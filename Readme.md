@@ -1,8 +1,8 @@
-Intelligent Warehouse Optimization Engine (IWOE) with External RCS Integration
+## Intelligent Warehouse Optimization Engine (IWOE) with External RCS Integration ##
 
 An intelligent, data-driven Warehouse Management System (WMS) module designed to bridge high-level order fulfillment planning with real-time physical fleet execution. IWOE evaluates historical order velocity through Cumulative ABC Analysis, dynamically reorganizes warehouse storage layouts, and streams high-frequency task payloads to external Robot Control Systems (RCS) via low-latency WebSockets.
 
-💡 System Overview
+💡 **System Overview**
 
 Modern automated warehouses suffer from two major operational bottlenecks:
 
