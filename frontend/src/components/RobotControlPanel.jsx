@@ -6,6 +6,7 @@ import {
   Zap,
   MapPin,
   AlertTriangle,
+  RotateCcw,
 } from "lucide-react";
 
 export default function RobotControlPanel({
@@ -15,11 +16,36 @@ export default function RobotControlPanel({
   if (!robot) return null;
 
   const commands = [
-    { name: "Start", command: "START", icon: Play },
-    { name: "Pause", command: "PAUSE", icon: Pause },
-    { name: "Stop", command: "STOP", icon: Square },
-    { name: "Return Home", command: "HOME", icon: Home },
-    { name: "Charge", command: "CHARGE", icon: Zap },
+    {
+      name: "Start",
+      command: "START",
+      icon: Play,
+    },
+    {
+      name: "Pause",
+      command: "PAUSE",
+      icon: Pause,
+    },
+    {
+      name: "Resume",
+      command: "START",
+      icon: RotateCcw,
+    },
+    {
+      name: "Stop",
+      command: "STOP",
+      icon: Square,
+    },
+    {
+      name: "Return Home",
+      command: "HOME",
+      icon: Home,
+    },
+    {
+      name: "Charge",
+      command: "CHARGE",
+      icon: Zap,
+    },
     {
       name: "Dispatch",
       command: "DISPATCH",
@@ -30,19 +56,35 @@ export default function RobotControlPanel({
   return (
     <div>
       <div className="robot-detail">
+        <div className="robot-detail-icon">
+          <span>🤖</span>
+        </div>
+
         <h3>{robot.id}</h3>
+
         <span>{robot.type}</span>
       </div>
 
       <Info label="Status" value={robot.status} />
-      <Info label="Battery" value={`${robot.battery}%`} />
-      <Info label="Position" value={robot.position} />
-      <Info label="Destination" value={robot.destination} />
+      <Info
+        label="Battery"
+        value={`${robot.battery}%`}
+      />
+      <Info
+        label="Position"
+        value={robot.position}
+      />
+      <Info
+        label="Destination"
+        value={robot.destination}
+      />
       <Info label="Task" value={robot.task} />
       <Info label="Speed" value={robot.speed} />
 
       <div className="command-section">
-        <span className="section-label">COMMAND</span>
+        <span className="section-label">
+          ROBOT COMMANDS
+        </span>
 
         <div className="command-grid">
           {commands.map((item) => {
@@ -50,11 +92,14 @@ export default function RobotControlPanel({
 
             return (
               <button
-                key={item.command}
+                key={item.name}
                 className="command-button"
-                onClick={() => onCommand(item.command)}
+                onClick={() =>
+                  onCommand(item.command)
+                }
               >
                 <Icon size={17} />
+
                 {item.name}
               </button>
             );
@@ -64,9 +109,12 @@ export default function RobotControlPanel({
 
       <button
         className="emergency-button"
-        onClick={() => onCommand("EMERGENCY_STOP")}
+        onClick={() =>
+          onCommand("EMERGENCY_STOP")
+        }
       >
         <AlertTriangle size={20} />
+
         EMERGENCY STOP
       </button>
     </div>

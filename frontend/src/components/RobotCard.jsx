@@ -19,10 +19,16 @@ export default function RobotCard({
         </div>
 
         <span
-          className={`robot-status ${robot.status.toLowerCase()}`}
+          className={`robot-status ${getStatusClass(
+            robot.status
+          )}`}
         >
           {robot.status}
         </span>
+      </div>
+
+      <div className="robot-task">
+        {robot.task}
       </div>
 
       <div className="robot-card-bottom">
@@ -35,4 +41,26 @@ export default function RobotCard({
       </div>
     </button>
   );
+}
+
+function getStatusClass(status) {
+  switch (status) {
+    case "MOVING":
+      return "moving";
+
+    case "IDLE":
+      return "idle";
+
+    case "CHARGING":
+      return "charging";
+
+    case "PAUSED":
+      return "paused";
+
+    case "E-STOP":
+      return "estop";
+
+    default:
+      return "";
+  }
 }
