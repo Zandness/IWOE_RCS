@@ -668,3 +668,229 @@
     flex-direction: column;
   }
 }
+
+/* ==========================================
+   MAP EDITOR V3
+   Zoom / Save / Undo / Expand
+========================================== */
+
+
+/* =========================
+   HEADER
+========================= */
+
+.map-header-right {
+  display: flex;
+  align-items: center;
+
+  gap: 10px;
+}
+
+.map-save-status {
+  padding: 7px 10px;
+
+  border: 1px solid #854d0e;
+
+  border-radius: 7px;
+
+  background: #422006;
+
+  color: #fbbf24;
+
+  font-size: 10px;
+
+  font-weight: 700;
+}
+
+.map-save-status.saved {
+  display: flex;
+  align-items: center;
+
+  gap: 5px;
+
+  border-color: #166534;
+
+  background: #052e16;
+
+  color: #4ade80;
+}
+
+
+/* =========================
+   SAVE BUTTON
+========================= */
+
+.map-tool-button.primary {
+  background: #0e7490;
+
+  border-color: #22d3ee;
+
+  color: #ecfeff;
+}
+
+.map-tool-button.primary:hover {
+  background: #0891b2;
+}
+
+
+/* =========================
+   DISABLED BUTTON
+========================= */
+
+.map-tool-button:disabled {
+  cursor: not-allowed;
+
+  opacity: 0.35;
+}
+
+
+/* =========================
+   ZOOM
+========================= */
+
+.zoom-display {
+  min-width: 48px;
+
+  padding: 7px 6px;
+
+  text-align: center;
+
+  background: #07111f;
+
+  border: 1px solid #263b53;
+
+  border-radius: 6px;
+
+  color: #67e8f9;
+
+  font-size: 10px;
+
+  font-weight: 800;
+}
+
+
+/*
+ * Container scrolls when
+ * map is larger than viewport
+ */
+
+.map-canvas-wrapper {
+  overflow: auto;
+
+  max-height: 680px;
+}
+
+
+/*
+ * Zoom layer controls real
+ * rendered width of SVG
+ */
+
+.map-zoom-layer {
+  min-width: 40%;
+
+  transition:
+    width 0.15s ease;
+
+  transform-origin:
+    top left;
+}
+
+
+.map-editor-canvas {
+  width: 100%;
+
+  height: auto;
+
+  min-height: 620px;
+}
+
+
+/* =========================
+   EXPAND MODE
+========================= */
+
+.map-page-expanded {
+  max-width: none;
+
+  width: 100%;
+}
+
+
+.map-editor-layout.expanded {
+  grid-template-columns:
+    1fr;
+}
+
+
+.map-editor-layout.expanded
+.map-main-panel {
+  min-height: 78vh;
+}
+
+
+.map-editor-layout.expanded
+.map-canvas-wrapper {
+  max-height: 78vh;
+}
+
+
+.map-editor-layout.expanded
+.map-editor-canvas {
+  min-height: 75vh;
+}
+
+
+/* =========================
+   TOOLBAR IMPROVEMENT
+========================= */
+
+.map-toolbar {
+  position: relative;
+
+  z-index: 5;
+}
+
+
+/* =========================
+   SCROLLBAR
+========================= */
+
+.map-canvas-wrapper::-webkit-scrollbar {
+  width: 10px;
+
+  height: 10px;
+}
+
+
+.map-canvas-wrapper::-webkit-scrollbar-track {
+  background: #07111f;
+}
+
+
+.map-canvas-wrapper::-webkit-scrollbar-thumb {
+  background: #263b53;
+
+  border-radius: 10px;
+}
+
+
+.map-canvas-wrapper::-webkit-scrollbar-thumb:hover {
+  background: #36506b;
+}
+
+
+/* =========================
+   RESPONSIVE
+========================= */
+
+@media (
+  max-width: 900px
+) {
+
+  .map-header-right {
+    margin-top: 10px;
+
+    flex-wrap: wrap;
+  }
+}
