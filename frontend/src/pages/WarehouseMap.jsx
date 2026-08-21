@@ -40,48 +40,45 @@ const STORAGE_KEY =
 
 
 export default function WarehouseMap() {
+  /*
+   * =====================================================
+   * MAP DATA
+   * =====================================================
+   */
 
   const [
     mapData,
     setMapData,
   ] = useState(() => {
-
     try {
-
       const saved =
         localStorage.getItem(
           STORAGE_KEY
         );
 
-
-      if (
-        saved
-      ) {
-
+      if (saved) {
         return JSON.parse(
           saved
         );
-
       }
-
-    } catch (
-      error
-    ) {
-
+    } catch (error) {
       console.warn(
-        "Could not load map.",
+        "Could not load saved warehouse map.",
         error
       );
-
     }
-
 
     return structuredClone(
       INITIAL_MAP
     );
-
   });
 
+
+  /*
+   * =====================================================
+   * MODE
+   * =====================================================
+   */
 
   const [
     mode,
@@ -91,6 +88,12 @@ export default function WarehouseMap() {
   );
 
 
+  /*
+   * =====================================================
+   * TOOL
+   * =====================================================
+   */
+
   const [
     tool,
     setTool,
@@ -98,6 +101,12 @@ export default function WarehouseMap() {
     "select"
   );
 
+
+  /*
+   * =====================================================
+   * NODE SELECTION
+   * =====================================================
+   */
 
   const [
     selectedNodeId,
@@ -107,6 +116,12 @@ export default function WarehouseMap() {
   );
 
 
+  /*
+   * =====================================================
+   * EDGE SELECTION
+   * =====================================================
+   */
+
   const [
     selectedEdgeId,
     setSelectedEdgeId,
@@ -114,6 +129,12 @@ export default function WarehouseMap() {
     null
   );
 
+
+  /*
+   * =====================================================
+   * PATH CREATION
+   * =====================================================
+   */
 
   const [
     connectionStart,
@@ -123,6 +144,12 @@ export default function WarehouseMap() {
   );
 
 
+  /*
+   * =====================================================
+   * MONITOR ROBOT
+   * =====================================================
+   */
+
   const [
     selectedRobotId,
     setSelectedRobotId,
@@ -131,13 +158,18 @@ export default function WarehouseMap() {
   );
 
 
+  /*
+   * =====================================================
+   * VIEW
+   * =====================================================
+   */
+
   const [
     zoom,
     setZoom,
   ] = useState(
     1
   );
-
 
   const [
     expanded,
@@ -147,6 +179,12 @@ export default function WarehouseMap() {
   );
 
 
+  /*
+   * =====================================================
+   * SAVE STATUS
+   * =====================================================
+   */
+
   const [
     saveStatus,
     setSaveStatus,
@@ -155,13 +193,18 @@ export default function WarehouseMap() {
   );
 
 
+  /*
+   * =====================================================
+   * UNDO / REDO
+   * =====================================================
+   */
+
   const [
     undoStack,
     setUndoStack,
   ] = useState(
     []
   );
-
 
   const [
     redoStack,
@@ -171,19 +214,30 @@ export default function WarehouseMap() {
   );
 
 
+  /*
+   * =====================================================
+   * DRAG HISTORY SNAPSHOT
+   * =====================================================
+   */
+
   const nodeDragSnapshot =
     useRef(
       null
     );
 
 
+  /*
+   * =====================================================
+   * SELECTED OBJECT DATA
+   * =====================================================
+   */
+
   const selectedNode =
     mapData.nodes.find(
       (node) =>
         node.id ===
         selectedNodeId
-    ) ||
-    null;
+    ) || null;
 
 
   const selectedEdge =
@@ -191,8 +245,7 @@ export default function WarehouseMap() {
       (edge) =>
         edge.id ===
         selectedEdgeId
-    ) ||
-    null;
+    ) || null;
 
 
   const selectedRobot =
@@ -200,57 +253,60 @@ export default function WarehouseMap() {
       (robot) =>
         robot.id ===
         selectedRobotId
-    ) ||
-    null;
+    ) || null;
 
 
   /*
    * =====================================================
-   * COMMIT
+   * COMMIT MAP
+   *
+   * ใช้ตอนแก้ข้อมูลที่ต้องเข้า Undo History
    * =====================================================
    */
 
   function commitMap(
     updater
   ) {
-
     setMapData(
-      (
-        current
-      ) => {
-
+      (current) => {
         const snapshot =
           structuredClone(
             current
           );
 
+        const workingCopy =
+          structuredClone(
+            current
+          );
 
         const next =
           typeof updater ===
           "function"
-
             ? updater(
-                structuredClone(
-                  current
-                )
+                workingCopy
               )
-
             : structuredClone(
                 updater
               );
 
 
-        setUndoStack(
-          (
-            history
-          ) => [
+        /*
+         * ถ้า updater คืนค่าเดิม
+         * เราก็ยัง return ได้
+         */
 
+        if (!next) {
+          return current;
+        }
+
+
+        setUndoStack(
+          (history) => [
             ...history.slice(
               -49
             ),
 
             snapshot,
-
           ]
         );
 
@@ -266,23 +322,20 @@ export default function WarehouseMap() {
 
 
         return next;
-
       }
     );
-
   }
 
 
   /*
    * =====================================================
-   * MODE
+   * MODE CHANGE
    * =====================================================
    */
 
   function handleModeChange(
     nextMode
   ) {
-
     setMode(
       nextMode
     );
@@ -312,29 +365,46 @@ export default function WarehouseMap() {
       nextMode ===
       "monitor"
     ) {
-
       if (
         !selectedRobotId &&
-        MOCK_ROBOTS.length >
-          0
+        MOCK_ROBOTS.length > 0
       ) {
-
         setSelectedRobotId(
-          MOCK_ROBOTS[
-            0
-          ].id
+          MOCK_ROBOTS[0].id
         );
-
       }
-
     } else {
-
       setSelectedRobotId(
         null
       );
+    }
+  }
 
+
+  /*
+   * =====================================================
+   * TOOL CHANGE
+   * =====================================================
+   */
+
+  function handleToolChange(
+    nextTool
+  ) {
+    if (
+      mode !== "edit"
+    ) {
+      return;
     }
 
+
+    setTool(
+      nextTool
+    );
+
+
+    setConnectionStart(
+      null
+    );
   }
 
 
@@ -345,43 +415,32 @@ export default function WarehouseMap() {
    */
 
   function handleUndo() {
-
     if (
-      undoStack.length ===
-      0
+      undoStack.length === 0
     ) {
-
       return;
-
     }
 
 
     const previous =
       undoStack[
-        undoStack.length -
-        1
+        undoStack.length - 1
       ];
 
 
     setRedoStack(
-      (
-        history
-      ) => [
-
+      (history) => [
         ...history,
 
         structuredClone(
           mapData
         ),
-
       ]
     );
 
 
     setUndoStack(
-      (
-        history
-      ) =>
+      (history) =>
         history.slice(
           0,
           -1
@@ -402,7 +461,6 @@ export default function WarehouseMap() {
     setSaveStatus(
       "Unsaved changes"
     );
-
   }
 
 
@@ -413,43 +471,32 @@ export default function WarehouseMap() {
    */
 
   function handleRedo() {
-
     if (
-      redoStack.length ===
-      0
+      redoStack.length === 0
     ) {
-
       return;
-
     }
 
 
     const next =
       redoStack[
-        redoStack.length -
-        1
+        redoStack.length - 1
       ];
 
 
     setUndoStack(
-      (
-        history
-      ) => [
-
+      (history) => [
         ...history,
 
         structuredClone(
           mapData
         ),
-
       ]
     );
 
 
     setRedoStack(
-      (
-        history
-      ) =>
+      (history) =>
         history.slice(
           0,
           -1
@@ -470,7 +517,6 @@ export default function WarehouseMap() {
     setSaveStatus(
       "Unsaved changes"
     );
-
   }
 
 
@@ -481,12 +527,9 @@ export default function WarehouseMap() {
    */
 
   function handleSave() {
-
     try {
-
       localStorage.setItem(
         STORAGE_KEY,
-
         JSON.stringify(
           mapData
         )
@@ -496,12 +539,9 @@ export default function WarehouseMap() {
       setSaveStatus(
         "Saved"
       );
-
-    } catch (
-      error
-    ) {
-
+    } catch (error) {
       console.error(
+        "Map save failed:",
         error
       );
 
@@ -509,9 +549,7 @@ export default function WarehouseMap() {
       setSaveStatus(
         "Save failed"
       );
-
     }
-
   }
 
 
@@ -522,51 +560,35 @@ export default function WarehouseMap() {
    */
 
   function zoomIn() {
-
     setZoom(
-      (
-        current
-      ) =>
+      (current) =>
         Number(
           Math.min(
-            current *
-              1.1,
+            current * 1.1,
             4
-          ).toFixed(
-            3
-          )
+          ).toFixed(3)
         )
     );
-
   }
 
 
   function zoomOut() {
-
     setZoom(
-      (
-        current
-      ) =>
+      (current) =>
         Number(
           Math.max(
-            current *
-              0.9,
+            current * 0.9,
             0.25
-          ).toFixed(
-            3
-          )
+          ).toFixed(3)
         )
     );
-
   }
 
 
   function fitMap() {
-
     setZoom(
       1
     );
-
   }
 
 
@@ -574,63 +596,53 @@ export default function WarehouseMap() {
    * =====================================================
    * EMPTY MAP CLICK
    * =====================================================
-   *
-   * THIS IS HOW USER RETURNS
-   * TO MAP PROPERTIES.
-   * =====================================================
    */
 
   function handleCanvasClick(
     position
   ) {
+    /*
+     * Monitor Mode
+     */
 
     if (
-      mode ===
-      "monitor"
+      mode === "monitor"
     ) {
-
       setSelectedRobotId(
         null
       );
 
-
       return;
-
     }
 
 
     /*
-     * Create Node
+     * NODE TOOL
      */
 
     if (
-      tool ===
-      "node"
+      tool === "node"
     ) {
-
       addNode(
         position
       );
 
-
       return;
-
     }
 
 
     /*
-     * Empty map click
+     * SELECT TOOL
+     *
+     * Click พื้นที่ว่าง
+     * = กลับ Map Properties
      */
 
     if (
-      tool ===
-      "select"
+      tool === "select"
     ) {
-
       clearSelection();
-
     }
-
   }
 
 
@@ -644,7 +656,6 @@ export default function WarehouseMap() {
     x,
     y,
   }) {
-
     const position =
       snapPosition(
         x,
@@ -669,7 +680,6 @@ export default function WarehouseMap() {
 
 
     const node = {
-
       id,
 
       name:
@@ -692,25 +702,17 @@ export default function WarehouseMap() {
 
       config:
         {},
-
     };
 
 
     commitMap(
-      (
-        previous
-      ) => ({
-
+      (previous) => ({
         ...previous,
 
         nodes: [
-
           ...previous.nodes,
-
           node,
-
         ],
-
       })
     );
 
@@ -725,10 +727,18 @@ export default function WarehouseMap() {
     );
 
 
+    setConnectionStart(
+      null
+    );
+
+
+    /*
+     * สร้างเสร็จกลับ Select
+     */
+
     setTool(
       "select"
     );
-
   }
 
 
@@ -741,30 +751,29 @@ export default function WarehouseMap() {
   function handleNodeClick(
     nodeId
   ) {
-
     if (
-      mode !==
-      "edit"
+      mode !== "edit"
     ) {
-
       return;
-
     }
 
 
     /*
-     * CONNECT PATH
+     * =========================================
+     * PATH CREATION MODE
+     * =========================================
      */
 
     if (
-      tool ===
-      "connect"
+      tool === "connect"
     ) {
+      /*
+       * First Node
+       */
 
       if (
         !connectionStart
       ) {
-
         setConnectionStart(
           nodeId
         );
@@ -781,24 +790,28 @@ export default function WarehouseMap() {
 
 
         return;
-
       }
 
+
+      /*
+       * Same Node clicked
+       */
 
       if (
         connectionStart ===
         nodeId
       ) {
-
         setConnectionStart(
           null
         );
 
-
         return;
-
       }
 
+
+      /*
+       * Create connection
+       */
 
       createConnection(
         connectionStart,
@@ -812,50 +825,49 @@ export default function WarehouseMap() {
 
 
       return;
-
     }
 
 
     /*
+     * =========================================
      * SELECT NODE
+     * =========================================
      */
 
-    setSelectedNodeId(
-      nodeId
-    );
+    if (
+      tool === "select"
+    ) {
+      setSelectedNodeId(
+        nodeId
+      );
 
 
-    setSelectedEdgeId(
-      null
-    );
+      setSelectedEdgeId(
+        null
+      );
 
 
-    setConnectionStart(
-      null
-    );
-
+      setConnectionStart(
+        null
+      );
+    }
   }
 
 
   /*
    * =====================================================
-   * PATH CLICK
+   * EDGE CLICK
    * =====================================================
    */
 
   function handleEdgeClick(
     edgeId
   ) {
-
     if (
-      mode !==
-        "edit" ||
-      tool !==
-        "select"
+      mode !== "edit" ||
+      tool !== "select"
     ) {
-
       return;
-
     }
 
 
@@ -872,13 +884,12 @@ export default function WarehouseMap() {
     setConnectionStart(
       null
     );
-
   }
 
 
   /*
    * =====================================================
-   * CREATE PATH
+   * CREATE CONNECTION
    * =====================================================
    */
 
@@ -886,19 +897,58 @@ export default function WarehouseMap() {
     fromId,
     toId
   ) {
+    /*
+     * Same Node
+     */
 
-    const exists =
+    if (
+      fromId === toId
+    ) {
+      return;
+    }
+
+
+    /*
+     * Nodes must exist
+     */
+
+    const from =
+      mapData.nodes.find(
+        (node) =>
+          node.id ===
+          fromId
+      );
+
+
+    const to =
+      mapData.nodes.find(
+        (node) =>
+          node.id ===
+          toId
+      );
+
+
+    if (
+      !from ||
+      !to
+    ) {
+      return;
+    }
+
+
+    /*
+     * Duplicate prevention
+     */
+
+    const duplicate =
       mapData.edges.some(
-        (
-          edge
-        ) =>
+        (edge) =>
           (
             edge.from ===
               fromId &&
             edge.to ===
               toId
-          )
-          ||
+          ) ||
           (
             edge.from ===
               toId &&
@@ -909,46 +959,13 @@ export default function WarehouseMap() {
 
 
     if (
-      exists
+      duplicate
     ) {
-
       return;
-
-    }
-
-
-    const from =
-      mapData.nodes.find(
-        (
-          node
-        ) =>
-          node.id ===
-          fromId
-      );
-
-
-    const to =
-      mapData.nodes.find(
-        (
-          node
-        ) =>
-          node.id ===
-          toId
-      );
-
-
-    if (
-      !from ||
-      !to
-    ) {
-
-      return;
-
     }
 
 
     const edge = {
-
       id:
         getNextId(
           mapData.edges,
@@ -985,28 +1002,24 @@ export default function WarehouseMap() {
 
       vehicleAccess:
         "BOTH",
-
     };
 
 
     commitMap(
-      (
-        previous
-      ) => ({
-
+      (previous) => ({
         ...previous,
 
         edges: [
-
           ...previous.edges,
-
           edge,
-
         ],
-
       })
     );
 
+
+    /*
+     * เลือก Path ที่เพิ่งสร้าง
+     */
 
     setSelectedNodeId(
       null
@@ -1016,77 +1029,62 @@ export default function WarehouseMap() {
     setSelectedEdgeId(
       edge.id
     );
-
   }
 
 
   /*
    * =====================================================
-   * NODE DRAG
+   * NODE DRAG START
    * =====================================================
    */
 
   function handleNodeDragStart() {
-
     nodeDragSnapshot.current =
       structuredClone(
         mapData
       );
-
   }
 
+
+  /*
+   * =====================================================
+   * NODE MOVE
+   * =====================================================
+   */
 
   function handleNodeMove(
     nodeId,
     x,
     y
   ) {
-
     if (
-      mode !==
-      "edit"
+      mode !== "edit"
     ) {
-
       return;
-
     }
 
 
     setMapData(
-      (
-        previous
-      ) => {
-
+      (previous) => {
         const nodes =
           previous.nodes.map(
-            (
-              node
-            ) =>
+            (node) =>
               node.id ===
               nodeId
-
                 ? {
-
                     ...node,
 
                     x:
-                      Number(
-                        x
-                      ),
+                      Number(x),
 
                     y:
-                      Number(
-                        y
-                      ),
-
+                      Number(y),
                   }
-
                 : node
           );
 
 
         return {
-
           ...previous,
 
           nodes,
@@ -1096,9 +1094,7 @@ export default function WarehouseMap() {
               previous.edges,
               nodes
             ),
-
         };
-
       }
     );
 
@@ -1106,32 +1102,30 @@ export default function WarehouseMap() {
     setSaveStatus(
       "Unsaved changes"
     );
-
   }
 
 
-  function handleNodeDragEnd() {
+  /*
+   * =====================================================
+   * NODE DRAG END
+   * =====================================================
+   */
 
+  function handleNodeDragEnd() {
     if (
       !nodeDragSnapshot.current
     ) {
-
       return;
-
     }
 
 
     setUndoStack(
-      (
-        history
-      ) => [
-
+      (history) => [
         ...history.slice(
           -49
         ),
 
         nodeDragSnapshot.current,
-
       ]
     );
 
@@ -1144,12 +1138,16 @@ export default function WarehouseMap() {
     nodeDragSnapshot.current =
       null;
 
+
+    setSaveStatus(
+      "Unsaved changes"
+    );
   }
 
 
   /*
    * =====================================================
-   * NODE PROPERTY
+   * NODE PROPERTY CHANGE
    * =====================================================
    */
 
@@ -1157,45 +1155,38 @@ export default function WarehouseMap() {
     field,
     value
   ) {
-
     if (
-      mode !==
-        "edit" ||
+      mode !== "edit" ||
       !selectedNodeId
     ) {
-
       return;
-
     }
 
 
     commitMap(
-      (
-        previous
-      ) => {
-
+      (previous) => {
         const nodes =
           previous.nodes.map(
-            (
-              node
-            ) => {
-
+            (node) => {
               if (
                 node.id !==
                 selectedNodeId
               ) {
-
                 return node;
-
               }
 
+
+              /*
+               * =========================================
+               * CONFIG FIELD
+               * =========================================
+               */
 
               if (
                 field.startsWith(
                   "config."
                 )
               ) {
-
                 const configKey =
                   field.replace(
                     "config.",
@@ -1204,33 +1195,29 @@ export default function WarehouseMap() {
 
 
                 return {
-
                   ...node,
 
                   config: {
-
-                    ...(
-                      node.config ||
-                      {}
-                    ),
+                    ...(node.config ||
+                      {}),
 
                     [configKey]:
                       value,
-
                   },
-
                 };
-
               }
 
 
+              /*
+               * =========================================
+               * NODE TYPE
+               * =========================================
+               */
+
               if (
-                field ===
-                "type"
+                field === "type"
               ) {
-
                 return {
-
                   ...node,
 
                   type:
@@ -1241,48 +1228,98 @@ export default function WarehouseMap() {
                       value,
                       node.config
                     ),
-
                 };
+              }
 
+
+              /*
+               * =========================================
+               * POSITION
+               * =========================================
+               */
+
+              if (
+                field === "x" ||
+                field === "y"
+              ) {
+                const number =
+                  Number(value);
+
+
+                if (
+                  !Number.isFinite(
+                    number
+                  )
+                ) {
+                  return node;
+                }
+
+
+                return {
+                  ...node,
+
+                  [field]:
+                    number,
+                };
+              }
+
+
+              /*
+               * =========================================
+               * ROTATION
+               * =========================================
+               */
+
+              if (
+                field === "rotation"
+              ) {
+                return {
+                  ...node,
+
+                  rotation:
+                    Number(value) ||
+                    0,
+                };
               }
 
 
               return {
-
                 ...node,
 
                 [field]:
                   value,
-
               };
-
             }
           );
 
 
         return {
-
           ...previous,
 
           nodes,
+
+          /*
+           * ถ้า X/Y เปลี่ยน
+           * auto distance จะเปลี่ยนด้วย
+           */
 
           edges:
             recalculateEdges(
               previous.edges,
               nodes
             ),
-
         };
-
       }
     );
-
   }
 
 
   /*
    * =====================================================
-   * PATH PROPERTY
+   * EDGE PROPERTY CHANGE
+   *
+   * V9
+   * รองรับ From / To endpoint editing
    * =====================================================
    */
 
@@ -1290,154 +1327,336 @@ export default function WarehouseMap() {
     field,
     value
   ) {
-
     if (
-      mode !==
-        "edit" ||
+      mode !== "edit" ||
       !selectedEdgeId
     ) {
-
       return;
-
     }
 
 
     commitMap(
-      (
-        previous
-      ) => ({
-
-        ...previous,
-
-        edges:
-          previous.edges.map(
-            (
-              edge
-            ) => {
-
-              if (
-                edge.id !==
-                selectedEdgeId
-              ) {
-
-                return edge;
-
-              }
+      (previous) => {
+        const currentEdge =
+          previous.edges.find(
+            (edge) =>
+              edge.id ===
+              selectedEdgeId
+          );
 
 
-              const nextEdge = {
-
-                ...edge,
-
-                [field]:
-                  value,
-
-              };
+        if (
+          !currentEdge
+        ) {
+          return previous;
+        }
 
 
-              /*
-               * AUTO DISTANCE ON
-               */
+        /*
+         * =================================================
+         * FROM / TO NODE CHANGE
+         * =================================================
+         */
 
-              if (
-                field ===
-                  "autoDistance" &&
-                value ===
-                  true
-              ) {
-
-                const from =
-                  previous.nodes.find(
-                    (
-                      node
-                    ) =>
-                      node.id ===
-                      edge.from
-                  );
+        if (
+          field === "from" ||
+          field === "to"
+        ) {
+          const nextFrom =
+            field === "from"
+              ? value
+              : currentEdge.from;
 
 
-                const to =
-                  previous.nodes.find(
-                    (
-                      node
-                    ) =>
-                      node.id ===
-                      edge.to
-                  );
+          const nextTo =
+            field === "to"
+              ? value
+              : currentEdge.to;
 
+
+          /*
+           * -----------------------------------------------
+           * CHECK NODE EXISTS
+           * -----------------------------------------------
+           */
+
+          const fromNode =
+            previous.nodes.find(
+              (node) =>
+                node.id ===
+                nextFrom
+            );
+
+
+          const toNode =
+            previous.nodes.find(
+              (node) =>
+                node.id ===
+                nextTo
+            );
+
+
+          if (
+            !fromNode ||
+            !toNode
+          ) {
+            return previous;
+          }
+
+
+          /*
+           * -----------------------------------------------
+           * FROM CANNOT EQUAL TO
+           * -----------------------------------------------
+           */
+
+          if (
+            nextFrom ===
+            nextTo
+          ) {
+            return previous;
+          }
+
+
+          /*
+           * -----------------------------------------------
+           * PREVENT DUPLICATE PATH
+           *
+           * Treat reverse direction as same physical path
+           * -----------------------------------------------
+           */
+
+          const duplicate =
+            previous.edges.some(
+              (edge) => {
+                /*
+                 * Ignore current selected edge.
+                 */
 
                 if (
-                  from &&
-                  to
+                  edge.id ===
+                  selectedEdgeId
                 ) {
-
-                  nextEdge.distance =
-                    calculateDistance(
-                      from,
-                      to
-                    );
-
+                  return false;
                 }
 
+
+                const sameDirection =
+                  edge.from ===
+                    nextFrom &&
+                  edge.to ===
+                    nextTo;
+
+
+                const oppositeDirection =
+                  edge.from ===
+                    nextTo &&
+                  edge.to ===
+                    nextFrom;
+
+
+                return (
+                  sameDirection ||
+                  oppositeDirection
+                );
               }
+            );
 
 
-              /*
-               * DISTANCE
-               */
+          if (
+            duplicate
+          ) {
+            return previous;
+          }
 
-              if (
-                field ===
-                "distance"
-              ) {
 
-                nextEdge.distance =
-                  Math.max(
-                    Number(
-                      value
-                    ) ||
-                      0,
-                    0
-                  );
+          /*
+           * -----------------------------------------------
+           * UPDATE EDGE
+           * -----------------------------------------------
+           */
 
+          return {
+            ...previous,
+
+            edges:
+              previous.edges.map(
+                (edge) => {
+                  if (
+                    edge.id !==
+                    selectedEdgeId
+                  ) {
+                    return edge;
+                  }
+
+
+                  const nextEdge = {
+                    ...edge,
+
+                    from:
+                      nextFrom,
+
+                    to:
+                      nextTo,
+                  };
+
+
+                  /*
+                   * ---------------------------------------
+                   * RECALCULATE DISTANCE
+                   * ---------------------------------------
+                   */
+
+                  if (
+                    edge.autoDistance
+                  ) {
+                    nextEdge.distance =
+                      calculateDistance(
+                        fromNode,
+                        toNode
+                      );
+                  }
+
+
+                  return nextEdge;
+                }
+              ),
+          };
+        }
+
+
+        /*
+         * =================================================
+         * NORMAL EDGE PROPERTY CHANGE
+         * =================================================
+         */
+
+        return {
+          ...previous,
+
+          edges:
+            previous.edges.map(
+              (edge) => {
+                if (
+                  edge.id !==
+                  selectedEdgeId
+                ) {
+                  return edge;
+                }
+
+
+                const nextEdge = {
+                  ...edge,
+
+                  [field]:
+                    value,
+                };
+
+
+                /*
+                 * -----------------------------------------
+                 * AUTO DISTANCE ENABLED
+                 * -----------------------------------------
+                 */
+
+                if (
+                  field ===
+                    "autoDistance" &&
+                  value === true
+                ) {
+                  const fromNode =
+                    previous.nodes.find(
+                      (node) =>
+                        node.id ===
+                        edge.from
+                    );
+
+
+                  const toNode =
+                    previous.nodes.find(
+                      (node) =>
+                        node.id ===
+                        edge.to
+                    );
+
+
+                  if (
+                    fromNode &&
+                    toNode
+                  ) {
+                    nextEdge.distance =
+                      calculateDistance(
+                        fromNode,
+                        toNode
+                      );
+                  }
+                }
+
+
+                /*
+                 * -----------------------------------------
+                 * MANUAL DISTANCE
+                 * -----------------------------------------
+                 */
+
+                if (
+                  field ===
+                  "distance"
+                ) {
+                  const distance =
+                    Number(value);
+
+
+                  nextEdge.distance =
+                    Number.isFinite(
+                      distance
+                    )
+                      ? Math.max(
+                          distance,
+                          0
+                        )
+                      : 0;
+                }
+
+
+                /*
+                 * -----------------------------------------
+                 * SPEED LIMIT
+                 * -----------------------------------------
+                 */
+
+                if (
+                  field ===
+                  "speedLimit"
+                ) {
+                  const speed =
+                    Number(value);
+
+
+                  nextEdge.speedLimit =
+                    Number.isFinite(
+                      speed
+                    )
+                      ? Math.max(
+                          speed,
+                          0
+                        )
+                      : 0;
+                }
+
+
+                return nextEdge;
               }
-
-
-              /*
-               * SPEED
-               */
-
-              if (
-                field ===
-                "speedLimit"
-              ) {
-
-                nextEdge.speedLimit =
-                  Math.max(
-                    Number(
-                      value
-                    ) ||
-                      0,
-                    0
-                  );
-
-              }
-
-
-              return nextEdge;
-
-            }
-          ),
-
-      })
+            ),
+        };
+      }
     );
-
   }
 
 
   /*
    * =====================================================
-   * MAP PROPERTY
+   * MAP PROPERTY CHANGE
    * =====================================================
    */
 
@@ -1445,64 +1664,49 @@ export default function WarehouseMap() {
     field,
     value
   ) {
-
     if (
-      mode !==
-      "edit"
+      mode !== "edit"
     ) {
-
       return;
-
     }
 
 
-    if (
-      field ===
-        "width" ||
-      field ===
-        "height" ||
-      field ===
-        "gridSpacing"
-    ) {
+    /*
+     * Numeric fields
+     */
 
+    if (
+      field === "width" ||
+      field === "height" ||
+      field === "gridSpacing"
+    ) {
       const number =
-        Number(
-          value
-        );
+        Number(value);
 
 
       if (
         !Number.isFinite(
           number
         ) ||
-        number <=
-          0
+        number <= 0
       ) {
-
         return;
-
       }
 
 
       value =
         number;
-
     }
 
 
     commitMap(
-      (
-        previous
-      ) => ({
-
+      (previous) => ({
         ...previous,
 
         [field]:
           value,
-
       })
     );
-
   }
 
 
@@ -1513,37 +1717,32 @@ export default function WarehouseMap() {
    */
 
   function handleDelete() {
-
     if (
-      mode !==
-      "edit"
+      mode !== "edit"
     ) {
-
       return;
-
     }
 
+
+    /*
+     * =========================================
+     * DELETE EDGE
+     * =========================================
+     */
 
     if (
       selectedEdgeId
     ) {
-
       commitMap(
-        (
-          previous
-        ) => ({
-
+        (previous) => ({
           ...previous,
 
           edges:
             previous.edges.filter(
-              (
-                edge
-              ) =>
+              (edge) =>
                 edge.id !==
                 selectedEdgeId
             ),
-
         })
       );
 
@@ -1554,41 +1753,39 @@ export default function WarehouseMap() {
 
 
       return;
-
     }
 
+
+    /*
+     * =========================================
+     * DELETE NODE
+     *
+     * Also remove connected edges
+     * =========================================
+     */
 
     if (
       selectedNodeId
     ) {
-
       commitMap(
-        (
-          previous
-        ) => ({
-
+        (previous) => ({
           ...previous,
 
           nodes:
             previous.nodes.filter(
-              (
-                node
-              ) =>
+              (node) =>
                 node.id !==
                 selectedNodeId
             ),
 
           edges:
             previous.edges.filter(
-              (
-                edge
-              ) =>
+              (edge) =>
                 edge.from !==
                   selectedNodeId &&
                 edge.to !==
                   selectedNodeId
             ),
-
         })
       );
 
@@ -1601,9 +1798,7 @@ export default function WarehouseMap() {
       setConnectionStart(
         null
       );
-
     }
-
   }
 
 
@@ -1614,7 +1809,6 @@ export default function WarehouseMap() {
    */
 
   function handleExport() {
-
     const json =
       JSON.stringify(
         mapData,
@@ -1625,9 +1819,7 @@ export default function WarehouseMap() {
 
     const blob =
       new Blob(
-        [
-          json,
-        ],
+        [json],
         {
           type:
             "application/json",
@@ -1671,7 +1863,6 @@ export default function WarehouseMap() {
     URL.revokeObjectURL(
       url
     );
-
   }
 
 
@@ -1682,14 +1873,10 @@ export default function WarehouseMap() {
    */
 
   function handleReset() {
-
     if (
-      mode !==
-      "edit"
+      mode !== "edit"
     ) {
-
       return;
-
     }
 
 
@@ -1711,7 +1898,6 @@ export default function WarehouseMap() {
     setZoom(
       1
     );
-
   }
 
 
@@ -1722,7 +1908,6 @@ export default function WarehouseMap() {
    */
 
   function clearSelection() {
-
     setSelectedNodeId(
       null
     );
@@ -1736,7 +1921,66 @@ export default function WarehouseMap() {
     setConnectionStart(
       null
     );
+  }
 
+
+  /*
+   * =====================================================
+   * TREE NODE SELECT
+   * =====================================================
+   */
+
+  function handleTreeNodeSelect(
+    nodeId
+  ) {
+    setSelectedNodeId(
+      nodeId
+    );
+
+
+    setSelectedEdgeId(
+      null
+    );
+
+
+    setConnectionStart(
+      null
+    );
+
+
+    setTool(
+      "select"
+    );
+  }
+
+
+  /*
+   * =====================================================
+   * TREE EDGE SELECT
+   * =====================================================
+   */
+
+  function handleTreeEdgeSelect(
+    edgeId
+  ) {
+    setSelectedEdgeId(
+      edgeId
+    );
+
+
+    setSelectedNodeId(
+      null
+    );
+
+
+    setConnectionStart(
+      null
+    );
+
+
+    setTool(
+      "select"
+    );
   }
 
 
@@ -1755,43 +1999,39 @@ export default function WarehouseMap() {
       }
     >
 
+      {/* =================================================
+          PAGE HEADER
+      ================================================= */}
+
       <div className="page-header">
 
         <div>
-
           <span className="page-label">
             WAREHOUSE MAP DESIGN
           </span>
 
 
           <h2>
-
-            {mode ===
-            "edit"
+            {mode === "edit"
               ? "Map Editor"
               : "Warehouse Monitor"}
-
           </h2>
 
 
           <p>
-
-            {mode ===
-            "edit"
+            {mode === "edit"
               ? "Create warehouse nodes and configure robot travel paths."
               : "Monitor robot position, status and planned route."}
-
           </p>
-
         </div>
 
 
         <div className="map-header-right">
 
-          {mode ===
-            "edit" &&
-            saveStatus && (
+          {/* SAVE STATUS */}
 
+          {mode === "edit" &&
+            saveStatus && (
             <div
               className={
                 saveStatus ===
@@ -1800,38 +2040,29 @@ export default function WarehouseMap() {
                   : "map-save-status"
               }
             >
-
               {saveStatus ===
                 "Saved" && (
-
                 <CheckCircle2
-                  size={
-                    14
-                  }
+                  size={14}
                 />
-
               )}
-
 
               <span>
                 {saveStatus}
               </span>
-
             </div>
-
           )}
 
+
+          {/* MAP SIZE */}
 
           <div className="map-editor-info">
 
             <Map
-              size={
-                16
-              }
+              size={16}
             />
 
             <span>
-
               {mapData.width}
 
               {" × "}
@@ -1841,7 +2072,6 @@ export default function WarehouseMap() {
               {" "}
 
               {mapData.unit}
-
             </span>
 
           </div>
@@ -1851,31 +2081,22 @@ export default function WarehouseMap() {
       </div>
 
 
+      {/* =================================================
+          TOOLBAR
+      ================================================= */}
+
       <MapToolbar
-        mode={
-          mode
-        }
+        mode={mode}
 
         setMode={
           handleModeChange
         }
 
-        tool={
-          tool
+        tool={tool}
+
+        setTool={
+          handleToolChange
         }
-
-        setTool={(nextTool) => {
-
-          setTool(
-            nextTool
-          );
-
-
-          setConnectionStart(
-            null
-          );
-
-        }}
 
         onDelete={
           handleDelete
@@ -1911,9 +2132,7 @@ export default function WarehouseMap() {
           0
         }
 
-        zoom={
-          zoom
-        }
+        zoom={zoom}
 
         onZoomIn={
           zoomIn
@@ -1933,14 +2152,16 @@ export default function WarehouseMap() {
 
         onToggleExpand={() =>
           setExpanded(
-            (
-              current
-            ) =>
+            (current) =>
               !current
           )
         }
       />
 
+
+      {/* =================================================
+          EDITOR LAYOUT
+      ================================================= */}
 
       <div
         className={
@@ -1950,12 +2171,12 @@ export default function WarehouseMap() {
         }
       >
 
-        {/* LEFT */}
+        {/* =================================================
+            LEFT SIDE
+        ================================================= */}
 
         {!expanded &&
-          mode ===
-            "edit" && (
-
+          mode === "edit" && (
           <MapObjectTree
             mapData={
               mapData
@@ -1969,68 +2190,23 @@ export default function WarehouseMap() {
               selectedEdgeId
             }
 
-            onSelectNode={(
-              nodeId
-            ) => {
+            onSelectNode={
+              handleTreeNodeSelect
+            }
 
-              setSelectedNodeId(
-                nodeId
-              );
-
-
-              setSelectedEdgeId(
-                null
-              );
-
-
-              setConnectionStart(
-                null
-              );
-
-
-              setTool(
-                "select"
-              );
-
-            }}
-
-            onSelectEdge={(
-              edgeId
-            ) => {
-
-              setSelectedEdgeId(
-                edgeId
-              );
-
-
-              setSelectedNodeId(
-                null
-              );
-
-
-              setConnectionStart(
-                null
-              );
-
-
-              setTool(
-                "select"
-              );
-
-            }}
+            onSelectEdge={
+              handleTreeEdgeSelect
+            }
           />
-
         )}
 
 
         {!expanded &&
           mode ===
             "monitor" && (
-
           <aside className="panel monitor-fleet-list">
 
             <div className="panel-header">
-
               <h3>
                 Robot Fleet
               </h3>
@@ -2038,15 +2214,11 @@ export default function WarehouseMap() {
               <span>
                 {MOCK_ROBOTS.length}
               </span>
-
             </div>
 
 
             {MOCK_ROBOTS.map(
-              (
-                robot
-              ) => (
-
+              (robot) => (
                 <button
                   type="button"
 
@@ -2067,9 +2239,7 @@ export default function WarehouseMap() {
                     )
                   }
                 >
-
                   <div>
-
                     <strong>
                       {robot.id}
                     </strong>
@@ -2077,7 +2247,6 @@ export default function WarehouseMap() {
                     <span>
                       {robot.task}
                     </span>
-
                   </div>
 
 
@@ -2086,74 +2255,63 @@ export default function WarehouseMap() {
                   >
                     {robot.status}
                   </span>
-
                 </button>
-
               )
             )}
 
           </aside>
-
         )}
 
 
-        {/* CENTER */}
+        {/* =================================================
+            CENTER
+        ================================================= */}
 
         <section className="panel map-main-panel">
 
           <div className="panel-header">
 
             <h3>
-
-              {mode ===
-              "edit"
+              {mode === "edit"
                 ? "Warehouse Topology"
                 : "Live Warehouse Map"}
-
             </h3>
 
 
             <span>
-
-              {mode ===
-              "edit"
+              {mode === "edit"
                 ? `${mapData.nodes.length} nodes • ${mapData.edges.length} paths`
                 : `${MOCK_ROBOTS.length} robots`}
-
             </span>
 
           </div>
 
 
-          {mode ===
-            "edit" &&
+          {/* CONNECT MESSAGE */}
+
+          {mode === "edit" &&
             tool ===
               "connect" && (
-
             <EditorMessage>
-
               {connectionStart
                 ? `Start node: ${connectionStart}. Select destination node.`
                 : "Select the first node to create a path."}
-
             </EditorMessage>
-
           )}
 
 
-          {mode ===
-            "edit" &&
+          {/* NODE MESSAGE */}
+
+          {mode === "edit" &&
             tool ===
               "node" && (
-
             <EditorMessage>
-
               Click anywhere on the grid to create a Node.
-
             </EditorMessage>
-
           )}
 
+
+          {/* MAP CANVAS */}
 
           <MapCanvas
             mapData={
@@ -2228,12 +2386,12 @@ export default function WarehouseMap() {
         </section>
 
 
-        {/* RIGHT */}
+        {/* =================================================
+            RIGHT SIDE
+        ================================================= */}
 
         {!expanded &&
-          mode ===
-            "edit" && (
-
+          mode === "edit" && (
           <aside className="panel map-properties">
 
             <MapProperties
@@ -2263,20 +2421,17 @@ export default function WarehouseMap() {
             />
 
           </aside>
-
         )}
 
 
         {!expanded &&
           mode ===
             "monitor" && (
-
           <MonitorPanel
             robot={
               selectedRobot
             }
           />
-
         )}
 
       </div>
@@ -2286,21 +2441,20 @@ export default function WarehouseMap() {
 }
 
 
-/* =====================================================
-   MESSAGE
-===================================================== */
+/*
+ * =====================================================
+ * EDITOR MESSAGE
+ * =====================================================
+ */
 
 function EditorMessage({
   children,
 }) {
-
   return (
     <div className="map-editor-message">
 
       <Info
-        size={
-          15
-        }
+        size={15}
       />
 
       <span>
@@ -2309,19 +2463,19 @@ function EditorMessage({
 
     </div>
   );
-
 }
 
 
-/* =====================================================
-   DISTANCE
-===================================================== */
+/*
+ * =====================================================
+ * DISTANCE
+ * =====================================================
+ */
 
 function calculateDistance(
   pointA,
   pointB
 ) {
-
   const dx =
     pointB.x -
     pointA.x;
@@ -2334,46 +2488,40 @@ function calculateDistance(
 
   return Number(
     Math.sqrt(
-      dx *
-        dx +
-      dy *
-        dy
-    ).toFixed(
-      3
-    )
+      dx * dx +
+      dy * dy
+    ).toFixed(3)
   );
-
 }
 
 
-/* =====================================================
-   RECALCULATE
-===================================================== */
+/*
+ * =====================================================
+ * RECALCULATE EDGES
+ * =====================================================
+ */
 
 function recalculateEdges(
   edges,
   nodes
 ) {
-
   return edges.map(
-    (
-      edge
-    ) => {
+    (edge) => {
+      /*
+       * Manual distance
+       * ไม่ต้องคำนวณใหม่
+       */
 
       if (
         !edge.autoDistance
       ) {
-
         return edge;
-
       }
 
 
       const from =
         nodes.find(
-          (
-            node
-          ) =>
+          (node) =>
             node.id ===
             edge.from
         );
@@ -2381,9 +2529,7 @@ function recalculateEdges(
 
       const to =
         nodes.find(
-          (
-            node
-          ) =>
+          (node) =>
             node.id ===
             edge.to
         );
@@ -2393,14 +2539,11 @@ function recalculateEdges(
         !from ||
         !to
       ) {
-
         return edge;
-
       }
 
 
       return {
-
         ...edge,
 
         distance:
@@ -2408,25 +2551,23 @@ function recalculateEdges(
             from,
             to
           ),
-
       };
-
     }
   );
-
 }
 
 
-/* =====================================================
-   SNAP
-===================================================== */
+/*
+ * =====================================================
+ * SNAP POSITION
+ * =====================================================
+ */
 
 function snapPosition(
   x,
   y,
   spacing
 ) {
-
   const step =
     Number(
       spacing
@@ -2437,81 +2578,59 @@ function snapPosition(
     !Number.isFinite(
       step
     ) ||
-    step <=
-      0
+    step <= 0
   ) {
-
     return {
-
       x:
-        Number(
-          x
-        ),
+        Number(x),
 
       y:
-        Number(
-          y
-        ),
-
+        Number(y),
     };
-
   }
 
 
   return {
-
-    x:
-      Number(
-        (
-          Math.round(
-            Number(
-              x
-            ) /
-            step
-          ) *
+    x: Number(
+      (
+        Math.round(
+          Number(x) /
           step
-        ).toFixed(
-          3
-        )
-      ),
+        ) *
+        step
+      ).toFixed(3)
+    ),
 
-    y:
-      Number(
-        (
-          Math.round(
-            Number(
-              y
-            ) /
-            step
-          ) *
+    y: Number(
+      (
+        Math.round(
+          Number(y) /
           step
-        ).toFixed(
-          3
-        )
-      ),
-
+        ) *
+        step
+      ).toFixed(3)
+    ),
   };
-
 }
 
 
-/* =====================================================
-   DEFAULT NODE CONFIG
-===================================================== */
+/*
+ * =====================================================
+ * DEFAULT NODE CONFIG
+ * =====================================================
+ */
 
 function getDefaultConfigForType(
   type,
   existingConfig = {}
 ) {
-
-  switch (
-    type
-  ) {
+  switch (type) {
+    /*
+     * STORAGE
+     */
 
     case "STORAGE":
-
       return {
-
         width:
           existingConfig.width ||
           4,
@@ -2531,14 +2650,15 @@ function getDefaultConfigForType(
         slotsPerLevel:
           existingConfig.slotsPerLevel ||
           6,
-
       };
 
 
+    /*
+     * CHARGING
+     */
+
     case "CHARGING":
-
       return {
-
         width:
           existingConfig.width ||
           2,
@@ -2550,14 +2670,15 @@ function getDefaultConfigForType(
         chargerId:
           existingConfig.chargerId ||
           "",
-
       };
 
 
+    /*
+     * DOCK
+     */
+
     case "DOCK":
-
       return {
-
         width:
           existingConfig.width ||
           3,
@@ -2565,29 +2686,30 @@ function getDefaultConfigForType(
         depth:
           existingConfig.depth ||
           2,
-
       };
 
 
+    /*
+     * OTHER NODE TYPES
+     */
+
     default:
-
       return {};
-
   }
-
 }
 
 
-/* =====================================================
-   NEXT ID
-===================================================== */
+/*
+ * =====================================================
+ * NEXT ID
+ * =====================================================
+ */
 
 function getNextId(
   items,
   prefix,
   padding
 ) {
-
   let highest =
     0;
 
@@ -2596,15 +2718,12 @@ function getNextId(
     const item
     of items
   ) {
-
     if (
       !item.id.startsWith(
         prefix
       )
     ) {
-
       continue;
-
     }
 
 
@@ -2625,37 +2744,33 @@ function getNextId(
         number
       )
     ) {
-
       highest =
         Math.max(
           highest,
           number
         );
-
     }
-
   }
 
 
   return `${prefix}${String(
-    highest +
-      1
+    highest + 1
   ).padStart(
     padding,
     "0"
   )}`;
-
 }
 
 
-/* =====================================================
-   FILE NAME
-===================================================== */
+/*
+ * =====================================================
+ * FILE NAME
+ * =====================================================
+ */
 
 function sanitizeFilename(
   name
 ) {
-
   return (
     name
       ?.trim()
@@ -2670,5 +2785,4 @@ function sanitizeFilename(
     ||
     "warehouse-map"
   );
-
 }
