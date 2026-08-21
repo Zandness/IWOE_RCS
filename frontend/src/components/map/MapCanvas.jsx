@@ -16,6 +16,8 @@ export default function MapCanvas({
   tool,
 
   selectedNodeId,
+  selectedEdgeId,
+
   connectionStart,
 
   robots = [],
@@ -33,10 +35,11 @@ export default function MapCanvas({
 
   onNodeDragStart,
   onNodeDragEnd,
+
+  onEdgeClick,
 }) {
   const viewportRef =
     useRef(null);
-
 
   const panRef =
     useRef({
@@ -44,22 +47,17 @@ export default function MapCanvas({
       y: 150,
     });
 
-
   const panDragRef =
     useRef(null);
-
 
   const autoPanFrameRef =
     useRef(null);
 
-
   const dragPointerRef =
     useRef(null);
 
-
   const movedRef =
     useRef(false);
-
 
   const [
     pan,
@@ -82,12 +80,6 @@ export default function MapCanvas({
   }
 
 
-  /*
-   * =========================================
-   * SCREEN -> WORLD
-   * =========================================
-   */
-
   function screenToWorld(
     clientX,
     clientY
@@ -105,16 +97,13 @@ export default function MapCanvas({
     const rect =
       viewport.getBoundingClientRect();
 
-
     const screenX =
       clientX -
       rect.left;
 
-
     const screenY =
       clientY -
       rect.top;
-
 
     const worldPixelX =
       (
@@ -123,14 +112,12 @@ export default function MapCanvas({
       ) /
       zoom;
 
-
     const worldPixelY =
       (
         screenY -
         panRef.current.y
       ) /
       zoom;
-
 
     return {
       x: Number(
@@ -151,9 +138,9 @@ export default function MapCanvas({
 
 
   /*
-   * =========================================
+   * ===========================
    * AUTO PAN
-   * =========================================
+   * ===========================
    */
 
   function calculateAutoPan(
@@ -170,70 +157,47 @@ export default function MapCanvas({
       };
     }
 
-
     const rect =
       viewport.getBoundingClientRect();
-
-
-    const leftDistance =
-      clientX -
-      rect.left;
-
-
-    const rightDistance =
-      rect.right -
-      clientX;
-
-
-    const topDistance =
-      clientY -
-      rect.top;
-
-
-    const bottomDistance =
-      rect.bottom -
-      clientY;
-
 
     let moveX = 0;
     let moveY = 0;
 
-
     if (
-      leftDistance <
+      clientX -
+        rect.left <
       AUTO_PAN_EDGE
     ) {
       moveX =
         AUTO_PAN_SPEED;
     }
 
-
     if (
-      rightDistance <
+      rect.right -
+        clientX <
       AUTO_PAN_EDGE
     ) {
       moveX =
         -AUTO_PAN_SPEED;
     }
 
-
     if (
-      topDistance <
+      clientY -
+        rect.top <
       AUTO_PAN_EDGE
     ) {
       moveY =
         AUTO_PAN_SPEED;
     }
 
-
     if (
-      bottomDistance <
+      rect.bottom -
+        clientY <
       AUTO_PAN_EDGE
     ) {
       moveY =
         -AUTO_PAN_SPEED;
     }
-
 
     return {
       x:
@@ -252,11 +216,9 @@ export default function MapCanvas({
       return;
     }
 
-
     function loop() {
       const pointer =
         dragPointerRef.current;
-
 
       if (!pointer) {
         autoPanFrameRef.current =
@@ -265,13 +227,11 @@ export default function MapCanvas({
         return;
       }
 
-
       const movement =
         calculateAutoPan(
           pointer.clientX,
           pointer.clientY
         );
-
 
       if (
         movement.x !== 0 ||
@@ -287,17 +247,14 @@ export default function MapCanvas({
             movement.y,
         });
 
-
         pointer.updatePosition?.();
       }
-
 
       autoPanFrameRef.current =
         requestAnimationFrame(
           loop
         );
     }
-
 
     autoPanFrameRef.current =
       requestAnimationFrame(
@@ -310,14 +267,12 @@ export default function MapCanvas({
     dragPointerRef.current =
       null;
 
-
     if (
       autoPanFrameRef.current
     ) {
       cancelAnimationFrame(
         autoPanFrameRef.current
       );
-
 
       autoPanFrameRef.current =
         null;
@@ -326,9 +281,9 @@ export default function MapCanvas({
 
 
   /*
-   * =========================================
+   * ===========================
    * BACKGROUND PAN
-   * =========================================
+   * ===========================
    */
 
   function handleBackgroundPointerDown(
@@ -337,14 +292,12 @@ export default function MapCanvas({
     const middleMouse =
       event.button === 1;
 
-
     const selectPan =
       event.button === 0 &&
       (
         tool === "select" ||
         mode === "monitor"
       );
-
 
     if (
       !middleMouse &&
@@ -353,13 +306,10 @@ export default function MapCanvas({
       return;
     }
 
-
     event.preventDefault();
-
 
     movedRef.current =
       false;
-
 
     panDragRef.current = {
       pointerId:
@@ -378,11 +328,11 @@ export default function MapCanvas({
         panRef.current.y,
     };
 
-
     try {
-      event.currentTarget.setPointerCapture(
-        event.pointerId
-      );
+      event.currentTarget
+        .setPointerCapture(
+          event.pointerId
+        );
     } catch {
       //
     }
@@ -395,11 +345,9 @@ export default function MapCanvas({
     const drag =
       panDragRef.current;
 
-
     if (!drag) {
       return;
     }
-
 
     if (
       drag.pointerId !==
@@ -408,16 +356,13 @@ export default function MapCanvas({
       return;
     }
 
-
     const dx =
       event.clientX -
       drag.startX;
 
-
     const dy =
       event.clientY -
       drag.startY;
-
 
     if (
       Math.abs(dx) > 3 ||
@@ -426,7 +371,6 @@ export default function MapCanvas({
       movedRef.current =
         true;
     }
-
 
     updatePan({
       x:
@@ -448,10 +392,8 @@ export default function MapCanvas({
         panDragRef.current
       );
 
-
     panDragRef.current =
       null;
-
 
     if (
       wasPanning &&
@@ -463,20 +405,17 @@ export default function MapCanvas({
       return;
     }
 
-
     if (
       event.button !== 0
     ) {
       return;
     }
 
-
     const position =
       screenToWorld(
         event.clientX,
         event.clientY
       );
-
 
     onCanvasClick(
       position
@@ -485,9 +424,9 @@ export default function MapCanvas({
 
 
   /*
-   * =========================================
+   * ===========================
    * ZOOM
-   * =========================================
+   * ===========================
    */
 
   function handleWheel(
@@ -495,39 +434,31 @@ export default function MapCanvas({
   ) {
     event.preventDefault();
 
-
     const viewport =
       viewportRef.current;
-
 
     if (!viewport) {
       return;
     }
 
-
     const rect =
       viewport.getBoundingClientRect();
-
 
     const mouseX =
       event.clientX -
       rect.left;
 
-
     const mouseY =
       event.clientY -
       rect.top;
 
-
     const oldZoom =
       zoom;
-
 
     const factor =
       event.deltaY < 0
         ? 1.1
         : 0.9;
-
 
     const nextZoom =
       clamp(
@@ -537,7 +468,6 @@ export default function MapCanvas({
         4
       );
 
-
     const worldX =
       (
         mouseX -
@@ -545,14 +475,12 @@ export default function MapCanvas({
       ) /
       oldZoom;
 
-
     const worldY =
       (
         mouseY -
         panRef.current.y
       ) /
       oldZoom;
-
 
     updatePan({
       x:
@@ -566,21 +494,18 @@ export default function MapCanvas({
           nextZoom,
     });
 
-
     onZoomChange(
       Number(
-        nextZoom.toFixed(
-          3
-        )
+        nextZoom.toFixed(3)
       )
     );
   }
 
 
   /*
-   * =========================================
-   * NODE DRAG / PATH CLICK
-   * =========================================
+   * ===========================
+   * NODE DRAG
+   * ===========================
    */
 
   function handleNodePointerDown(
@@ -589,13 +514,11 @@ export default function MapCanvas({
   ) {
     event.stopPropagation();
 
-
     if (
       mode === "monitor"
     ) {
       return;
     }
-
 
     if (
       tool === "connect"
@@ -607,44 +530,35 @@ export default function MapCanvas({
       return;
     }
 
-
     if (
       tool !== "select"
     ) {
       return;
     }
 
-
     event.preventDefault();
-
 
     onNodeClick(
       node.id
     );
 
-
     onNodeDragStart?.(
       node.id
     );
 
-
     const pointerId =
       event.pointerId;
 
-
     let moved =
       false;
-
 
     function updateNodePosition() {
       const pointer =
         dragPointerRef.current;
 
-
       if (!pointer) {
         return;
       }
-
 
       const position =
         screenToWorld(
@@ -652,13 +566,11 @@ export default function MapCanvas({
           pointer.clientY
         );
 
-
       const snapped =
         snapToGrid(
           position,
           mapData.gridSpacing
         );
-
 
       onNodeMove(
         node.id,
@@ -666,7 +578,6 @@ export default function MapCanvas({
         snapped.y
       );
     }
-
 
     function handleMove(
       moveEvent
@@ -678,10 +589,8 @@ export default function MapCanvas({
         return;
       }
 
-
       moved =
         true;
-
 
       dragPointerRef.current = {
         clientX:
@@ -694,13 +603,10 @@ export default function MapCanvas({
           updateNodePosition,
       };
 
-
       updateNodePosition();
-
 
       startAutoPan();
     }
-
 
     function handleUp(
       upEvent
@@ -712,39 +618,32 @@ export default function MapCanvas({
         return;
       }
 
-
       window.removeEventListener(
         "pointermove",
         handleMove
       );
-
 
       window.removeEventListener(
         "pointerup",
         handleUp
       );
 
-
       stopAutoPan();
-
 
       if (moved) {
         movedRef.current =
           true;
       }
 
-
       onNodeDragEnd?.(
         node.id
       );
     }
 
-
     window.addEventListener(
       "pointermove",
       handleMove
     );
-
 
     window.addEventListener(
       "pointerup",
@@ -753,12 +652,6 @@ export default function MapCanvas({
   }
 
 
-  /*
-   * =========================================
-   * SELECTED ROBOT PATH
-   * =========================================
-   */
-
   const selectedRobot =
     robots.find(
       (robot) =>
@@ -766,17 +659,9 @@ export default function MapCanvas({
         selectedRobotId
     ) || null;
 
-
   const selectedRobotPath =
     selectedRobot?.plannedPath ||
     [];
-
-
-  /*
-   * =========================================
-   * GRID
-   * =========================================
-   */
 
   const gridSize =
     Math.max(
@@ -788,12 +673,6 @@ export default function MapCanvas({
     SCALE *
     zoom;
 
-
-  /*
-   * =========================================
-   * RENDER
-   * =========================================
-   */
 
   return (
     <div
@@ -827,8 +706,6 @@ export default function MapCanvas({
       }
     >
 
-      {/* INFINITE GRID */}
-
       <div
         className="infinite-map-background"
 
@@ -855,19 +732,41 @@ export default function MapCanvas({
         className="infinite-map-world"
       >
 
+        <defs>
+          <marker
+            id="path-arrow"
+
+            markerWidth="8"
+            markerHeight="8"
+
+            refX="7"
+            refY="4"
+
+            orient="auto"
+
+            markerUnits="strokeWidth"
+          >
+            <path
+              d="M 0 0 L 8 4 L 0 8 z"
+
+              className="path-arrow-head"
+            />
+          </marker>
+        </defs>
+
+
         <g
           transform={`
             translate(
               ${pan.x}
               ${pan.y}
             )
+
             scale(
               ${zoom}
             )
           `}
         >
-
-          {/* WAREHOUSE BOUNDARY */}
 
           <rect
             x="0"
@@ -898,14 +797,12 @@ export default function MapCanvas({
                     edge.from
                 );
 
-
               const to =
                 mapData.nodes.find(
                   (node) =>
                     node.id ===
                     edge.to
                 );
-
 
               if (
                 !from ||
@@ -914,7 +811,6 @@ export default function MapCanvas({
                 return null;
               }
 
-
               const highlighted =
                 mode === "monitor" &&
                 isEdgeInRobotPath(
@@ -922,6 +818,26 @@ export default function MapCanvas({
                   selectedRobotPath
                 );
 
+              const selected =
+                mode === "edit" &&
+                selectedEdgeId ===
+                  edge.id;
+
+              const x1 =
+                from.x *
+                SCALE;
+
+              const y1 =
+                from.y *
+                SCALE;
+
+              const x2 =
+                to.x *
+                SCALE;
+
+              const y2 =
+                to.y *
+                SCALE;
 
               return (
                 <g
@@ -932,54 +848,88 @@ export default function MapCanvas({
                   className="map-edge-group"
                 >
 
+                  {/*
+                   * Wide invisible line
+                   * for easy selection.
+                   */}
+
+                  {mode ===
+                    "edit" && (
+                    <line
+                      x1={x1}
+                      y1={y1}
+
+                      x2={x2}
+                      y2={y2}
+
+                      className="map-edge-hitbox"
+
+                      onPointerDown={(event) => {
+                        event.stopPropagation();
+
+                        if (
+                          tool !==
+                          "select"
+                        ) {
+                          return;
+                        }
+
+                        onEdgeClick(
+                          edge.id
+                        );
+                      }}
+                    />
+                  )}
+
+
                   <line
-                    x1={
-                      from.x *
-                      SCALE
+                    x1={x1}
+                    y1={y1}
+
+                    x2={x2}
+                    y2={y2}
+
+                    markerEnd={
+                      !edge.bidirectional
+                        ? "url(#path-arrow)"
+                        : undefined
                     }
 
-                    y1={
-                      from.y *
-                      SCALE
-                    }
+                    className={[
+                      "map-edge",
 
-                    x2={
-                      to.x *
-                      SCALE
-                    }
+                      selected
+                        ? "selected"
+                        : "",
 
-                    y2={
-                      to.y *
-                      SCALE
-                    }
-
-                    className={
                       highlighted
-                        ? "map-edge path-highlighted"
-                        : "map-edge"
-                    }
+                        ? "path-highlighted"
+                        : "",
+
+                      edge.enabled === false
+                        ? "disabled"
+                        : "",
+                    ].join(
+                      " "
+                    )}
                   />
 
 
                   <text
                     x={
                       (
-                        from.x +
-                        to.x
+                        x1 +
+                        x2
                       ) /
-                        2 *
-                      SCALE
+                      2
                     }
 
                     y={
                       (
-                        (
-                          from.y +
-                          to.y
-                        ) /
-                        2 *
-                        SCALE
-                      ) -
+                        y1 +
+                        y2
+                      ) /
+                        2 -
                       9
                     }
 
@@ -987,11 +937,11 @@ export default function MapCanvas({
 
                     className="edge-distance"
                   >
+                    {edge.id}
+                    {" • "}
                     {Number(
                       edge.distance
-                    ).toFixed(
-                      2
-                    )}
+                    ).toFixed(2)}
                     {" m"}
                   </text>
 
@@ -1005,18 +955,15 @@ export default function MapCanvas({
 
           {mapData.nodes.map(
             (node) => {
-
               const selected =
                 mode === "edit" &&
                 selectedNodeId ===
                   node.id;
 
-
               const connecting =
                 mode === "edit" &&
                 connectionStart ===
                   node.id;
-
 
               return (
                 <NodeShape
@@ -1055,11 +1002,9 @@ export default function MapCanvas({
           {mode === "monitor" &&
             robots.map(
               (robot) => {
-
                 const selected =
                   selectedRobotId ===
                   robot.id;
-
 
                 return (
                   <g
@@ -1082,9 +1027,7 @@ export default function MapCanvas({
                       )
                     `}
 
-                    onPointerDown={(
-                      event
-                    ) => {
+                    onPointerDown={(event) => {
                       event.stopPropagation();
 
                       onRobotClick(
@@ -1108,11 +1051,8 @@ export default function MapCanvas({
                         selected
                           ? "selected"
                           : "",
-                      ].join(
-                        " "
-                      )}
+                      ].join(" ")}
                     />
-
 
                     <text
                       x="0"
@@ -1125,7 +1065,6 @@ export default function MapCanvas({
                       R
                     </text>
 
-
                     <text
                       x="0"
                       y="-20"
@@ -1134,9 +1073,7 @@ export default function MapCanvas({
 
                       className="monitor-robot-label"
                     >
-                      {
-                        robot.id
-                      }
+                      {robot.id}
                     </text>
 
                   </g>
@@ -1170,11 +1107,9 @@ export default function MapCanvas({
 }
 
 
-/*
- * =========================================
- * NODE SHAPE
- * =========================================
- */
+/* ===========================
+   NODE SHAPE
+=========================== */
 
 function NodeShape({
   node,
@@ -1191,7 +1126,6 @@ function NodeShape({
   const y =
     node.y *
     SCALE;
-
 
   const classes = [
     "map-node-shape",
@@ -1212,29 +1146,21 @@ function NodeShape({
   ].join(" ");
 
 
-  /*
-   * STORAGE
-   */
-
   if (
     node.type ===
     "STORAGE"
   ) {
     const width =
       Number(
-        node.config?.width ||
-          4
+        node.config?.width || 4
       ) *
       SCALE;
-
 
     const depth =
       Number(
-        node.config?.depth ||
-          2
+        node.config?.depth || 2
       ) *
       SCALE;
-
 
     return (
       <g
@@ -1245,6 +1171,7 @@ function NodeShape({
             ${x}
             ${y}
           )
+
           rotate(
             ${node.rotation || 0}
           )
@@ -1254,16 +1181,13 @@ function NodeShape({
           onPointerDown
         }
       >
-
         <rect
           x={
-            -width /
-            2
+            -width / 2
           }
 
           y={
-            -depth /
-            2
+            -depth / 2
           }
 
           width={
@@ -1281,20 +1205,13 @@ function NodeShape({
           }
         />
 
-        <NodeLabel
-          node={
-            node
-          }
+        <LocalNodeLabel
+          node={node}
         />
-
       </g>
     );
   }
 
-
-  /*
-   * CHARGING / DOCK
-   */
 
   if (
     node.type ===
@@ -1304,19 +1221,15 @@ function NodeShape({
   ) {
     const width =
       Number(
-        node.config?.width ||
-          2
+        node.config?.width || 2
       ) *
       SCALE;
-
 
     const depth =
       Number(
-        node.config?.depth ||
-          2
+        node.config?.depth || 2
       ) *
       SCALE;
-
 
     return (
       <g
@@ -1327,6 +1240,7 @@ function NodeShape({
             ${x}
             ${y}
           )
+
           rotate(
             ${node.rotation || 0}
           )
@@ -1336,16 +1250,13 @@ function NodeShape({
           onPointerDown
         }
       >
-
         <rect
           x={
-            -width /
-            2
+            -width / 2
           }
 
           y={
-            -depth /
-            2
+            -depth / 2
           }
 
           width={
@@ -1363,7 +1274,6 @@ function NodeShape({
           }
         />
 
-
         <text
           x="0"
           y="4"
@@ -1378,21 +1288,13 @@ function NodeShape({
             : "D"}
         </text>
 
-
-        <NodeLabel
-          node={
-            node
-          }
+        <LocalNodeLabel
+          node={node}
         />
-
       </g>
     );
   }
 
-
-  /*
-   * ROAD DIAMOND
-   */
 
   if (
     node.type ===
@@ -1407,8 +1309,12 @@ function NodeShape({
             ${x}
             ${y}
           )
+
           rotate(
-            ${45 + (node.rotation || 0)}
+            ${
+              45 +
+              (node.rotation || 0)
+            }
           )
         `}
 
@@ -1416,7 +1322,6 @@ function NodeShape({
           onPointerDown
         }
       >
-
         <rect
           x="-10"
           y="-10"
@@ -1430,105 +1335,55 @@ function NodeShape({
             classes
           }
         />
-
-        <g
-          transform="rotate(-45)"
-        >
-          <NodeLabel
-            node={
-              node
-            }
-          />
-        </g>
-
       </g>
     );
   }
 
 
-  /*
-   * PICKUP
-   */
-
   if (
     node.type ===
-    "PICKUP"
+      "PICKUP" ||
+    node.type ===
+      "DROPOFF"
   ) {
+    const points =
+      node.type ===
+      "PICKUP"
+        ? "-12,10 0,-12 12,10"
+        : "-12,-10 0,12 12,-10";
+
     return (
       <g
         className="map-node-group"
+
+        transform={`
+          translate(
+            ${x}
+            ${y}
+          )
+        `}
 
         onPointerDown={
           onPointerDown
         }
       >
-
         <polygon
-          points={`
-            ${x},${y - 12}
-            ${x - 12},${y + 10}
-            ${x + 12},${y + 10}
-          `}
+          points={
+            points
+          }
 
           className={
             classes
           }
         />
 
-        <NodeLabel
-          node={
-            node
-          }
+        <LocalNodeLabel
+          node={node}
         />
-
       </g>
     );
   }
 
-
-  /*
-   * DROPOFF
-   */
-
-  if (
-    node.type ===
-    "DROPOFF"
-  ) {
-    return (
-      <g
-        className="map-node-group"
-
-        onPointerDown={
-          onPointerDown
-        }
-      >
-
-        <polygon
-          points={`
-            ${x},${y + 12}
-            ${x - 12},${y - 10}
-            ${x + 12},${y - 10}
-          `}
-
-          className={
-            classes
-          }
-        />
-
-        <NodeLabel
-          node={
-            node
-          }
-        />
-
-      </g>
-    );
-  }
-
-
-  /*
-   * HOME / WAITING / WAYPOINT
-   */
 
   return (
     <g
@@ -1538,7 +1393,6 @@ function NodeShape({
         onPointerDown
       }
     >
-
       <circle
         cx={
           x
@@ -1560,15 +1414,10 @@ function NodeShape({
         }
       />
 
-
       {node.type ===
         "HOME" && (
-
         <text
-          x={
-            x
-          }
-
+          x={x}
           y={
             y + 3
           }
@@ -1579,54 +1428,32 @@ function NodeShape({
         >
           H
         </text>
-
       )}
 
-
-      <NodeLabel
-        node={
-          node
+      <text
+        x={x}
+        y={
+          y - 15
         }
-      />
 
+        textAnchor="middle"
+
+        className="map-node-label"
+      >
+        {node.id}
+      </text>
     </g>
   );
 }
 
 
-function NodeLabel({
+function LocalNodeLabel({
   node,
 }) {
   return (
     <text
-      x={
-        node.type ===
-          "STORAGE" ||
-        node.type ===
-          "CHARGING" ||
-        node.type ===
-          "DOCK" ||
-        node.type ===
-          "ROAD"
-          ? 0
-          : node.x *
-            SCALE
-      }
-
-      y={
-        node.type ===
-          "STORAGE" ||
-        node.type ===
-          "CHARGING" ||
-        node.type ===
-          "DOCK" ||
-        node.type ===
-          "ROAD"
-          ? -18
-          : node.y *
-              SCALE -
-            15
-      }
+      x="0"
+      y="-18"
 
       textAnchor="middle"
 
@@ -1643,10 +1470,7 @@ function snapToGrid(
   spacing
 ) {
   const step =
-    Number(
-      spacing
-    );
-
+    Number(spacing);
 
   if (
     !Number.isFinite(
@@ -1657,7 +1481,6 @@ function snapToGrid(
     return position;
   }
 
-
   return {
     x: Number(
       (
@@ -1666,9 +1489,7 @@ function snapToGrid(
           step
         ) *
         step
-      ).toFixed(
-        3
-      )
+      ).toFixed(3)
     ),
 
     y: Number(
@@ -1678,9 +1499,7 @@ function snapToGrid(
           step
         ) *
         step
-      ).toFixed(
-        3
-      )
+      ).toFixed(3)
     ),
   };
 }
@@ -1714,7 +1533,6 @@ function positiveModulo(
     return 0;
   }
 
-
   return (
     (
       value %
@@ -1737,7 +1555,6 @@ function isEdgeInRobotPath(
     return false;
   }
 
-
   for (
     let index = 0;
     index <
@@ -1747,25 +1564,26 @@ function isEdgeInRobotPath(
     const from =
       path[index];
 
-
     const to =
       path[index + 1];
 
-
     if (
       (
-        edge.from === from &&
-        edge.to === to
+        edge.from ===
+          from &&
+        edge.to ===
+          to
       ) ||
       (
-        edge.from === to &&
-        edge.to === from
+        edge.from ===
+          to &&
+        edge.to ===
+          from
       )
     ) {
       return true;
     }
   }
-
 
   return false;
 }

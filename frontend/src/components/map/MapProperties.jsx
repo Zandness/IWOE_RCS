@@ -2,15 +2,27 @@ export default function MapProperties({
   mapData,
 
   selectedNode,
+  selectedEdge,
 
   onMapChange,
   onNodeChange,
+  onEdgeChange,
 }) {
+  if (selectedEdge) {
+    return (
+      <EdgeProperties
+        edge={selectedEdge}
+        onEdgeChange={
+          onEdgeChange
+        }
+      />
+    );
+  }
+
   if (selectedNode) {
     return (
       <NodeProperties
         node={selectedNode}
-
         onNodeChange={
           onNodeChange
         }
@@ -21,7 +33,6 @@ export default function MapProperties({
   return (
     <MapSettings
       mapData={mapData}
-
       onMapChange={
         onMapChange
       }
@@ -37,7 +48,6 @@ function MapSettings({
   return (
     <>
       <div className="panel-header">
-
         <h3>
           Map Properties
         </h3>
@@ -45,16 +55,13 @@ function MapSettings({
         <span>
           {mapData.mapId}
         </span>
-
       </div>
 
       <PropertyInput
         label="Map Name"
-
         value={
           mapData.name
         }
-
         onChange={(value) =>
           onMapChange(
             "name",
@@ -65,15 +72,11 @@ function MapSettings({
 
       <PropertyInput
         label="Warehouse Width"
-
         type="number"
-
         value={
           mapData.width
         }
-
         unit="m"
-
         onChange={(value) =>
           onMapChange(
             "width",
@@ -84,15 +87,11 @@ function MapSettings({
 
       <PropertyInput
         label="Warehouse Height"
-
         type="number"
-
         value={
           mapData.height
         }
-
         unit="m"
-
         onChange={(value) =>
           onMapChange(
             "height",
@@ -103,17 +102,12 @@ function MapSettings({
 
       <PropertyInput
         label="Grid Spacing"
-
         type="number"
-
         step="0.1"
-
         value={
           mapData.gridSpacing
         }
-
         unit="m"
-
         onChange={(value) =>
           onMapChange(
             "gridSpacing",
@@ -123,7 +117,6 @@ function MapSettings({
       />
 
       <div className="map-property-summary">
-
         <div>
           <span>
             Nodes
@@ -143,13 +136,6 @@ function MapSettings({
             {mapData.edges.length}
           </strong>
         </div>
-
-      </div>
-
-      <div className="map-help-box">
-        All warehouse objects are represented as nodes.
-        Select a node and change its type to define
-        waypoint, storage, charging, dock or other functions.
       </div>
     </>
   );
@@ -166,7 +152,6 @@ function NodeProperties({
   return (
     <>
       <div className="panel-header">
-
         <h3>
           Node Properties
         </h3>
@@ -174,17 +159,13 @@ function NodeProperties({
         <span>
           {node.id}
         </span>
-
       </div>
-
 
       <PropertyInput
         label="Node Name"
-
         value={
           node.name
         }
-
         onChange={(value) =>
           onNodeChange(
             "name",
@@ -193,87 +174,42 @@ function NodeProperties({
         }
       />
 
-
-      <div className="property-group">
-
-        <label className="property-label">
-          Node Type
-        </label>
-
-        <select
-          className="property-input"
-
-          value={
-            node.type
-          }
-
-          onChange={(event) =>
-            onNodeChange(
-              "type",
-              event.target.value
-            )
-          }
-        >
-
-          <option value="WAYPOINT">
-            Waypoint
-          </option>
-
-          <option value="ROAD">
-            Road Point
-          </option>
-
-          <option value="STORAGE">
-            Storage
-          </option>
-
-          <option value="PICKUP">
-            Pickup
-          </option>
-
-          <option value="DROPOFF">
-            Dropoff
-          </option>
-
-          <option value="CHARGING">
-            Charging
-          </option>
-
-          <option value="DOCK">
-            Dock
-          </option>
-
-          <option value="WAITING">
-            Waiting
-          </option>
-
-          <option value="HOME">
-            Home
-          </option>
-
-        </select>
-
-      </div>
-
+      <SelectInput
+        label="Node Type"
+        value={
+          node.type
+        }
+        onChange={(value) =>
+          onNodeChange(
+            "type",
+            value
+          )
+        }
+        options={[
+          ["WAYPOINT", "Waypoint"],
+          ["ROAD", "Road Point"],
+          ["STORAGE", "Storage"],
+          ["PICKUP", "Pickup"],
+          ["DROPOFF", "Dropoff"],
+          ["CHARGING", "Charging"],
+          ["DOCK", "Dock"],
+          ["WAITING", "Waiting"],
+          ["HOME", "Home"],
+        ]}
+      />
 
       <div className="property-section-title">
         Position
       </div>
 
-
       <PropertyInput
         label="X Position"
-
         type="number"
-
         step="0.1"
-
         value={
           node.x
         }
-
         unit="m"
-
         onChange={(value) =>
           onNodeChange(
             "x",
@@ -282,20 +218,14 @@ function NodeProperties({
         }
       />
 
-
       <PropertyInput
         label="Y Position"
-
         type="number"
-
         step="0.1"
-
         value={
           node.y
         }
-
         unit="m"
-
         onChange={(value) =>
           onNodeChange(
             "y",
@@ -304,20 +234,14 @@ function NodeProperties({
         }
       />
 
-
       <PropertyInput
         label="Rotation"
-
         type="number"
-
         step="5"
-
         value={
           node.rotation || 0
         }
-
         unit="°"
-
         onChange={(value) =>
           onNodeChange(
             "rotation",
@@ -326,59 +250,40 @@ function NodeProperties({
         }
       />
 
-
-      <div className="property-group">
-
-        <label className="property-label">
-          Enabled
-        </label>
-
-        <select
-          className="property-input"
-
-          value={
-            node.enabled
-              ? "YES"
-              : "NO"
-          }
-
-          onChange={(event) =>
-            onNodeChange(
-              "enabled",
-              event.target.value ===
-                "YES"
-            )
-          }
-        >
-          <option value="YES">
-            Yes
-          </option>
-
-          <option value="NO">
-            No
-          </option>
-        </select>
-
-      </div>
-
+      <SelectInput
+        label="Enabled"
+        value={
+          node.enabled
+            ? "YES"
+            : "NO"
+        }
+        onChange={(value) =>
+          onNodeChange(
+            "enabled",
+            value === "YES"
+          )
+        }
+        options={[
+          ["YES", "Yes"],
+          ["NO", "No"],
+        ]}
+      />
 
       {node.type ===
         "STORAGE" && (
-
         <>
           <div className="property-section-title">
             Storage Configuration
           </div>
 
-          <ConfigInput
+          <PropertyInput
             label="Width"
-
+            type="number"
+            step="0.1"
             value={
               config.width || 4
             }
-
             unit="m"
-
             onChange={(value) =>
               onNodeChange(
                 "config.width",
@@ -387,15 +292,14 @@ function NodeProperties({
             }
           />
 
-          <ConfigInput
+          <PropertyInput
             label="Depth"
-
+            type="number"
+            step="0.1"
             value={
               config.depth || 2
             }
-
             unit="m"
-
             onChange={(value) =>
               onNodeChange(
                 "config.depth",
@@ -404,13 +308,11 @@ function NodeProperties({
             }
           />
 
-          <ConfigInput
+          <PropertyInput
             label="Zone"
-
             value={
               config.zone || ""
             }
-
             onChange={(value) =>
               onNodeChange(
                 "config.zone",
@@ -419,15 +321,12 @@ function NodeProperties({
             }
           />
 
-          <ConfigInput
+          <PropertyInput
             label="Levels"
-
             type="number"
-
             value={
               config.levels || 1
             }
-
             onChange={(value) =>
               onNodeChange(
                 "config.levels",
@@ -436,16 +335,12 @@ function NodeProperties({
             }
           />
 
-          <ConfigInput
+          <PropertyInput
             label="Slots / Level"
-
             type="number"
-
             value={
-              config.slotsPerLevel ||
-              1
+              config.slotsPerLevel || 1
             }
-
             onChange={(value) =>
               onNodeChange(
                 "config.slotsPerLevel",
@@ -453,48 +348,26 @@ function NodeProperties({
               )
             }
           />
-
-          <div className="rack-slot-summary">
-
-            <span>
-              Total Storage Slots
-            </span>
-
-            <strong>
-              {Number(
-                config.levels ||
-                  1
-              ) *
-                Number(
-                  config.slotsPerLevel ||
-                    1
-                )}
-            </strong>
-
-          </div>
         </>
       )}
-
 
       {(node.type ===
         "CHARGING" ||
         node.type ===
           "DOCK") && (
-
         <>
           <div className="property-section-title">
             Station Configuration
           </div>
 
-          <ConfigInput
+          <PropertyInput
             label="Width"
-
+            type="number"
+            step="0.1"
             value={
               config.width || 2
             }
-
             unit="m"
-
             onChange={(value) =>
               onNodeChange(
                 "config.width",
@@ -503,15 +376,14 @@ function NodeProperties({
             }
           />
 
-          <ConfigInput
+          <PropertyInput
             label="Depth"
-
+            type="number"
+            step="0.1"
             value={
               config.depth || 2
             }
-
             unit="m"
-
             onChange={(value) =>
               onNodeChange(
                 "config.depth",
@@ -522,15 +394,12 @@ function NodeProperties({
 
           {node.type ===
             "CHARGING" && (
-
-            <ConfigInput
+            <PropertyInput
               label="Charger ID"
-
               value={
                 config.chargerId ||
                 ""
               }
-
               onChange={(value) =>
                 onNodeChange(
                   "config.chargerId",
@@ -538,54 +407,204 @@ function NodeProperties({
                 )
               }
             />
-
           )}
         </>
       )}
-
-
-      <div className="map-help-box">
-        Changing the Node Type changes only its
-        visual style and configuration. Existing
-        paths remain connected to the same Node ID.
-      </div>
-
     </>
   );
 }
 
 
-function ConfigInput({
+function EdgeProperties({
+  edge,
+  onEdgeChange,
+}) {
+  return (
+    <>
+      <div className="panel-header">
+        <h3>
+          Path Properties
+        </h3>
+
+        <span>
+          {edge.id}
+        </span>
+      </div>
+
+      <div className="property-readonly">
+        <span>
+          From
+        </span>
+
+        <strong>
+          {edge.from}
+        </strong>
+      </div>
+
+      <div className="property-readonly">
+        <span>
+          To
+        </span>
+
+        <strong>
+          {edge.to}
+        </strong>
+      </div>
+
+      <PropertyInput
+        label="Distance"
+        type="number"
+        step="0.01"
+        value={
+          edge.distance
+        }
+        unit="m"
+        disabled={
+          edge.autoDistance
+        }
+        onChange={(value) =>
+          onEdgeChange(
+            "distance",
+            Number(value)
+          )
+        }
+      />
+
+      <SelectInput
+        label="Auto Distance"
+        value={
+          edge.autoDistance
+            ? "YES"
+            : "NO"
+        }
+        onChange={(value) =>
+          onEdgeChange(
+            "autoDistance",
+            value === "YES"
+          )
+        }
+        options={[
+          ["YES", "Yes"],
+          ["NO", "No"],
+        ]}
+      />
+
+      <SelectInput
+        label="Direction"
+        value={
+          edge.bidirectional
+            ? "BOTH"
+            : "ONE"
+        }
+        onChange={(value) =>
+          onEdgeChange(
+            "bidirectional",
+            value === "BOTH"
+          )
+        }
+        options={[
+          [
+            "BOTH",
+            "Bidirectional",
+          ],
+          [
+            "ONE",
+            "One Way",
+          ],
+        ]}
+      />
+
+      <PropertyInput
+        label="Speed Limit"
+        type="number"
+        step="0.1"
+        value={
+          edge.speedLimit ?? 1
+        }
+        unit="m/s"
+        onChange={(value) =>
+          onEdgeChange(
+            "speedLimit",
+            Number(value)
+          )
+        }
+      />
+
+      <SelectInput
+        label="Enabled"
+        value={
+          edge.enabled !== false
+            ? "YES"
+            : "NO"
+        }
+        onChange={(value) =>
+          onEdgeChange(
+            "enabled",
+            value === "YES"
+          )
+        }
+        options={[
+          ["YES", "Yes"],
+          ["NO", "No"],
+        ]}
+      />
+
+      <div className="map-help-box">
+        One-way path travels from{" "}
+        <strong>
+          {edge.from}
+        </strong>{" "}
+        to{" "}
+        <strong>
+          {edge.to}
+        </strong>
+        .
+      </div>
+    </>
+  );
+}
+
+
+function SelectInput({
   label,
-
   value,
-
-  type = "text",
-
-  unit,
-
+  options,
   onChange,
 }) {
   return (
-    <PropertyInput
-      label={label}
+    <div className="property-group">
+      <label className="property-label">
+        {label}
+      </label>
 
-      value={value}
-
-      type={type}
-
-      unit={unit}
-
-      step={
-        type === "number"
-          ? "0.1"
-          : undefined
-      }
-
-      onChange={
-        onChange
-      }
-    />
+      <select
+        className="property-input"
+        value={value}
+        onChange={(event) =>
+          onChange(
+            event.target.value
+          )
+        }
+      >
+        {options.map(
+          ([
+            optionValue,
+            optionLabel,
+          ]) => (
+            <option
+              key={
+                optionValue
+              }
+              value={
+                optionValue
+              }
+            >
+              {optionLabel}
+            </option>
+          )
+        )}
+      </select>
+    </div>
   );
 }
 
@@ -603,28 +622,25 @@ function PropertyInput({
 
   unit,
 
+  disabled = false,
+
   onChange,
 }) {
   return (
     <div className="property-group">
-
       <label className="property-label">
         {label}
       </label>
 
       <div className="property-input-wrapper">
-
         <input
           className="property-input"
-
           type={type}
-
           value={value}
-
           min={min}
           max={max}
           step={step}
-
+          disabled={disabled}
           onChange={(event) =>
             onChange(
               event.target.value
@@ -637,9 +653,7 @@ function PropertyInput({
             {unit}
           </span>
         )}
-
       </div>
-
     </div>
   );
 }

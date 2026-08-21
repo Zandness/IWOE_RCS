@@ -15,110 +15,78 @@ export default function MapObjectTree({
   mapData,
 
   selectedNodeId,
+  selectedEdgeId,
 
   onSelectNode,
+  onSelectEdge,
 }) {
   return (
     <aside className="panel map-object-tree">
-
       <div className="panel-header">
-
-        <h3>
-          Map Objects
-        </h3>
+        <h3>Map Objects</h3>
 
         <span>
           {mapData.nodes.length +
             mapData.edges.length}
         </span>
-
       </div>
-
 
       <TreeSection
         title="Nodes"
-
-        count={
-          mapData.nodes.length
-        }
+        count={mapData.nodes.length}
       >
-        {mapData.nodes.map(
-          (node) => {
-
-            const Icon =
-              getNodeIcon(
-                node.type
-              );
-
-            return (
-              <TreeItem
-                key={
-                  node.id
-                }
-
-                icon={
-                  Icon
-                }
-
-                title={
-                  node.id
-                }
-
-                subtitle={`${node.name} • ${formatType(
-                  node.type
-                )}`}
-
-                active={
-                  selectedNodeId ===
-                  node.id
-                }
-
-                onClick={() =>
-                  onSelectNode(
-                    node.id
-                  )
-                }
-              />
+        {mapData.nodes.map((node) => {
+          const Icon =
+            getNodeIcon(
+              node.type
             );
-          }
-        )}
-      </TreeSection>
 
+          return (
+            <TreeItem
+              key={node.id}
+              icon={Icon}
+              title={node.id}
+              subtitle={`${node.name} • ${formatType(
+                node.type
+              )}`}
+              active={
+                selectedNodeId ===
+                node.id
+              }
+              onClick={() =>
+                onSelectNode(
+                  node.id
+                )
+              }
+            />
+          );
+        })}
+      </TreeSection>
 
       <TreeSection
         title="Paths"
-
-        count={
-          mapData.edges.length
-        }
+        count={mapData.edges.length}
       >
-        {mapData.edges.map(
-          (edge) => (
-
-            <TreeItem
-              key={
+        {mapData.edges.map((edge) => (
+          <TreeItem
+            key={edge.id}
+            icon={Link2}
+            title={edge.id}
+            subtitle={`${edge.from} → ${edge.to} • ${Number(
+              edge.distance
+            ).toFixed(2)} m`}
+            active={
+              selectedEdgeId ===
+              edge.id
+            }
+            onClick={() =>
+              onSelectEdge(
                 edge.id
-              }
-
-              icon={
-                Link2
-              }
-
-              title={
-                edge.id
-              }
-
-              subtitle={`${edge.from} → ${edge.to} • ${Number(
-                edge.distance
-              ).toFixed(
-                2
-              )} m`}
-            />
-
-          )
-        )}
+              )
+            }
+          />
+        ))}
       </TreeSection>
-
     </aside>
   );
 }
@@ -131,9 +99,7 @@ function TreeSection({
 }) {
   return (
     <div className="tree-section">
-
       <div className="tree-section-header">
-
         <div>
           <ChevronDown
             size={13}
@@ -147,13 +113,11 @@ function TreeSection({
         <span>
           {count}
         </span>
-
       </div>
 
       <div className="tree-section-content">
         {children}
       </div>
-
     </div>
   );
 }
@@ -172,24 +136,20 @@ function TreeItem({
   return (
     <button
       type="button"
-
       className={`tree-item ${
         active
           ? "active"
           : ""
       }`}
-
       onClick={
         onClick
       }
     >
-
       <Icon
         size={14}
       />
 
       <div>
-
         <strong>
           {title}
         </strong>
@@ -197,9 +157,7 @@ function TreeItem({
         <span>
           {subtitle}
         </span>
-
       </div>
-
     </button>
   );
 }
@@ -209,7 +167,6 @@ function getNodeIcon(
   type
 ) {
   switch (type) {
-
     case "ROAD":
       return Diamond;
 
@@ -244,7 +201,6 @@ function formatType(
   type
 ) {
   switch (type) {
-
     case "WAYPOINT":
       return "Waypoint";
 

@@ -1728,3 +1728,99 @@ Only Node and Robot receive pointer events.
     flex-direction: column;
   }
 }
+
+/* =========================================================
+   PATH EDITING V7
+========================================================= */
+
+
+/* Real path line */
+
+.map-edge {
+  stroke: #60748b;
+
+  stroke-width: 3;
+
+  stroke-linecap: round;
+
+  transition:
+    stroke 0.12s,
+    stroke-width 0.12s,
+    opacity 0.12s;
+}
+
+
+.map-edge.selected {
+  stroke: #fbbf24;
+
+  stroke-width: 5;
+
+  filter:
+    drop-shadow(
+      0 0 4px
+      #fbbf24
+    );
+}
+
+
+.map-edge.disabled {
+  opacity: 0.25;
+
+  stroke-dasharray:
+    7 5;
+}
+
+
+/*
+Large transparent path used only
+for mouse selection.
+*/
+
+.map-edge-hitbox {
+  stroke: transparent;
+
+  stroke-width: 18;
+
+  fill: none;
+
+  cursor: pointer;
+
+  pointer-events: stroke;
+}
+
+
+.map-edge-hitbox:hover + .map-edge {
+  stroke: #94a3b8;
+
+  stroke-width: 5;
+}
+
+
+/*
+Important:
+The parent group can contain
+a selectable hitbox now.
+*/
+
+.infinite-map-world
+.map-edge-group {
+  pointer-events: all;
+}
+
+
+/* Arrow */
+
+.path-arrow-head {
+  fill: #60748b;
+}
+
+
+/* Disabled property input */
+
+.property-input:disabled {
+  opacity: 0.45;
+
+  cursor: not-allowed;
+
+  background: #0b1420;
+}
