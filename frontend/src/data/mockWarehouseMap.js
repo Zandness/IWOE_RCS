@@ -13,18 +13,104 @@ export const INITIAL_MAP = {
   nodes: [
     {
       id: "P001",
-      name: "Point-001",
-      type: "NORMAL",
+
+      name: "Start Point",
+
+      type: "HOME",
+
       x: 5,
       y: 5,
+
+      rotation: 0,
+
+      enabled: true,
+
+      config: {},
     },
 
     {
       id: "P002",
-      name: "Point-002",
-      type: "STORAGE",
+
+      name: "Main Waypoint",
+
+      type: "WAYPOINT",
+
       x: 10,
       y: 5,
+
+      rotation: 0,
+
+      enabled: true,
+
+      config: {},
+    },
+
+    {
+      id: "P003",
+
+      name: "Storage A",
+
+      type: "STORAGE",
+
+      x: 15,
+      y: 5,
+
+      rotation: 0,
+
+      enabled: true,
+
+      config: {
+        width: 4,
+        depth: 2,
+
+        zone: "A",
+
+        levels: 4,
+
+        slotsPerLevel: 6,
+      },
+    },
+
+    {
+      id: "P004",
+
+      name: "Charging Station 1",
+
+      type: "CHARGING",
+
+      x: 20,
+      y: 10,
+
+      rotation: 0,
+
+      enabled: true,
+
+      config: {
+        width: 2,
+        depth: 2,
+
+        chargerId: "CHG-01",
+      },
+    },
+
+    {
+      id: "P005",
+
+      name: "Dock 1",
+
+      type: "DOCK",
+
+      x: 24,
+      y: 15,
+
+      rotation: 0,
+
+      enabled: true,
+
+      config: {
+        width: 3,
+        depth: 2,
+      },
     },
   ],
 
@@ -40,60 +126,77 @@ export const INITIAL_MAP = {
       autoDistance: true,
 
       bidirectional: true,
-    },
-  ],
 
-  racks: [
-    {
-      id: "RACK-001",
+      enabled: true,
 
-      name: "Rack A",
+      speedLimit: 1.2,
 
-      x: 15,
-      y: 9,
+      pathType: "NORMAL",
 
-      width: 4,
-      depth: 1.5,
-
-      rotation: 0,
-
-      levels: 4,
-
-      slotsPerLevel: 6,
-    },
-  ],
-
-  stations: [
-    {
-      id: "CHARGE-01",
-
-      name: "Charging Station 1",
-
-      type: "CHARGING",
-
-      x: 3,
-      y: 17,
-
-      width: 2,
-      depth: 2,
-
-      rotation: 0,
+      vehicleAccess: "BOTH",
     },
 
     {
-      id: "DOCK-01",
+      id: "E002",
 
-      name: "Dock 1",
+      from: "P002",
+      to: "P003",
 
-      type: "DOCK",
+      distance: 5,
 
-      x: 26,
-      y: 17,
+      autoDistance: true,
 
-      width: 3,
-      depth: 2,
+      bidirectional: true,
 
-      rotation: 0,
+      enabled: true,
+
+      speedLimit: 0.8,
+
+      pathType: "SLOW",
+
+      vehicleAccess: "BOTH",
+    },
+
+    {
+      id: "E003",
+
+      from: "P003",
+      to: "P004",
+
+      distance: 7.071,
+
+      autoDistance: true,
+
+      bidirectional: false,
+
+      enabled: true,
+
+      speedLimit: 1,
+
+      pathType: "NORMAL",
+
+      vehicleAccess: "AMR",
+    },
+
+    {
+      id: "E004",
+
+      from: "P004",
+      to: "P005",
+
+      distance: 6.403,
+
+      autoDistance: true,
+
+      bidirectional: true,
+
+      enabled: true,
+
+      speedLimit: 1.2,
+
+      pathType: "RESTRICTED",
+
+      vehicleAccess: "AGV",
     },
   ],
 };

@@ -11,6 +11,7 @@ import {
   ChevronDown,
 } from "lucide-react";
 
+
 export default function MapObjectTree({
   mapData,
 
@@ -22,71 +23,124 @@ export default function MapObjectTree({
 }) {
   return (
     <aside className="panel map-object-tree">
+
       <div className="panel-header">
-        <h3>Map Objects</h3>
+
+        <h3>
+          Map Objects
+        </h3>
 
         <span>
           {mapData.nodes.length +
             mapData.edges.length}
         </span>
+
       </div>
+
+
+      {/* NODES */}
 
       <TreeSection
         title="Nodes"
-        count={mapData.nodes.length}
+        count={
+          mapData.nodes.length
+        }
       >
-        {mapData.nodes.map((node) => {
-          const Icon =
-            getNodeIcon(
-              node.type
-            );
 
-          return (
-            <TreeItem
-              key={node.id}
-              icon={Icon}
-              title={node.id}
-              subtitle={`${node.name} • ${formatType(
+        {mapData.nodes.map(
+          (node) => {
+
+            const Icon =
+              getNodeIcon(
                 node.type
-              )}`}
-              active={
-                selectedNodeId ===
-                node.id
-              }
-              onClick={() =>
-                onSelectNode(
+              );
+
+            return (
+              <TreeItem
+                key={
                   node.id
-                )
-              }
-            />
-          );
-        })}
+                }
+
+                icon={
+                  Icon
+                }
+
+                title={
+                  node.id
+                }
+
+                subtitle={`${node.name} • ${formatNodeType(
+                  node.type
+                )}`}
+
+                active={
+                  selectedNodeId ===
+                  node.id
+                }
+
+                onClick={() =>
+                  onSelectNode(
+                    node.id
+                  )
+                }
+              />
+            );
+          }
+        )}
+
       </TreeSection>
+
+
+      {/* PATHS */}
 
       <TreeSection
         title="Paths"
-        count={mapData.edges.length}
+        count={
+          mapData.edges.length
+        }
       >
-        {mapData.edges.map((edge) => (
-          <TreeItem
-            key={edge.id}
-            icon={Link2}
-            title={edge.id}
-            subtitle={`${edge.from} → ${edge.to} • ${Number(
-              edge.distance
-            ).toFixed(2)} m`}
-            active={
-              selectedEdgeId ===
-              edge.id
-            }
-            onClick={() =>
-              onSelectEdge(
+
+        {mapData.edges.map(
+          (edge) => (
+
+            <TreeItem
+              key={
                 edge.id
-              )
-            }
-          />
-        ))}
+              }
+
+              icon={
+                Link2
+              }
+
+              title={
+                edge.id
+              }
+
+              subtitle={`${edge.from} ${
+                edge.bidirectional
+                  ? "↔"
+                  : "→"
+              } ${edge.to} • ${formatPathType(
+                edge.pathType
+              )}`}
+
+              active={
+                selectedEdgeId ===
+                edge.id
+              }
+
+              onClick={() =>
+                onSelectEdge(
+                  edge.id
+                )
+              }
+            />
+
+          )
+        )}
+
       </TreeSection>
+
     </aside>
   );
 }
@@ -99,8 +153,11 @@ function TreeSection({
 }) {
   return (
     <div className="tree-section">
+
       <div className="tree-section-header">
+
         <div>
+
           <ChevronDown
             size={13}
           />
@@ -108,16 +165,20 @@ function TreeSection({
           <strong>
             {title}
           </strong>
+
         </div>
 
         <span>
           {count}
         </span>
+
       </div>
+
 
       <div className="tree-section-content">
         {children}
       </div>
+
     </div>
   );
 }
@@ -136,20 +197,24 @@ function TreeItem({
   return (
     <button
       type="button"
+
       className={`tree-item ${
         active
           ? "active"
           : ""
       }`}
+
       onClick={
         onClick
       }
     >
+
       <Icon
         size={14}
       />
 
       <div>
+
         <strong>
           {title}
         </strong>
@@ -157,7 +222,9 @@ function TreeItem({
         <span>
           {subtitle}
         </span>
+
       </div>
+
     </button>
   );
 }
@@ -167,6 +234,7 @@ function getNodeIcon(
   type
 ) {
   switch (type) {
+
     case "ROAD":
       return Diamond;
 
@@ -197,10 +265,11 @@ function getNodeIcon(
 }
 
 
-function formatType(
+function formatNodeType(
   type
 ) {
   switch (type) {
+
     case "WAYPOINT":
       return "Waypoint";
 
@@ -230,5 +299,25 @@ function formatType(
 
     default:
       return type;
+  }
+}
+
+
+function formatPathType(
+  type
+) {
+  switch (type) {
+
+    case "SLOW":
+      return "Slow Zone";
+
+    case "RESTRICTED":
+      return "Restricted";
+
+    case "EMERGENCY":
+      return "Emergency";
+
+    default:
+      return "Normal";
   }
 }

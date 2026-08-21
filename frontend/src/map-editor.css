@@ -1824,3 +1824,197 @@ a selectable hitbox now.
 
   background: #0b1420;
 }
+
+/* =========================================================
+   V8 PATH TRAFFIC RULES
+========================================================= */
+
+
+/* ---------------------------------------------------------
+   PATH HITBOX
+--------------------------------------------------------- */
+
+.map-edge-hitbox {
+  stroke: transparent;
+
+  stroke-width: 20;
+
+  fill: none;
+
+  cursor: pointer;
+
+  pointer-events: stroke;
+}
+
+
+.infinite-map-world
+.map-edge-group {
+  pointer-events: all;
+}
+
+
+/* ---------------------------------------------------------
+   PATH SELECTED
+--------------------------------------------------------- */
+
+.map-edge.selected {
+  stroke: #fbbf24 !important;
+
+  stroke-width: 5;
+
+  filter:
+    drop-shadow(
+      0 0 4px
+      #fbbf24
+    );
+}
+
+
+/* ---------------------------------------------------------
+   NORMAL PATH
+--------------------------------------------------------- */
+
+.map-edge.path-type-normal {
+  stroke: #60748b;
+}
+
+
+/* ---------------------------------------------------------
+   SLOW ZONE
+--------------------------------------------------------- */
+
+.map-edge.path-type-slow {
+  stroke: #d97706;
+
+  stroke-dasharray:
+    8 4;
+}
+
+
+/* ---------------------------------------------------------
+   RESTRICTED PATH
+--------------------------------------------------------- */
+
+.map-edge.path-type-restricted {
+  stroke: #dc2626;
+
+  stroke-dasharray:
+    5 4;
+}
+
+
+/* ---------------------------------------------------------
+   EMERGENCY PATH
+--------------------------------------------------------- */
+
+.map-edge.path-type-emergency {
+  stroke: #7c3aed;
+
+  stroke-width: 4;
+}
+
+
+/* ---------------------------------------------------------
+   DISABLED
+--------------------------------------------------------- */
+
+.map-edge.disabled {
+  opacity: 0.25;
+
+  stroke-dasharray:
+    4 6;
+}
+
+
+/* ---------------------------------------------------------
+   MONITOR HIGHLIGHT
+--------------------------------------------------------- */
+
+.map-edge.path-highlighted {
+  stroke: #22d3ee !important;
+
+  stroke-width: 5;
+
+  filter:
+    drop-shadow(
+      0 0 4px
+      #22d3ee
+    );
+}
+
+
+/* ---------------------------------------------------------
+   ONE-WAY ARROW
+--------------------------------------------------------- */
+
+.path-arrow-head {
+  fill: #94a3b8;
+}
+
+
+/* ---------------------------------------------------------
+   PATH PROPERTY SUMMARY
+--------------------------------------------------------- */
+
+.path-rule-summary {
+  display: grid;
+
+  grid-template-columns:
+    repeat(3, 1fr);
+
+  gap: 6px;
+
+  margin-top: 18px;
+}
+
+
+.path-rule-summary > div {
+  min-width: 0;
+
+  padding: 9px 7px;
+
+  border: 1px solid #1b2a3d;
+
+  border-radius: 7px;
+
+  background: #0f1d30;
+}
+
+
+.path-rule-summary span {
+  display: block;
+
+  margin-bottom: 4px;
+
+  color: #64748b;
+
+  font-size: 8px;
+}
+
+
+.path-rule-summary strong {
+  display: block;
+
+  overflow: hidden;
+
+  color: #e2e8f0;
+
+  font-size: 9px;
+
+  text-overflow: ellipsis;
+
+  white-space: nowrap;
+}
+
+
+/* ---------------------------------------------------------
+   DISABLED INPUT
+--------------------------------------------------------- */
+
+.property-input:disabled {
+  opacity: 0.45;
+
+  cursor: not-allowed;
+
+  background: #0b1420;
+}
