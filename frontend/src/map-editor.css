@@ -1,0 +1,670 @@
+/* ==========================================
+   MAP EDITOR LAYOUT
+========================================== */
+
+.map-editor-layout {
+  display: grid;
+
+  grid-template-columns:
+    minmax(0, 1fr)
+    300px;
+
+  gap: 16px;
+}
+
+.map-main-panel {
+  min-width: 0;
+}
+
+.map-editor-info {
+  display: flex;
+  align-items: center;
+
+  gap: 7px;
+
+  padding: 8px 12px;
+
+  border: 1px solid #164e63;
+
+  border-radius: 8px;
+
+  background: #083344;
+
+  color: #67e8f9;
+
+  font-size: 11px;
+
+  font-weight: 700;
+}
+
+
+/* ==========================================
+   TOOLBAR
+========================================== */
+
+.map-toolbar {
+  display: flex;
+  align-items: center;
+
+  flex-wrap: wrap;
+
+  gap: 6px;
+
+  margin-bottom: 14px;
+
+  padding: 9px;
+
+  background: #0b1728;
+
+  border: 1px solid #1b2a3d;
+
+  border-radius: 10px;
+}
+
+.map-tool-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  gap: 6px;
+
+  min-height: 34px;
+
+  padding: 8px 10px;
+
+  background: #102135;
+
+  border: 1px solid #263b53;
+
+  border-radius: 7px;
+
+  color: #94a3b8;
+
+  font-size: 10px;
+
+  font-weight: 700;
+
+  transition: 0.15s;
+}
+
+.map-tool-button:hover {
+  color: #e2e8f0;
+
+  background: #16304a;
+
+  border-color: #3b5876;
+}
+
+.map-tool-button.active {
+  background: #0c3c48;
+
+  border-color: #22d3ee;
+
+  color: #67e8f9;
+}
+
+.map-tool-button.danger:hover {
+  background: #45151c;
+
+  border-color: #fb7185;
+
+  color: #fb7185;
+}
+
+.toolbar-divider {
+  width: 1px;
+
+  height: 28px;
+
+  margin: 0 3px;
+
+  background: #263b53;
+}
+
+.toolbar-spacer {
+  flex: 1;
+}
+
+
+/* ==========================================
+   EDITOR MESSAGES
+========================================== */
+
+.map-editor-message {
+  display: flex;
+  align-items: center;
+
+  gap: 8px;
+
+  margin-bottom: 10px;
+
+  padding: 9px 10px;
+
+  border: 1px solid #164e63;
+
+  border-radius: 7px;
+
+  background: #083344;
+
+  color: #67e8f9;
+
+  font-size: 10px;
+}
+
+
+/* ==========================================
+   CANVAS
+========================================== */
+
+.map-canvas-wrapper {
+  width: 100%;
+
+  overflow: auto;
+
+  background: #030a12;
+
+  border: 1px solid #1b2a3d;
+
+  border-radius: 8px;
+}
+
+.map-editor-canvas {
+  display: block;
+
+  width: 100%;
+
+  min-height: 620px;
+
+  background: #07111f;
+
+  user-select: none;
+}
+
+.map-editor-canvas.tool-node,
+.map-editor-canvas.tool-rack,
+.map-editor-canvas.tool-dock,
+.map-editor-canvas.tool-charging {
+  cursor: crosshair;
+}
+
+.map-background {
+  fill: #07111f;
+}
+
+
+/* ==========================================
+   GRID
+========================================== */
+
+.grid-layer {
+  pointer-events: none;
+}
+
+.grid-line {
+  stroke: #17283b;
+
+  stroke-width: 0.7;
+}
+
+
+/* ==========================================
+   PATH / EDGE
+========================================== */
+
+.map-edge-group {
+  pointer-events: none;
+}
+
+.map-edge {
+  stroke: #60748b;
+
+  stroke-width: 3;
+
+  stroke-linecap: round;
+}
+
+.edge-distance {
+  fill: #94a3b8;
+
+  font-size: 10px;
+
+  font-weight: 600;
+
+  pointer-events: none;
+}
+
+
+/* ==========================================
+   TOPOLOGY NODE
+========================================== */
+
+.map-node-group {
+  cursor: pointer;
+}
+
+.map-node-circle {
+  fill: #64748b;
+
+  stroke: #cbd5e1;
+
+  stroke-width: 2;
+
+  transition: 0.1s;
+}
+
+.map-node-circle:hover {
+  stroke: #ffffff;
+
+  stroke-width: 3;
+}
+
+.map-node-circle.selected {
+  fill: #0891b2;
+
+  stroke: #67e8f9;
+
+  stroke-width: 3;
+}
+
+.map-node-circle.connecting {
+  fill: #d97706;
+
+  stroke: #fbbf24;
+
+  stroke-width: 4;
+}
+
+.node-normal {
+  fill: #64748b;
+}
+
+.node-storage {
+  fill: #2563eb;
+}
+
+.node-pick {
+  fill: #7c3aed;
+}
+
+.node-drop {
+  fill: #9333ea;
+}
+
+.node-home {
+  fill: #059669;
+}
+
+.node-waiting {
+  fill: #475569;
+}
+
+.node-charging {
+  fill: #ca8a04;
+}
+
+.map-node-label {
+  fill: #e2e8f0;
+
+  font-size: 10px;
+
+  font-weight: 700;
+
+  pointer-events: none;
+}
+
+
+/* ==========================================
+   MAP OBJECTS
+========================================== */
+
+.map-object {
+  cursor: pointer;
+}
+
+
+/* Rack */
+
+.map-rack {
+  fill: #1d3852;
+
+  stroke: #64748b;
+
+  stroke-width: 2;
+
+  transition: 0.15s;
+}
+
+.map-rack:hover {
+  stroke: #94a3b8;
+
+  stroke-width: 3;
+}
+
+.map-rack.selected {
+  fill: #124454;
+
+  stroke: #22d3ee;
+
+  stroke-width: 4;
+}
+
+
+/* Stations */
+
+.map-station {
+  stroke-width: 2;
+
+  transition: 0.15s;
+}
+
+.map-station.charging {
+  fill: #123629;
+
+  stroke: #34d399;
+}
+
+.map-station.dock {
+  fill: #443817;
+
+  stroke: #fbbf24;
+}
+
+.map-station.selected {
+  stroke: #67e8f9;
+
+  stroke-width: 4;
+}
+
+.map-object-label {
+  fill: #e2e8f0;
+
+  font-size: 10px;
+
+  font-weight: 700;
+
+  pointer-events: none;
+}
+
+
+/* ==========================================
+   PROPERTIES PANEL
+========================================== */
+
+.map-properties {
+  align-self: start;
+
+  position: sticky;
+
+  top: 15px;
+}
+
+.property-group {
+  margin-bottom: 13px;
+}
+
+.property-label {
+  display: block;
+
+  margin-bottom: 5px;
+
+  color: #94a3b8;
+
+  font-size: 10px;
+
+  font-weight: 600;
+}
+
+.property-input-wrapper {
+  position: relative;
+}
+
+.property-input {
+  width: 100%;
+
+  padding: 9px 10px;
+
+  background: #07111f;
+
+  border: 1px solid #263b53;
+
+  border-radius: 6px;
+
+  color: #e2e8f0;
+
+  outline: none;
+
+  font-size: 11px;
+}
+
+.property-input:hover {
+  border-color: #36506b;
+}
+
+.property-input:focus {
+  border-color: #22d3ee;
+}
+
+.property-input-wrapper
+  .property-input {
+  padding-right: 40px;
+}
+
+.property-unit {
+  position: absolute;
+
+  right: 10px;
+
+  top: 50%;
+
+  transform: translateY(-50%);
+
+  color: #64748b;
+
+  font-size: 9px;
+
+  pointer-events: none;
+}
+
+
+/* Sections */
+
+.property-section-title {
+  margin-top: 19px;
+
+  margin-bottom: 11px;
+
+  padding-bottom: 6px;
+
+  border-bottom: 1px solid #1b2a3d;
+
+  color: #67e8f9;
+
+  font-size: 9px;
+
+  font-weight: 800;
+
+  letter-spacing: 1px;
+
+  text-transform: uppercase;
+}
+
+.property-readonly {
+  display: flex;
+
+  align-items: center;
+
+  justify-content: space-between;
+
+  margin-bottom: 14px;
+
+  padding: 10px;
+
+  background: #0f1d30;
+
+  border: 1px solid #1b2a3d;
+
+  border-radius: 7px;
+
+  font-size: 10px;
+}
+
+.property-readonly span {
+  color: #64748b;
+}
+
+.property-readonly strong {
+  color: #67e8f9;
+}
+
+
+/* ==========================================
+   PROPERTY SUMMARY
+========================================== */
+
+.map-property-summary {
+  display: grid;
+
+  grid-template-columns:
+    repeat(2, 1fr);
+
+  gap: 7px;
+
+  margin-top: 20px;
+}
+
+.map-property-summary > div {
+  padding: 10px;
+
+  background: #0f1d30;
+
+  border: 1px solid #1b2a3d;
+
+  border-radius: 7px;
+}
+
+.map-property-summary span {
+  display: block;
+
+  color: #64748b;
+
+  font-size: 9px;
+}
+
+.map-property-summary strong {
+  display: block;
+
+  margin-top: 4px;
+
+  color: #e2e8f0;
+
+  font-size: 17px;
+}
+
+
+/* ==========================================
+   RACK SUMMARY
+========================================== */
+
+.rack-slot-summary {
+  display: flex;
+
+  align-items: center;
+
+  justify-content: space-between;
+
+  margin-top: 14px;
+
+  padding: 12px;
+
+  background: #0c303b;
+
+  border: 1px solid #164e63;
+
+  border-radius: 7px;
+}
+
+.rack-slot-summary span {
+  color: #94a3b8;
+
+  font-size: 10px;
+}
+
+.rack-slot-summary strong {
+  color: #67e8f9;
+
+  font-size: 18px;
+}
+
+
+/* ==========================================
+   HELP
+========================================== */
+
+.map-help-box {
+  margin-top: 18px;
+
+  padding: 10px;
+
+  background: #0f1d30;
+
+  border: 1px solid #1b2a3d;
+
+  border-radius: 7px;
+
+  color: #64748b;
+
+  font-size: 10px;
+
+  line-height: 1.6;
+}
+
+
+/* ==========================================
+   RESPONSIVE
+========================================== */
+
+@media (max-width: 1100px) {
+  .map-editor-layout {
+    grid-template-columns:
+      1fr
+      260px;
+  }
+}
+
+@media (max-width: 900px) {
+  .map-editor-layout {
+    grid-template-columns:
+      1fr;
+  }
+
+  .map-properties {
+    position: static;
+  }
+
+  .toolbar-spacer {
+    display: none;
+  }
+}
+
+@media (max-width: 600px) {
+  .map-toolbar {
+    align-items: stretch;
+  }
+
+  .map-tool-button {
+    flex: 1 1 100px;
+  }
+
+  .toolbar-divider {
+    display: none;
+  }
+
+  .map-editor-info {
+    margin-top: 10px;
+  }
+
+  .page-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

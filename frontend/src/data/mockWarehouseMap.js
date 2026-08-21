@@ -1,6 +1,8 @@
 export const INITIAL_MAP = {
   mapId: "MAP-001",
+
   name: "Main Warehouse",
+
   unit: "meter",
 
   width: 30,
@@ -16,6 +18,7 @@ export const INITIAL_MAP = {
       x: 5,
       y: 5,
     },
+
     {
       id: "P002",
       name: "Point-002",
@@ -28,15 +31,69 @@ export const INITIAL_MAP = {
   edges: [
     {
       id: "E001",
+
       from: "P001",
       to: "P002",
+
       distance: 5,
+
       autoDistance: true,
+
       bidirectional: true,
     },
   ],
 
-  racks: [],
+  racks: [
+    {
+      id: "RACK-001",
 
-  stations: [],
+      name: "Rack A",
+
+      x: 15,
+      y: 9,
+
+      width: 4,
+      depth: 1.5,
+
+      rotation: 0,
+
+      levels: 4,
+
+      slotsPerLevel: 6,
+    },
+  ],
+
+  stations: [
+    {
+      id: "CHARGE-01",
+
+      name: "Charging Station 1",
+
+      type: "CHARGING",
+
+      x: 3,
+      y: 17,
+
+      width: 2,
+      depth: 2,
+
+      rotation: 0,
+    },
+
+    {
+      id: "DOCK-01",
+
+      name: "Dock 1",
+
+      type: "DOCK",
+
+      x: 26,
+      y: 17,
+
+      width: 3,
+      depth: 2,
+
+      rotation: 0,
+    },
+  ],
 };
