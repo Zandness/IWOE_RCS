@@ -1,28 +1,28 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+
 import Navbar from "./components/Navbar";
 import Sidebar from "./components/Sidebar";
+
 import Dashboard from "./pages/Dashboard";
 import FleetControl from "./pages/FleetControl";
 import WarehouseMap from "./pages/WarehouseMap";
+import Settings from "./pages/Settings";
 
 function App() {
   return (
     <BrowserRouter>
-      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
-        {/* Header */}
+      <div className="app">
         <Navbar />
 
-        {/* Main Layout */}
-        <div className="flex flex-1 overflow-hidden">
-          {/* Sidebar */}
+        <div className="app-body">
           <Sidebar />
 
-          {/* Page Content */}
-          <main className="flex-1 p-8 overflow-y-auto bg-slate-900/50">
+          <main className="main-content">
             <Routes>
               <Route path="/" element={<Dashboard />} />
               <Route path="/fleet" element={<FleetControl />} />
               <Route path="/warehouse" element={<WarehouseMap />} />
+              <Route path="/settings" element={<Settings />} />
             </Routes>
           </main>
         </div>
