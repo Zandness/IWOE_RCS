@@ -1,43 +1,47 @@
 export const MOCK_ROBOTS = [
   {
     id: "AMR-01",
+
     type: "AMR",
 
     status: "MOVING",
 
     battery: 84,
 
-    x: 7,
+    x: 11,
     y: 5,
 
-    currentNode: "P001",
-    nextNode: "P002",
+    currentNode: "P002",
 
-    destination: "P003",
+    nextNode: "P003",
+
+    destination: "P004",
 
     task: "Order Picking",
 
     speed: 1.2,
 
     plannedPath: [
-      "P001",
       "P002",
       "P003",
+      "P004",
     ],
   },
 
   {
     id: "AMR-02",
+
     type: "AMR",
 
     status: "IDLE",
 
     battery: 93,
 
-    x: 12,
-    y: 10,
+    x: 5,
+    y: 5,
 
-    currentNode: "P002",
+    currentNode: "P001",
+
     nextNode: null,
 
     destination: null,
@@ -51,19 +55,21 @@ export const MOCK_ROBOTS = [
 
   {
     id: "AGV-01",
+
     type: "AGV",
 
     status: "CHARGING",
 
     battery: 38,
 
-    x: 3,
-    y: 17,
+    x: 20,
+    y: 10,
 
-    currentNode: null,
+    currentNode: "P004",
+
     nextNode: null,
 
-    destination: "CHARGE-01",
+    destination: "P004",
 
     task: "Charging",
 

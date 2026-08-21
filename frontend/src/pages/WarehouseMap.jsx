@@ -18,9 +18,6 @@ import MapCanvas
 import MapProperties
   from "../components/map/MapProperties";
 
-import MapObjectProperties
-  from "../components/map/MapObjectProperties";
-
 import MapObjectTree
   from "../components/map/MapObjectTree";
 
@@ -39,16 +36,10 @@ import "../map-editor.css";
 
 
 const STORAGE_KEY =
-  "wms-warehouse-map";
+  "wms-warehouse-map-v2";
 
 
 export default function WarehouseMap() {
-  /*
-   * =========================================
-   * MAP
-   * =========================================
-   */
-
   const [
     mapData,
     setMapData,
@@ -59,6 +50,7 @@ export default function WarehouseMap() {
           STORAGE_KEY
         );
 
+
       if (saved) {
         return JSON.parse(
           saved
@@ -66,22 +58,17 @@ export default function WarehouseMap() {
       }
     } catch (error) {
       console.warn(
-        "Could not load saved warehouse map.",
+        "Could not load map.",
         error
       );
     }
+
 
     return structuredClone(
       INITIAL_MAP
     );
   });
 
-
-  /*
-   * =========================================
-   * MODE
-   * =========================================
-   */
 
   const [
     mode,
@@ -91,12 +78,6 @@ export default function WarehouseMap() {
   );
 
 
-  /*
-   * =========================================
-   * EDIT TOOL
-   * =========================================
-   */
-
   const [
     tool,
     setTool,
@@ -105,12 +86,6 @@ export default function WarehouseMap() {
   );
 
 
-  /*
-   * =========================================
-   * EDIT SELECTION
-   * =========================================
-   */
-
   const [
     selectedNodeId,
     setSelectedNodeId,
@@ -118,12 +93,6 @@ export default function WarehouseMap() {
     null
   );
 
-  const [
-    selectedObject,
-    setSelectedObject,
-  ] = useState(
-    null
-  );
 
   const [
     connectionStart,
@@ -133,12 +102,6 @@ export default function WarehouseMap() {
   );
 
 
-  /*
-   * =========================================
-   * MONITOR SELECTION
-   * =========================================
-   */
-
   const [
     selectedRobotId,
     setSelectedRobotId,
@@ -147,18 +110,13 @@ export default function WarehouseMap() {
   );
 
 
-  /*
-   * =========================================
-   * VIEW
-   * =========================================
-   */
-
   const [
     zoom,
     setZoom,
   ] = useState(
     1
   );
+
 
   const [
     expanded,
@@ -168,12 +126,6 @@ export default function WarehouseMap() {
   );
 
 
-  /*
-   * =========================================
-   * SAVE
-   * =========================================
-   */
-
   const [
     saveStatus,
     setSaveStatus,
@@ -182,18 +134,13 @@ export default function WarehouseMap() {
   );
 
 
-  /*
-   * =========================================
-   * HISTORY
-   * =========================================
-   */
-
   const [
     undoStack,
     setUndoStack,
   ] = useState(
     []
   );
+
 
   const [
     redoStack,
@@ -202,22 +149,12 @@ export default function WarehouseMap() {
     []
   );
 
+
   const nodeDragSnapshot =
     useRef(
       null
     );
 
-  const objectDragSnapshot =
-    useRef(
-      null
-    );
-
-
-  /*
-   * =========================================
-   * SELECTED DATA
-   * =========================================
-   */
 
   const selectedNode =
     mapData.nodes.find(
@@ -225,13 +162,6 @@ export default function WarehouseMap() {
         node.id ===
         selectedNodeId
     ) || null;
-
-
-  const selectedMapObject =
-    getSelectedMapObject(
-      mapData,
-      selectedObject
-    );
 
 
   const selectedRobot =
@@ -242,21 +172,16 @@ export default function WarehouseMap() {
     ) || null;
 
 
-  /*
-   * =========================================
-   * COMMIT MAP
-   * =========================================
-   */
-
   function commitMap(
     updater
   ) {
     setMapData(
       (current) => {
-        const currentSnapshot =
+        const snapshot =
           structuredClone(
             current
           );
+
 
         const next =
           typeof updater ===
@@ -270,30 +195,30 @@ export default function WarehouseMap() {
                 updater
               );
 
+
         setUndoStack(
           (history) => [
             ...history.slice(-49),
-            currentSnapshot,
+            snapshot,
           ]
         );
 
-        setRedoStack([]);
+
+        setRedoStack(
+          []
+        );
+
 
         setSaveStatus(
           "Unsaved changes"
         );
+
 
         return next;
       }
     );
   }
 
-
-  /*
-   * =========================================
-   * MODE CHANGE
-   * =========================================
-   */
 
   function handleModeChange(
     nextMode
@@ -302,35 +227,37 @@ export default function WarehouseMap() {
       nextMode
     );
 
+
     setConnectionStart(
       null
     );
+
+
+    setTool(
+      "select"
+    );
+
 
     if (
       nextMode ===
       "monitor"
     ) {
-      setTool(
-        "select"
-      );
-
       setSelectedNodeId(
         null
       );
 
-      setSelectedObject(
-        null
-      );
 
       if (
         !selectedRobotId &&
-        MOCK_ROBOTS.length > 0
+        MOCK_ROBOTS.length >
+          0
       ) {
         setSelectedRobotId(
           MOCK_ROBOTS[0].id
         );
       }
     }
+
 
     if (
       nextMode ===
@@ -343,32 +270,32 @@ export default function WarehouseMap() {
   }
 
 
-  /*
-   * =========================================
-   * UNDO
-   * =========================================
-   */
-
   function handleUndo() {
     if (
-      undoStack.length === 0
+      undoStack.length ===
+      0
     ) {
       return;
     }
 
+
     const previous =
       undoStack[
-        undoStack.length - 1
+        undoStack.length -
+          1
       ];
+
 
     setRedoStack(
       (history) => [
         ...history,
+
         structuredClone(
           mapData
         ),
       ]
     );
+
 
     setUndoStack(
       (history) =>
@@ -377,6 +304,7 @@ export default function WarehouseMap() {
           -1
         )
     );
+
 
     setMapData(
       structuredClone(
@@ -384,7 +312,16 @@ export default function WarehouseMap() {
       )
     );
 
-    clearEditSelection();
+
+    setSelectedNodeId(
+      null
+    );
+
+
+    setConnectionStart(
+      null
+    );
+
 
     setSaveStatus(
       "Unsaved changes"
@@ -392,32 +329,32 @@ export default function WarehouseMap() {
   }
 
 
-  /*
-   * =========================================
-   * REDO
-   * =========================================
-   */
-
   function handleRedo() {
     if (
-      redoStack.length === 0
+      redoStack.length ===
+      0
     ) {
       return;
     }
 
+
     const next =
       redoStack[
-        redoStack.length - 1
+        redoStack.length -
+          1
       ];
+
 
     setUndoStack(
       (history) => [
         ...history,
+
         structuredClone(
           mapData
         ),
       ]
     );
+
 
     setRedoStack(
       (history) =>
@@ -427,13 +364,23 @@ export default function WarehouseMap() {
         )
     );
 
+
     setMapData(
       structuredClone(
         next
       )
     );
 
-    clearEditSelection();
+
+    setSelectedNodeId(
+      null
+    );
+
+
+    setConnectionStart(
+      null
+    );
+
 
     setSaveStatus(
       "Unsaved changes"
@@ -441,29 +388,25 @@ export default function WarehouseMap() {
   }
 
 
-  /*
-   * =========================================
-   * SAVE
-   * =========================================
-   */
-
   function handleSave() {
     try {
       localStorage.setItem(
         STORAGE_KEY,
+
         JSON.stringify(
           mapData
         )
       );
+
 
       setSaveStatus(
         "Saved"
       );
     } catch (error) {
       console.error(
-        "Map save failed:",
         error
       );
+
 
       setSaveStatus(
         "Save failed"
@@ -472,20 +415,17 @@ export default function WarehouseMap() {
   }
 
 
-  /*
-   * =========================================
-   * ZOOM
-   * =========================================
-   */
-
   function zoomIn() {
     setZoom(
       (current) =>
         Number(
           Math.min(
-            current * 1.1,
+            current *
+              1.1,
             4
-          ).toFixed(3)
+          ).toFixed(
+            3
+          )
         )
     );
   }
@@ -496,9 +436,12 @@ export default function WarehouseMap() {
       (current) =>
         Number(
           Math.max(
-            current * 0.9,
+            current *
+              0.9,
             0.25
-          ).toFixed(3)
+          ).toFixed(
+            3
+          )
         )
     );
   }
@@ -511,17 +454,12 @@ export default function WarehouseMap() {
   }
 
 
-  /*
-   * =========================================
-   * CANVAS CLICK
-   * =========================================
-   */
-
   function handleCanvasClick(
     position
   ) {
     if (
-      mode === "monitor"
+      mode ===
+      "monitor"
     ) {
       setSelectedRobotId(
         null
@@ -530,57 +468,33 @@ export default function WarehouseMap() {
       return;
     }
 
+
     if (
-      tool === "node"
+      tool ===
+      "node"
     ) {
       addNode(
         position
       );
+
       return;
     }
 
+
     if (
-      tool === "rack"
+      tool ===
+      "select"
     ) {
-      addRack(
-        position
+      setSelectedNodeId(
+        null
       );
-      return;
-    }
 
-    if (
-      tool === "dock"
-    ) {
-      addStation(
-        position,
-        "DOCK"
+      setConnectionStart(
+        null
       );
-      return;
-    }
-
-    if (
-      tool === "charging"
-    ) {
-      addStation(
-        position,
-        "CHARGING"
-      );
-      return;
-    }
-
-    if (
-      tool === "select"
-    ) {
-      clearEditSelection();
     }
   }
 
-
-  /*
-   * =========================================
-   * ADD NODE
-   * =========================================
-   */
 
   function addNode({
     x,
@@ -593,6 +507,7 @@ export default function WarehouseMap() {
         mapData.gridSpacing
       );
 
+
     const id =
       getNextId(
         mapData.nodes,
@@ -600,27 +515,39 @@ export default function WarehouseMap() {
         3
       );
 
+
     const number =
       id.replace(
         "P",
         ""
       );
 
-    const newNode = {
+
+    const node = {
       id,
 
       name:
         `Point-${number}`,
 
       type:
-        "NORMAL",
+        "WAYPOINT",
 
       x:
         position.x,
 
       y:
         position.y,
+
+      rotation:
+        0,
+
+      enabled:
+        true,
+
+      config:
+        {},
     };
+
 
     commitMap(
       (previous) => ({
@@ -628,219 +555,37 @@ export default function WarehouseMap() {
 
         nodes: [
           ...previous.nodes,
-          newNode,
+          node,
         ],
       })
     );
+
 
     setSelectedNodeId(
       id
     );
 
-    setSelectedObject(
-      null
-    );
 
     setTool(
       "select"
     );
   }
 
-
-  /*
-   * =========================================
-   * ADD RACK
-   * =========================================
-   */
-
-  function addRack({
-    x,
-    y,
-  }) {
-    const position =
-      snapPosition(
-        x,
-        y,
-        mapData.gridSpacing
-      );
-
-    const id =
-      getNextId(
-        mapData.racks,
-        "RACK-",
-        3
-      );
-
-    const rack = {
-      id,
-
-      name:
-        `Rack ${
-          mapData.racks.length +
-          1
-        }`,
-
-      x:
-        position.x,
-
-      y:
-        position.y,
-
-      width:
-        4,
-
-      depth:
-        1.5,
-
-      rotation:
-        0,
-
-      levels:
-        4,
-
-      slotsPerLevel:
-        6,
-    };
-
-    commitMap(
-      (previous) => ({
-        ...previous,
-
-        racks: [
-          ...previous.racks,
-          rack,
-        ],
-      })
-    );
-
-    setSelectedNodeId(
-      null
-    );
-
-    setSelectedObject({
-      type:
-        "rack",
-
-      id,
-    });
-
-    setTool(
-      "select"
-    );
-  }
-
-
-  /*
-   * =========================================
-   * ADD STATION
-   * =========================================
-   */
-
-  function addStation(
-    position,
-    type
-  ) {
-    const snapped =
-      snapPosition(
-        position.x,
-        position.y,
-        mapData.gridSpacing
-      );
-
-    const prefix =
-      type === "DOCK"
-        ? "DOCK-"
-        : "CHARGE-";
-
-    const sameType =
-      mapData.stations.filter(
-        (station) =>
-          station.type === type
-      );
-
-    const id =
-      getNextId(
-        sameType,
-        prefix,
-        2
-      );
-
-    const count =
-      sameType.length + 1;
-
-    const station = {
-      id,
-
-      name:
-        type === "DOCK"
-          ? `Dock ${count}`
-          : `Charging Station ${count}`,
-
-      type,
-
-      x:
-        snapped.x,
-
-      y:
-        snapped.y,
-
-      width:
-        type === "DOCK"
-          ? 3
-          : 2,
-
-      depth:
-        2,
-
-      rotation:
-        0,
-    };
-
-    commitMap(
-      (previous) => ({
-        ...previous,
-
-        stations: [
-          ...previous.stations,
-          station,
-        ],
-      })
-    );
-
-    setSelectedNodeId(
-      null
-    );
-
-    setSelectedObject({
-      type:
-        "station",
-
-      id,
-    });
-
-    setTool(
-      "select"
-    );
-  }
-
-
-  /*
-   * =========================================
-   * NODE CLICK
-   * =========================================
-   */
 
   function handleNodeClick(
     nodeId
   ) {
     if (
-      mode === "monitor"
+      mode !==
+      "edit"
     ) {
       return;
     }
 
+
     if (
-      tool === "connect"
+      tool ===
+      "connect"
     ) {
       if (
         !connectionStart
@@ -851,6 +596,7 @@ export default function WarehouseMap() {
 
         return;
       }
+
 
       if (
         connectionStart ===
@@ -863,10 +609,12 @@ export default function WarehouseMap() {
         return;
       }
 
+
       createConnection(
         connectionStart,
         nodeId
       );
+
 
       setConnectionStart(
         null
@@ -875,9 +623,6 @@ export default function WarehouseMap() {
       return;
     }
 
-    setSelectedObject(
-      null
-    );
 
     setSelectedNodeId(
       nodeId
@@ -885,50 +630,11 @@ export default function WarehouseMap() {
   }
 
 
-  /*
-   * =========================================
-   * OBJECT CLICK
-   * =========================================
-   */
-
-  function handleObjectClick(
-    object
-  ) {
-    if (
-      mode === "monitor"
-    ) {
-      return;
-    }
-
-    setSelectedNodeId(
-      null
-    );
-
-    setConnectionStart(
-      null
-    );
-
-    setSelectedObject(
-      object
-    );
-
-    setTool(
-      "select"
-    );
-  }
-
-
-  /*
-   * =========================================
-   * CONNECTION
-   * =========================================
-   */
-
   function createConnection(
     fromId,
     toId
   ) {
-    const alreadyExists =
+    const exists =
       mapData.edges.some(
         (edge) =>
           (
@@ -945,11 +651,11 @@ export default function WarehouseMap() {
           )
       );
 
-    if (
-      alreadyExists
-    ) {
+
+    if (exists) {
       return;
     }
+
 
     const from =
       mapData.nodes.find(
@@ -958,6 +664,7 @@ export default function WarehouseMap() {
           fromId
       );
 
+
     const to =
       mapData.nodes.find(
         (node) =>
@@ -965,12 +672,14 @@ export default function WarehouseMap() {
           toId
       );
 
+
     if (
       !from ||
       !to
     ) {
       return;
     }
+
 
     const edge = {
       id:
@@ -997,7 +706,14 @@ export default function WarehouseMap() {
 
       bidirectional:
         true,
+
+      enabled:
+        true,
+
+      speedLimit:
+        1.2,
     };
+
 
     commitMap(
       (previous) => ({
@@ -1011,12 +727,6 @@ export default function WarehouseMap() {
     );
   }
 
-
-  /*
-   * =========================================
-   * NODE DRAG
-   * =========================================
-   */
 
   function handleNodeDragStart() {
     nodeDragSnapshot.current =
@@ -1032,10 +742,12 @@ export default function WarehouseMap() {
     y
   ) {
     if (
-      mode !== "edit"
+      mode !==
+      "edit"
     ) {
       return;
     }
+
 
     setMapData(
       (previous) => {
@@ -1048,13 +760,18 @@ export default function WarehouseMap() {
                     ...node,
 
                     x:
-                      Number(x),
+                      Number(
+                        x
+                      ),
 
                     y:
-                      Number(y),
+                      Number(
+                        y
+                      ),
                   }
                 : node
           );
+
 
         return {
           ...previous,
@@ -1069,6 +786,7 @@ export default function WarehouseMap() {
         };
       }
     );
+
 
     setSaveStatus(
       "Unsaved changes"
@@ -1083,6 +801,7 @@ export default function WarehouseMap() {
       return;
     }
 
+
     setUndoStack(
       (history) => [
         ...history.slice(-49),
@@ -1091,139 +810,29 @@ export default function WarehouseMap() {
       ]
     );
 
-    setRedoStack([]);
+
+    setRedoStack(
+      []
+    );
+
 
     nodeDragSnapshot.current =
       null;
   }
 
 
-  /*
-   * =========================================
-   * OBJECT DRAG
-   * =========================================
-   */
-
-  function handleObjectDragStart() {
-    objectDragSnapshot.current =
-      structuredClone(
-        mapData
-      );
-  }
-
-
-  function handleObjectMove(
-    type,
-    objectId,
-    x,
-    y
-  ) {
-    if (
-      mode !== "edit"
-    ) {
-      return;
-    }
-
-    setMapData(
-      (previous) => {
-        if (
-          type === "rack"
-        ) {
-          return {
-            ...previous,
-
-            racks:
-              previous.racks.map(
-                (rack) =>
-                  rack.id ===
-                  objectId
-                    ? {
-                        ...rack,
-
-                        x:
-                          Number(x),
-
-                        y:
-                          Number(y),
-                      }
-                    : rack
-              ),
-          };
-        }
-
-        if (
-          type === "station"
-        ) {
-          return {
-            ...previous,
-
-            stations:
-              previous.stations.map(
-                (station) =>
-                  station.id ===
-                  objectId
-                    ? {
-                        ...station,
-
-                        x:
-                          Number(x),
-
-                        y:
-                          Number(y),
-                      }
-                    : station
-              ),
-          };
-        }
-
-        return previous;
-      }
-    );
-
-    setSaveStatus(
-      "Unsaved changes"
-    );
-  }
-
-
-  function handleObjectDragEnd() {
-    if (
-      !objectDragSnapshot.current
-    ) {
-      return;
-    }
-
-    setUndoStack(
-      (history) => [
-        ...history.slice(-49),
-
-        objectDragSnapshot.current,
-      ]
-    );
-
-    setRedoStack([]);
-
-    objectDragSnapshot.current =
-      null;
-  }
-
-
-  /*
-   * =========================================
-   * NODE PROPERTY
-   * =========================================
-   */
-
   function handleNodeChange(
     field,
     value
   ) {
     if (
-      mode !== "edit" ||
+      mode !==
+        "edit" ||
       !selectedNodeId
     ) {
       return;
     }
+
 
     commitMap(
       (previous) => {
@@ -1237,20 +846,61 @@ export default function WarehouseMap() {
                 return node;
               }
 
-              const nextValue =
-                field === "x" ||
-                field === "y"
-                  ? Number(value)
-                  : value;
+
+              if (
+                field.startsWith(
+                  "config."
+                )
+              ) {
+                const configKey =
+                  field.replace(
+                    "config.",
+                    ""
+                  );
+
+
+                return {
+                  ...node,
+
+                  config: {
+                    ...(node.config ||
+                      {}),
+
+                    [configKey]:
+                      value,
+                  },
+                };
+              }
+
+
+              if (
+                field ===
+                "type"
+              ) {
+                return {
+                  ...node,
+
+                  type:
+                    value,
+
+                  config:
+                    getDefaultConfigForType(
+                      value,
+                      node.config
+                    ),
+                };
+              }
+
 
               return {
                 ...node,
 
                 [field]:
-                  nextValue,
+                  value,
               };
             }
           );
+
 
         return {
           ...previous,
@@ -1268,107 +918,31 @@ export default function WarehouseMap() {
   }
 
 
-  /*
-   * =========================================
-   * OBJECT PROPERTY
-   * =========================================
-   */
-
-  function handleObjectChange(
-    field,
-    value
-  ) {
-    if (
-      mode !== "edit" ||
-      !selectedObject
-    ) {
-      return;
-    }
-
-    if (
-      selectedObject.type ===
-      "rack"
-    ) {
-      commitMap(
-        (previous) => ({
-          ...previous,
-
-          racks:
-            previous.racks.map(
-              (rack) =>
-                rack.id ===
-                selectedObject.id
-                  ? {
-                      ...rack,
-
-                      [field]:
-                        normalizeObjectValue(
-                          field,
-                          value
-                        ),
-                    }
-                  : rack
-            ),
-        })
-      );
-
-      return;
-    }
-
-    if (
-      selectedObject.type ===
-      "station"
-    ) {
-      commitMap(
-        (previous) => ({
-          ...previous,
-
-          stations:
-            previous.stations.map(
-              (station) =>
-                station.id ===
-                selectedObject.id
-                  ? {
-                      ...station,
-
-                      [field]:
-                        normalizeObjectValue(
-                          field,
-                          value
-                        ),
-                    }
-                  : station
-            ),
-        })
-      );
-    }
-  }
-
-
-  /*
-   * =========================================
-   * MAP PROPERTY
-   * =========================================
-   */
-
   function handleMapChange(
     field,
     value
   ) {
     if (
-      mode !== "edit"
+      mode !==
+      "edit"
     ) {
       return;
     }
 
+
     if (
-      field === "width" ||
-      field === "height" ||
+      field ===
+        "width" ||
+      field ===
+        "height" ||
       field ===
         "gridSpacing"
     ) {
       const number =
-        Number(value);
+        Number(
+          value
+        );
+
 
       if (
         !Number.isFinite(
@@ -1379,9 +953,11 @@ export default function WarehouseMap() {
         return;
       }
 
+
       value =
         number;
     }
+
 
     commitMap(
       (previous) => ({
@@ -1394,98 +970,49 @@ export default function WarehouseMap() {
   }
 
 
-  /*
-   * =========================================
-   * DELETE
-   * =========================================
-   */
-
   function handleDelete() {
     if (
-      mode !== "edit"
+      mode !==
+        "edit" ||
+      !selectedNodeId
     ) {
       return;
     }
 
-    if (
-      selectedNodeId
-    ) {
-      commitMap(
-        (previous) => ({
-          ...previous,
 
-          nodes:
-            previous.nodes.filter(
-              (node) =>
-                node.id !==
+    commitMap(
+      (previous) => ({
+        ...previous,
+
+        nodes:
+          previous.nodes.filter(
+            (node) =>
+              node.id !==
+              selectedNodeId
+          ),
+
+        edges:
+          previous.edges.filter(
+            (edge) =>
+              edge.from !==
+                selectedNodeId &&
+              edge.to !==
                 selectedNodeId
-            ),
+          ),
+      })
+    );
 
-          edges:
-            previous.edges.filter(
-              (edge) =>
-                edge.from !==
-                  selectedNodeId &&
-                edge.to !==
-                  selectedNodeId
-            ),
-        })
-      );
 
-      clearEditSelection();
+    setSelectedNodeId(
+      null
+    );
 
-      return;
-    }
 
-    if (
-      selectedObject?.type ===
-      "rack"
-    ) {
-      commitMap(
-        (previous) => ({
-          ...previous,
-
-          racks:
-            previous.racks.filter(
-              (rack) =>
-                rack.id !==
-                selectedObject.id
-            ),
-        })
-      );
-
-      clearEditSelection();
-
-      return;
-    }
-
-    if (
-      selectedObject?.type ===
-      "station"
-    ) {
-      commitMap(
-        (previous) => ({
-          ...previous,
-
-          stations:
-            previous.stations.filter(
-              (station) =>
-                station.id !==
-                selectedObject.id
-            ),
-        })
-      );
-
-      clearEditSelection();
-    }
+    setConnectionStart(
+      null
+    );
   }
 
-
-  /*
-   * =========================================
-   * EXPORT
-   * =========================================
-   */
 
   function handleExport() {
     const json =
@@ -1495,40 +1022,51 @@ export default function WarehouseMap() {
         2
       );
 
+
     const blob =
       new Blob(
-        [json],
+        [
+          json,
+        ],
         {
           type:
             "application/json",
         }
       );
 
+
     const url =
       URL.createObjectURL(
         blob
       );
+
 
     const link =
       document.createElement(
         "a"
       );
 
+
     link.href =
       url;
+
 
     link.download =
       `${sanitizeFilename(
         mapData.name
       )}.json`;
 
+
     document.body.appendChild(
       link
     );
 
+
     link.click();
 
+
     link.remove();
+
 
     URL.revokeObjectURL(
       url
@@ -1536,18 +1074,14 @@ export default function WarehouseMap() {
   }
 
 
-  /*
-   * =========================================
-   * RESET
-   * =========================================
-   */
-
   function handleReset() {
     if (
-      mode !== "edit"
+      mode !==
+      "edit"
     ) {
       return;
     }
+
 
     commitMap(
       structuredClone(
@@ -1555,117 +1089,27 @@ export default function WarehouseMap() {
       )
     );
 
-    clearEditSelection();
+
+    setSelectedNodeId(
+      null
+    );
+
+
+    setConnectionStart(
+      null
+    );
+
 
     setTool(
       "select"
     );
+
 
     setZoom(
       1
     );
   }
 
-
-  /*
-   * =========================================
-   * SELECTION
-   * =========================================
-   */
-
-  function clearEditSelection() {
-    setSelectedNodeId(
-      null
-    );
-
-    setSelectedObject(
-      null
-    );
-
-    setConnectionStart(
-      null
-    );
-  }
-
-
-  function handleTreeNodeSelect(
-    nodeId
-  ) {
-    if (
-      mode !== "edit"
-    ) {
-      return;
-    }
-
-    setSelectedObject(
-      null
-    );
-
-    setSelectedNodeId(
-      nodeId
-    );
-
-    setConnectionStart(
-      null
-    );
-
-    setTool(
-      "select"
-    );
-  }
-
-
-  function handleTreeObjectSelect(
-    object
-  ) {
-    if (
-      mode !== "edit"
-    ) {
-      return;
-    }
-
-    setSelectedNodeId(
-      null
-    );
-
-    setSelectedObject(
-      object
-    );
-
-    setConnectionStart(
-      null
-    );
-
-    setTool(
-      "select"
-    );
-  }
-
-
-  function handleToolChange(
-    nextTool
-  ) {
-    if (
-      mode !== "edit"
-    ) {
-      return;
-    }
-
-    setTool(
-      nextTool
-    );
-
-    setConnectionStart(
-      null
-    );
-  }
-
-
-  /*
-   * =========================================
-   * UI
-   * =========================================
-   */
 
   return (
     <div
@@ -1685,15 +1129,17 @@ export default function WarehouseMap() {
           </span>
 
           <h2>
-            {mode === "edit"
+            {mode ===
+            "edit"
               ? "Map Editor"
               : "Warehouse Monitor"}
           </h2>
 
           <p>
-            {mode === "edit"
-              ? "Design warehouse topology, racks, stations and robot travel paths."
-              : "Monitor robot position, status, destination and planned path."}
+            {mode ===
+            "edit"
+              ? "Create node-based warehouse topology and travel paths."
+              : "Monitor robot position, status and planned path."}
           </p>
 
         </div>
@@ -1704,30 +1150,45 @@ export default function WarehouseMap() {
           {mode ===
             "edit" &&
             saveStatus && (
+
             <div
               className={
-                saveStatus === "Saved"
+                saveStatus ===
+                "Saved"
                   ? "map-save-status saved"
                   : "map-save-status"
               }
             >
+
               {saveStatus ===
                 "Saved" && (
+
                 <CheckCircle2
-                  size={14}
+                  size={
+                    14
+                  }
                 />
+
               )}
 
               <span>
-                {saveStatus}
+                {
+                  saveStatus
+                }
               </span>
+
             </div>
+
           )}
 
 
           <div className="map-editor-info">
 
-            <Map size={16} />
+            <Map
+              size={
+                16
+              }
+            />
 
             <span>
               {mapData.width}
@@ -1745,17 +1206,27 @@ export default function WarehouseMap() {
 
 
       <MapToolbar
-        mode={mode}
+        mode={
+          mode
+        }
 
         setMode={
           handleModeChange
         }
 
-        tool={tool}
-
-        setTool={
-          handleToolChange
+        tool={
+          tool
         }
+
+        setTool={(nextTool) => {
+          setTool(
+            nextTool
+          );
+
+          setConnectionStart(
+            null
+          );
+        }}
 
         onDelete={
           handleDelete
@@ -1782,14 +1253,18 @@ export default function WarehouseMap() {
         }
 
         canUndo={
-          undoStack.length > 0
+          undoStack.length >
+          0
         }
 
         canRedo={
-          redoStack.length > 0
+          redoStack.length >
+          0
         }
 
-        zoom={zoom}
+        zoom={
+          zoom
+        }
 
         onZoomIn={
           zoomIn
@@ -1824,10 +1299,10 @@ export default function WarehouseMap() {
         }
       >
 
-        {/* LEFT */}
-
         {!expanded &&
-          mode === "edit" && (
+          mode ===
+            "edit" && (
+
           <MapObjectTree
             mapData={
               mapData
@@ -1837,38 +1312,50 @@ export default function WarehouseMap() {
               selectedNodeId
             }
 
-            selectedObject={
-              selectedObject
-            }
+            onSelectNode={(
+              nodeId
+            ) => {
+              setSelectedNodeId(
+                nodeId
+              );
 
-            onSelectNode={
-              handleTreeNodeSelect
-            }
+              setConnectionStart(
+                null
+              );
 
-            onSelectObject={
-              handleTreeObjectSelect
-            }
+              setTool(
+                "select"
+              );
+            }}
           />
+
         )}
 
 
         {!expanded &&
           mode ===
             "monitor" && (
+
           <aside className="panel monitor-fleet-list">
 
             <div className="panel-header">
+
               <h3>
                 Robot Fleet
               </h3>
 
               <span>
-                {MOCK_ROBOTS.length}
+                {
+                  MOCK_ROBOTS.length
+                }
               </span>
+
             </div>
+
 
             {MOCK_ROBOTS.map(
               (robot) => (
+
                 <button
                   type="button"
 
@@ -1889,94 +1376,86 @@ export default function WarehouseMap() {
                     )
                   }
                 >
+
                   <div>
+
                     <strong>
-                      {robot.id}
+                      {
+                        robot.id
+                      }
                     </strong>
 
                     <span>
-                      {robot.task}
+                      {
+                        robot.task
+                      }
                     </span>
+
                   </div>
+
 
                   <span
                     className={`monitor-status ${robot.status.toLowerCase()}`}
                   >
-                    {robot.status}
+                    {
+                      robot.status
+                    }
                   </span>
+
                 </button>
+
               )
             )}
 
           </aside>
+
         )}
 
-
-        {/* CENTER */}
 
         <section className="panel map-main-panel">
 
           <div className="panel-header">
 
             <h3>
-              {mode === "edit"
+              {mode ===
+              "edit"
                 ? "Warehouse Topology"
                 : "Live Warehouse Map"}
             </h3>
 
             <span>
-              {mode === "edit"
-                ? `${mapData.nodes.length} nodes • ${mapData.edges.length} paths • ${mapData.racks.length} racks • ${mapData.stations.length} stations`
+              {mode ===
+              "edit"
+                ? `${mapData.nodes.length} nodes • ${mapData.edges.length} paths`
                 : `${MOCK_ROBOTS.length} robots`}
             </span>
 
           </div>
 
 
-          {mode === "edit" &&
+          {mode ===
+            "edit" &&
             tool ===
               "connect" && (
+
             <EditorMessage>
               {connectionStart
                 ? `Start node: ${connectionStart}. Select destination node.`
                 : "Select the first node to create a path."}
             </EditorMessage>
+
           )}
 
 
-          {mode === "edit" &&
+          {mode ===
+            "edit" &&
             tool ===
               "node" && (
+
             <EditorMessage>
-              Click anywhere on the grid to create a topology node.
+              Click anywhere on the infinite grid to create a node.
             </EditorMessage>
-          )}
 
-
-          {mode === "edit" &&
-            tool ===
-              "rack" && (
-            <EditorMessage>
-              Click anywhere on the grid to place a rack.
-            </EditorMessage>
-          )}
-
-
-          {mode === "edit" &&
-            tool ===
-              "dock" && (
-            <EditorMessage>
-              Click anywhere on the grid to place a dock.
-            </EditorMessage>
-          )}
-
-
-          {mode === "edit" &&
-            tool ===
-              "charging" && (
-            <EditorMessage>
-              Click anywhere on the grid to place a charging station.
-            </EditorMessage>
           )}
 
 
@@ -1995,10 +1474,6 @@ export default function WarehouseMap() {
 
             selectedNodeId={
               selectedNodeId
-            }
-
-            selectedObject={
-              selectedObject
             }
 
             connectionStart={
@@ -2044,79 +1519,50 @@ export default function WarehouseMap() {
             onNodeDragEnd={
               handleNodeDragEnd
             }
-
-            onObjectClick={
-              handleObjectClick
-            }
-
-            onObjectMove={
-              handleObjectMove
-            }
-
-            onObjectDragStart={
-              handleObjectDragStart
-            }
-
-            onObjectDragEnd={
-              handleObjectDragEnd
-            }
           />
 
         </section>
 
 
-        {/* RIGHT */}
-
         {!expanded &&
-          mode === "edit" && (
+          mode ===
+            "edit" && (
+
           <aside className="panel map-properties">
 
-            {selectedMapObject ? (
-              <MapObjectProperties
-                object={
-                  selectedMapObject
-                }
+            <MapProperties
+              mapData={
+                mapData
+              }
 
-                objectType={
-                  selectedObject.type
-                }
+              selectedNode={
+                selectedNode
+              }
 
-                onChange={
-                  handleObjectChange
-                }
-              />
-            ) : (
-              <MapProperties
-                mapData={
-                  mapData
-                }
+              onMapChange={
+                handleMapChange
+              }
 
-                selectedNode={
-                  selectedNode
-                }
-
-                onMapChange={
-                  handleMapChange
-                }
-
-                onNodeChange={
-                  handleNodeChange
-                }
-              />
-            )}
+              onNodeChange={
+                handleNodeChange
+              }
+            />
 
           </aside>
+
         )}
 
 
         {!expanded &&
           mode ===
             "monitor" && (
+
           <MonitorPanel
             robot={
               selectedRobot
             }
           />
+
         )}
 
       </div>
@@ -2132,10 +1578,16 @@ function EditorMessage({
   return (
     <div className="map-editor-message">
 
-      <Info size={15} />
+      <Info
+        size={
+          15
+        }
+      />
 
       <span>
-        {children}
+        {
+          children
+        }
       </span>
 
     </div>
@@ -2151,15 +1603,19 @@ function calculateDistance(
     pointB.x -
     pointA.x;
 
+
   const dy =
     pointB.y -
     pointA.y;
+
 
   return Number(
     Math.sqrt(
       dx * dx +
       dy * dy
-    ).toFixed(3)
+    ).toFixed(
+      3
+    )
   );
 }
 
@@ -2170,11 +1626,13 @@ function recalculateEdges(
 ) {
   return edges.map(
     (edge) => {
+
       if (
         !edge.autoDistance
       ) {
         return edge;
       }
+
 
       const from =
         nodes.find(
@@ -2183,6 +1641,7 @@ function recalculateEdges(
             edge.from
         );
 
+
       const to =
         nodes.find(
           (node) =>
@@ -2190,12 +1649,14 @@ function recalculateEdges(
             edge.to
         );
 
+
       if (
         !from ||
         !to
       ) {
         return edge;
       }
+
 
       return {
         ...edge,
@@ -2211,55 +1672,16 @@ function recalculateEdges(
 }
 
 
-function getSelectedMapObject(
-  mapData,
-  selection
-) {
-  if (
-    !selection
-  ) {
-    return null;
-  }
-
-  if (
-    selection.type ===
-    "rack"
-  ) {
-    return (
-      mapData.racks.find(
-        (rack) =>
-          rack.id ===
-          selection.id
-      ) ||
-      null
-    );
-  }
-
-  if (
-    selection.type ===
-    "station"
-  ) {
-    return (
-      mapData.stations.find(
-        (station) =>
-          station.id ===
-          selection.id
-      ) ||
-      null
-    );
-  }
-
-  return null;
-}
-
-
 function snapPosition(
   x,
   y,
   spacing
 ) {
   const step =
-    Number(spacing);
+    Number(
+      spacing
+    );
+
 
   if (
     !Number.isFinite(
@@ -2269,108 +1691,109 @@ function snapPosition(
   ) {
     return {
       x:
-        Number(x),
+        Number(
+          x
+        ),
 
       y:
-        Number(y),
+        Number(
+          y
+        ),
     };
   }
 
-  return {
-    x: Number(
-      (
-        Math.round(
-          Number(x) /
-          step
-        ) *
-        step
-      ).toFixed(3)
-    ),
 
-    y: Number(
-      (
-        Math.round(
-          Number(y) /
+  return {
+    x:
+      Number(
+        (
+          Math.round(
+            Number(x) /
+            step
+          ) *
           step
-        ) *
-        step
-      ).toFixed(3)
-    ),
+        ).toFixed(
+          3
+        )
+      ),
+
+    y:
+      Number(
+        (
+          Math.round(
+            Number(y) /
+            step
+          ) *
+          step
+        ).toFixed(
+          3
+        )
+      ),
   };
 }
 
 
-function normalizeObjectValue(
-  field,
-  value
+function getDefaultConfigForType(
+  type,
+  existingConfig = {}
 ) {
-  if (
-    field === "x" ||
-    field === "y"
-  ) {
-    const number =
-      Number(value);
+  switch (type) {
 
-    return Number.isFinite(
-      number
-    )
-      ? number
-      : 0;
+    case "STORAGE":
+      return {
+        width:
+          existingConfig.width ||
+          4,
+
+        depth:
+          existingConfig.depth ||
+          2,
+
+        zone:
+          existingConfig.zone ||
+          "",
+
+        levels:
+          existingConfig.levels ||
+          4,
+
+        slotsPerLevel:
+          existingConfig.slotsPerLevel ||
+          6,
+      };
+
+
+    case "CHARGING":
+      return {
+        width:
+          existingConfig.width ||
+          2,
+
+        depth:
+          existingConfig.depth ||
+          2,
+
+        chargerId:
+          existingConfig.chargerId ||
+          "",
+      };
+
+
+    case "DOCK":
+      return {
+        width:
+          existingConfig.width ||
+          3,
+
+        depth:
+          existingConfig.depth ||
+          2,
+      };
+
+
+    default:
+      return {};
   }
-
-  if (
-    field === "width" ||
-    field === "depth"
-  ) {
-    const number =
-      Number(value);
-
-    return Math.max(
-      Number.isFinite(
-        number
-      )
-        ? number
-        : 0.1,
-
-      0.1
-    );
-  }
-
-  if (
-    field === "levels" ||
-    field ===
-      "slotsPerLevel"
-  ) {
-    const number =
-      Number(value);
-
-    return Math.max(
-      Math.round(
-        Number.isFinite(
-          number
-        )
-          ? number
-          : 1
-      ),
-      1
-    );
-  }
-
-  if (
-    field ===
-    "rotation"
-  ) {
-    const number =
-      Number(value);
-
-    return Number.isFinite(
-      number
-    )
-      ? number
-      : 0;
-  }
-
-  return value;
 }
 
 
@@ -2381,6 +1804,7 @@ function getNextId(
 ) {
   let highest =
     0;
+
 
   for (
     const item
@@ -2394,13 +1818,18 @@ function getNextId(
       continue;
     }
 
+
     const suffix =
       item.id.slice(
         prefix.length
       );
 
+
     const number =
-      Number(suffix);
+      Number(
+        suffix
+      );
+
 
     if (
       Number.isFinite(
@@ -2414,6 +1843,7 @@ function getNextId(
         );
     }
   }
+
 
   return `${prefix}${String(
     highest + 1
@@ -2437,7 +1867,8 @@ function sanitizeFilename(
       .replace(
         /\s+/g,
         "_"
-      ) ||
+      )
+    ||
     "warehouse-map"
   );
 }

@@ -2,9 +2,6 @@ import {
   MousePointer2,
   MapPin,
   Link2,
-  Boxes,
-  DoorOpen,
-  BatteryCharging,
   Trash2,
   Download,
   RotateCcw,
@@ -53,14 +50,10 @@ export default function MapToolbar({
   return (
     <div className="map-toolbar">
 
-      {/* MODE */}
-
       <ToolbarButton
         icon={Pencil}
         label="Edit Map"
-        active={
-          mode === "edit"
-        }
+        active={mode === "edit"}
         onClick={() =>
           setMode("edit")
         }
@@ -69,9 +62,7 @@ export default function MapToolbar({
       <ToolbarButton
         icon={Radio}
         label="Monitor"
-        active={
-          mode === "monitor"
-        }
+        active={mode === "monitor"}
         onClick={() =>
           setMode("monitor")
         }
@@ -79,14 +70,10 @@ export default function MapToolbar({
 
       <div className="toolbar-divider" />
 
-      {/* EDIT TOOLS */}
-
       {editing && (
         <>
           <ToolbarButton
-            active={
-              tool === "select"
-            }
+            active={tool === "select"}
             icon={MousePointer2}
             label="Select"
             onClick={() =>
@@ -95,9 +82,7 @@ export default function MapToolbar({
           />
 
           <ToolbarButton
-            active={
-              tool === "node"
-            }
+            active={tool === "node"}
             icon={MapPin}
             label="Node"
             onClick={() =>
@@ -106,50 +91,11 @@ export default function MapToolbar({
           />
 
           <ToolbarButton
-            active={
-              tool === "connect"
-            }
+            active={tool === "connect"}
             icon={Link2}
             label="Path"
             onClick={() =>
               setTool("connect")
-            }
-          />
-
-          <ToolbarButton
-            active={
-              tool === "rack"
-            }
-            icon={Boxes}
-            label="Rack"
-            onClick={() =>
-              setTool("rack")
-            }
-          />
-
-          <ToolbarButton
-            active={
-              tool === "dock"
-            }
-            icon={DoorOpen}
-            label="Dock"
-            onClick={() =>
-              setTool("dock")
-            }
-          />
-
-          <ToolbarButton
-            active={
-              tool === "charging"
-            }
-            icon={
-              BatteryCharging
-            }
-            label="Charge"
-            onClick={() =>
-              setTool(
-                "charging"
-              )
             }
           />
 
@@ -158,60 +104,41 @@ export default function MapToolbar({
           <ToolbarButton
             icon={Undo2}
             label="Undo"
-            disabled={
-              !canUndo
-            }
-            onClick={
-              onUndo
-            }
+            disabled={!canUndo}
+            onClick={onUndo}
           />
 
           <ToolbarButton
             icon={Redo2}
             label="Redo"
-            disabled={
-              !canRedo
-            }
-            onClick={
-              onRedo
-            }
+            disabled={!canRedo}
+            onClick={onRedo}
           />
         </>
       )}
 
       <div className="toolbar-divider" />
 
-      {/* ZOOM */}
-
       <ToolbarButton
         icon={ZoomOut}
         label="-"
-        onClick={
-          onZoomOut
-        }
+        onClick={onZoomOut}
       />
 
       <div className="zoom-display">
-        {Math.round(
-          zoom * 100
-        )}
-        %
+        {Math.round(zoom * 100)}%
       </div>
 
       <ToolbarButton
         icon={ZoomIn}
         label="+"
-        onClick={
-          onZoomIn
-        }
+        onClick={onZoomIn}
       />
 
       <ToolbarButton
         icon={Scan}
         label="Fit"
-        onClick={
-          onFit
-        }
+        onClick={onFit}
       />
 
       <ToolbarButton
@@ -225,14 +152,10 @@ export default function MapToolbar({
             ? "Collapse"
             : "Expand"
         }
-        onClick={
-          onToggleExpand
-        }
+        onClick={onToggleExpand}
       />
 
       <div className="toolbar-spacer" />
-
-      {/* FILE */}
 
       {editing && (
         <>
@@ -240,34 +163,26 @@ export default function MapToolbar({
             primary
             icon={Save}
             label="Save"
-            onClick={
-              onSave
-            }
+            onClick={onSave}
           />
 
           <ToolbarButton
             icon={Download}
             label="Export"
-            onClick={
-              onExport
-            }
+            onClick={onExport}
           />
 
           <ToolbarButton
             danger
             icon={Trash2}
             label="Delete"
-            onClick={
-              onDelete
-            }
+            onClick={onDelete}
           />
 
           <ToolbarButton
             icon={RotateCcw}
             label="Reset"
-            onClick={
-              onReset
-            }
+            onClick={onReset}
           />
         </>
       )}
@@ -291,9 +206,7 @@ function ToolbarButton({
     <button
       type="button"
 
-      disabled={
-        disabled
-      }
+      disabled={disabled}
 
       className={[
         "map-tool-button",
@@ -311,13 +224,9 @@ function ToolbarButton({
           : "",
       ].join(" ")}
 
-      onClick={
-        onClick
-      }
+      onClick={onClick}
     >
-      <Icon
-        size={16}
-      />
+      <Icon size={16} />
 
       <span>
         {label}

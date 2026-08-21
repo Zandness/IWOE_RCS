@@ -12,6 +12,7 @@ export default function MonitorPanel({
   if (!robot) {
     return (
       <aside className="panel monitor-panel">
+
         <div className="panel-header">
           <h3>
             Robot Monitor
@@ -21,6 +22,7 @@ export default function MonitorPanel({
         <div className="monitor-empty">
           Select a robot on the map or from the fleet list.
         </div>
+
       </aside>
     );
   }
@@ -29,6 +31,7 @@ export default function MonitorPanel({
     <aside className="panel monitor-panel">
 
       <div className="panel-header">
+
         <h3>
           Robot Monitor
         </h3>
@@ -36,15 +39,20 @@ export default function MonitorPanel({
         <span>
           {robot.id}
         </span>
+
       </div>
+
 
       <div className="monitor-robot-header">
 
         <div className="monitor-robot-icon">
-          <Bot size={25} />
+          <Bot
+            size={25}
+          />
         </div>
 
         <div>
+
           <strong>
             {robot.id}
           </strong>
@@ -52,6 +60,7 @@ export default function MonitorPanel({
           <span>
             {robot.type}
           </span>
+
         </div>
 
         <span
@@ -61,6 +70,7 @@ export default function MonitorPanel({
         </span>
 
       </div>
+
 
       <MonitorRow
         icon={Battery}
@@ -102,7 +112,9 @@ export default function MonitorPanel({
       />
 
       <MonitorRow
-        icon={ClipboardList}
+        icon={
+          ClipboardList
+        }
         label="Task"
         value={
           robot.task ||
@@ -110,42 +122,57 @@ export default function MonitorPanel({
         }
       />
 
+
       <div className="monitor-path-section">
 
         <div className="property-section-title">
           Planned Path
         </div>
 
-        {robot.plannedPath.length > 0 ? (
+        {robot.plannedPath.length >
+        0 ? (
+
           <div className="monitor-path-list">
+
             {robot.plannedPath.map(
               (
-                node,
+                nodeId,
                 index
               ) => (
+
                 <div
-                  key={`${robot.id}-${node}-${index}`}
+                  key={`${robot.id}-${nodeId}-${index}`}
+
                   className="monitor-path-node"
                 >
+
                   <span>
-                    {node}
+                    {nodeId}
                   </span>
 
                   {index <
                     robot.plannedPath.length -
                       1 && (
+
                     <span className="monitor-path-arrow">
                       →
                     </span>
+
                   )}
+
                 </div>
+
               )
             )}
+
           </div>
+
         ) : (
+
           <div className="monitor-empty-small">
             No planned path
           </div>
+
         )}
 
       </div>
@@ -164,11 +191,15 @@ function MonitorRow({
     <div className="monitor-row">
 
       <div>
-        <Icon size={14} />
+
+        <Icon
+          size={14}
+        />
 
         <span>
           {label}
         </span>
+
       </div>
 
       <strong>
