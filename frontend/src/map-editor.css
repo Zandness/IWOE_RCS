@@ -956,7 +956,7 @@ Only Node and Robot receive pointer events.
 
 
 .map-canvas-wrapper.tool-connect {
-  cursor: pointer;
+  cursor: crosshair;
 }
 
 
@@ -2024,29 +2024,38 @@ a selectable hitbox now.
 ========================================================= */
 
 .warehouse-boundary {
-  fill: rgba(8, 145, 178, 0.025);
+  fill: rgba(34, 211, 238, 0.025);
   stroke: #22d3ee66;
   stroke-width: 2;
   stroke-dasharray: 8 6;
-  pointer-events: all;
-  cursor: move;
+  pointer-events: none;
   transition:
     stroke 0.15s,
     fill 0.15s;
 }
 
 
-.warehouse-boundary:hover {
-  stroke: #22d3eeaa;
-  fill: rgba(34, 211, 238, 0.045);
-}
-
-
 .warehouse-boundary.selected {
+  fill: rgba(34, 211, 238, 0.035);
   stroke: #22d3ee;
   stroke-width: 2.5;
   stroke-dasharray: 8 4;
-  fill: rgba(34, 211, 238, 0.035);
+}
+
+
+/* Invisible stroke used only while Select tool is active. */
+.warehouse-boundary-hit {
+  fill: none;
+  pointer-events: stroke;
+  cursor: move;
+}
+
+
+/* Selected boundary can be dragged from its empty interior. */
+.warehouse-boundary-move-area {
+  fill: transparent;
+  pointer-events: all;
+  cursor: move;
 }
 
 
@@ -2319,5 +2328,353 @@ a selectable hitbox now.
 
   .map-minimap svg {
     width: 150px;
+  }
+}
+
+/* =========================================================
+   V12 - MAP MANAGER
+========================================================= */
+
+.map-manager {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 58px;
+  margin-bottom: 12px;
+  padding: 8px 10px;
+  overflow: visible;
+}
+
+.map-manager-current {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 190px;
+  padding-right: 14px;
+  border-right: 1px solid #1b2a3d;
+}
+
+.map-manager-icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  border: 1px solid #164e63;
+  border-radius: 8px;
+  background: #083344;
+  color: #67e8f9;
+}
+
+.map-manager-current > div:last-child {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.map-manager-label {
+  margin-bottom: 2px;
+  color: #22d3ee;
+  font-size: 7px;
+  font-weight: 800;
+  letter-spacing: 1px;
+}
+
+.map-manager-current strong {
+  overflow: hidden;
+  color: #e2e8f0;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.map-manager-current small {
+  margin-top: 2px;
+  color: #64748b;
+  font-size: 8px;
+}
+
+.map-manager-load {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 210px;
+  color: #64748b;
+}
+
+.map-manager-load select {
+  width: 100%;
+  min-width: 0;
+  padding: 8px 30px 8px 9px;
+  border: 1px solid #263b53;
+  border-radius: 7px;
+  outline: none;
+  background: #0b1727;
+  color: #cbd5e1;
+  font-size: 9px;
+  cursor: pointer;
+}
+
+.map-manager-load select:focus {
+  border-color: #22d3ee;
+}
+
+.map-manager-actions {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+}
+
+.map-manager-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 33px;
+  padding: 0 9px;
+  border: 1px solid #263b53;
+  border-radius: 7px;
+  background: #0f1d30;
+  color: #9fb4ca;
+  font-size: 9px;
+  font-weight: 650;
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    background 0.15s,
+    color 0.15s;
+}
+
+.map-manager-actions button:hover:not(:disabled) {
+  border-color: #3b5876;
+  background: #13263c;
+  color: #e2e8f0;
+}
+
+.map-manager-actions button.attention {
+  border-color: #0891b2;
+  background: #083344;
+  color: #67e8f9;
+}
+
+.map-manager-actions button.danger:hover:not(:disabled) {
+  border-color: #7f1d1d;
+  background: #3f1019;
+  color: #fda4af;
+}
+
+.map-manager-actions button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.map-import-status {
+  position: absolute;
+  right: 12px;
+  bottom: -21px;
+  z-index: 5;
+  color: #67e8f9;
+  font-size: 8px;
+}
+
+.map-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 5000;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(2, 6, 15, 0.72);
+  backdrop-filter: blur(3px);
+}
+
+.map-dialog {
+  width: min(420px, 100%);
+  overflow: hidden;
+  border: 1px solid #263b53;
+  border-radius: 12px;
+  background: #091525;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
+}
+
+.map-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 17px 18px;
+  border-bottom: 1px solid #1b2a3d;
+}
+
+.map-dialog-header span {
+  display: block;
+  margin-bottom: 4px;
+  color: #22d3ee;
+  font-size: 7px;
+  font-weight: 800;
+  letter-spacing: 1px;
+}
+
+.map-dialog-header h3 {
+  margin: 0;
+  color: #f1f5f9;
+  font-size: 15px;
+}
+
+.map-dialog-close {
+  display: grid;
+  place-items: center;
+  width: 31px;
+  height: 31px;
+  padding: 0;
+  border: 1px solid #263b53;
+  border-radius: 7px;
+  background: #0f1d30;
+  color: #94a3b8;
+  cursor: pointer;
+}
+
+.map-dialog-close:hover {
+  color: #f1f5f9;
+}
+
+.map-dialog-body {
+  padding: 18px;
+}
+
+.map-dialog-body label {
+  display: block;
+  margin-bottom: 7px;
+  color: #94a3b8;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.map-dialog-body input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 11px;
+  border: 1px solid #263b53;
+  border-radius: 7px;
+  outline: none;
+  background: #07111f;
+  color: #e2e8f0;
+  font-size: 11px;
+}
+
+.map-dialog-body input:focus {
+  border-color: #22d3ee;
+  box-shadow: 0 0 0 2px rgba(34, 211, 238, 0.08);
+}
+
+.map-dialog-body p {
+  margin: 9px 0 0;
+  color: #64748b;
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+.map-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 7px;
+  padding: 12px 18px 17px;
+}
+
+.map-dialog-actions button {
+  padding: 8px 13px;
+  border: 1px solid #263b53;
+  border-radius: 7px;
+  background: #0f1d30;
+  color: #94a3b8;
+  font-size: 9px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.map-dialog-actions button:hover {
+  color: #e2e8f0;
+}
+
+.map-dialog-actions button.primary {
+  border-color: #0891b2;
+  background: #0e7490;
+  color: #ffffff;
+}
+
+.map-dialog-actions button.primary:hover {
+  background: #0891b2;
+}
+
+.map-dialog-actions button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* =========================================================
+   V12 INTERACTION FIXES
+========================================================= */
+
+/* The visible warehouse rectangle must never steal Add Node / Add Path clicks. */
+.warehouse-boundary {
+  pointer-events: none !important;
+}
+
+/* Boundary selection is handled by a separate invisible stroke in MapCanvas. */
+.warehouse-boundary-hit {
+  fill: none;
+  pointer-events: stroke;
+  cursor: move;
+}
+
+/* Interior move target is present only while the boundary is selected. */
+.warehouse-boundary-move-area {
+  fill: transparent;
+  pointer-events: all;
+  cursor: move;
+}
+
+/* Node and path hit areas stay interactive above the boundary. */
+.infinite-map-world .map-node-group,
+.infinite-map-world .monitor-robot,
+.infinite-map-world .map-edge-group {
+  pointer-events: all;
+}
+
+.map-edge-hitbox {
+  pointer-events: stroke;
+}
+
+.map-canvas-wrapper.tool-node,
+.map-canvas-wrapper.tool-connect {
+  cursor: crosshair;
+}
+
+@media (max-width: 1100px) {
+  .map-manager {
+    flex-wrap: wrap;
+  }
+
+  .map-manager-current,
+  .map-manager-load {
+    flex: 1;
+  }
+
+  .map-manager-actions {
+    width: 100%;
+    margin-left: 0;
+  }
+}
+
+@media (max-width: 700px) {
+  .map-manager-current,
+  .map-manager-load {
+    width: 100%;
+    border-right: 0;
+  }
+
+  .map-manager-actions {
+    flex-wrap: wrap;
   }
 }

@@ -21,6 +21,12 @@ const MINI_HEIGHT = 130;
 const MINI_PADDING = 12;
 
 
+/*
+ * =====================================================
+ * MAP CANVAS
+ * =====================================================
+ */
+
 export default function MapCanvas({
   mapData,
 
@@ -59,6 +65,12 @@ export default function MapCanvas({
   onBoundaryChange,
   onBoundaryDragEnd,
 }) {
+  /*
+   * =====================================================
+   * REFS
+   * =====================================================
+   */
+
   const viewportRef =
     useRef(null);
 
@@ -70,17 +82,38 @@ export default function MapCanvas({
     });
 
 
-  const panDragRef =
+  /*
+   * Background interaction
+   *
+   * type:
+   *
+   * PAN
+   * NODE_PLACE
+   */
+
+  const backgroundDragRef =
     useRef(null);
 
+
+  /*
+   * Node Drag
+   */
 
   const nodeDragRef =
     useRef(null);
 
 
+  /*
+   * Boundary Drag
+   */
+
   const boundaryDragRef =
     useRef(null);
 
+
+  /*
+   * Node Auto Pan
+   */
 
   const autoPanFrameRef =
     useRef(null);
@@ -89,6 +122,12 @@ export default function MapCanvas({
   const dragPointerRef =
     useRef(null);
 
+
+  /*
+   * =====================================================
+   * STATE
+   * =====================================================
+   */
 
   const [
     pan,
@@ -101,7 +140,7 @@ export default function MapCanvas({
 
   /*
    * =====================================================
-   * PAN
+   * PAN UPDATE
    * =====================================================
    */
 
@@ -111,6 +150,7 @@ export default function MapCanvas({
     panRef.current =
       nextPan;
 
+
     setPan(
       nextPan
     );
@@ -119,7 +159,7 @@ export default function MapCanvas({
 
   /*
    * =====================================================
-   * FIT
+   * FIT MAP
    * =====================================================
    */
 
@@ -129,6 +169,7 @@ export default function MapCanvas({
     ) {
       return;
     }
+
 
     fitMapToViewport();
 
@@ -140,19 +181,29 @@ export default function MapCanvas({
     const viewport =
       viewportRef.current;
 
+
+    if (!viewport) {
+      return;
+    }
+
+
+    const rect =
+      viewport.getBoundingClientRect();
+
+
     if (
-      !viewport
+      rect.width <= 0 ||
+      rect.height <= 0
     ) {
       return;
     }
 
-    const rect =
-      viewport.getBoundingClientRect();
 
     const bounds =
       calculateMapBounds(
         mapData
       );
+
 
     const worldWidth =
       Math.max(
@@ -161,8 +212,10 @@ export default function MapCanvas({
           bounds.minX
         ) *
           SCALE,
+
         SCALE
       );
+
 
     const worldHeight =
       Math.max(
@@ -171,22 +224,28 @@ export default function MapCanvas({
           bounds.minY
         ) *
           SCALE,
+
         SCALE
       );
+
 
     const availableWidth =
       Math.max(
         rect.width -
           FIT_PADDING * 2,
+
         100
       );
+
 
     const availableHeight =
       Math.max(
         rect.height -
           FIT_PADDING * 2,
+
         100
       );
+
 
     const nextZoom =
       clamp(
@@ -197,43 +256,47 @@ export default function MapCanvas({
           availableHeight /
             worldHeight
         ),
+
         0.25,
         4
       );
+
 
     const centerWorldX =
       (
         bounds.minX +
         bounds.maxX
       ) /
-      2 *
+        2 *
       SCALE;
+
 
     const centerWorldY =
       (
         bounds.minY +
         bounds.maxY
       ) /
-      2 *
+        2 *
       SCALE;
+
 
     const nextPan = {
       x:
-        rect.width /
-          2 -
+        rect.width / 2 -
         centerWorldX *
           nextZoom,
 
       y:
-        rect.height /
-          2 -
+        rect.height / 2 -
         centerWorldY *
           nextZoom,
     };
 
+
     updatePan(
       nextPan
     );
+
 
     onZoomChange(
       Number(
@@ -247,7 +310,7 @@ export default function MapCanvas({
 
   /*
    * =====================================================
-   * COORDINATES
+   * SCREEN -> WORLD
    * =====================================================
    */
 
@@ -258,69 +321,151 @@ export default function MapCanvas({
     const viewport =
       viewportRef.current;
 
-    if (
-      !viewport
-    ) {
+
+    if (!viewport) {
       return {
         x: 0,
         y: 0,
       };
     }
 
+
     const rect =
       viewport.getBoundingClientRect();
 
-    return {
-      x:
-        (
-          clientX -
-          rect.left -
-          panRef.current.x
-        ) /
-        zoom /
-        SCALE,
 
-      y:
+    return {
+      x: Number(
         (
-          clientY -
-          rect.top -
-          panRef.current.y
-        ) /
-        zoom /
-        SCALE,
+          (
+            clientX -
+            rect.left -
+            panRef.current.x
+          ) /
+          zoom /
+          SCALE
+        ).toFixed(3)
+      ),
+
+      y: Number(
+        (
+          (
+            clientY -
+            rect.top -
+            panRef.current.y
+          ) /
+          zoom /
+          SCALE
+        ).toFixed(3)
+      ),
     };
   }
 
 
   /*
    * =====================================================
-   * BACKGROUND PAN
+   * BACKGROUND POINTER DOWN
+   *
+   * FIX V12
+   *
+   * Select = Pan
+   * Middle Mouse = Pan
+   * Node Tool = Prepare Node Placement
+   *
+   * ก่อนหน้านี้ Node Tool ไม่ได้สร้าง session
+   * ทำให้ PointerUp return ก่อนถึง onCanvasClick
    * =====================================================
    */
 
   function handleBackgroundPointerDown(
     event
   ) {
-    const middle =
+    /*
+     * Left Mouse only for normal operations
+     */
+
+    const leftMouse =
+      event.button === 0;
+
+
+    const middleMouse =
       event.button === 1;
 
-    const left =
-      event.button === 0 &&
+
+    /*
+     * =========================================
+     * NODE TOOL
+     * =========================================
+     */
+
+    if (
+      mode === "edit" &&
+      tool === "node" &&
+      leftMouse
+    ) {
+      event.preventDefault();
+
+
+      backgroundDragRef.current = {
+        type:
+          "NODE_PLACE",
+
+        pointerId:
+          event.pointerId,
+
+        startX:
+          event.clientX,
+
+        startY:
+          event.clientY,
+
+        moved:
+          false,
+      };
+
+
+      try {
+        event.currentTarget.setPointerCapture(
+          event.pointerId
+        );
+      } catch {
+        //
+      }
+
+
+      return;
+    }
+
+
+    /*
+     * =========================================
+     * PAN
+     * =========================================
+     */
+
+    const allowLeftPan =
+      leftMouse &&
       (
         tool === "select" ||
         mode === "monitor"
       );
 
+
     if (
-      !middle &&
-      !left
+      !middleMouse &&
+      !allowLeftPan
     ) {
       return;
     }
 
+
     event.preventDefault();
 
-    panDragRef.current = {
+
+    backgroundDragRef.current = {
+      type:
+        "PAN",
+
       pointerId:
         event.pointerId,
 
@@ -330,104 +475,241 @@ export default function MapCanvas({
       startY:
         event.clientY,
 
-      panX:
+      originalPanX:
         panRef.current.x,
 
-      panY:
+      originalPanY:
         panRef.current.y,
 
       moved:
         false,
     };
 
+
     try {
-      event.currentTarget
-        .setPointerCapture(
-          event.pointerId
-        );
+      event.currentTarget.setPointerCapture(
+        event.pointerId
+      );
     } catch {
       //
     }
   }
 
 
+  /*
+   * =====================================================
+   * BACKGROUND MOVE
+   * =====================================================
+   */
+
   function handleBackgroundPointerMove(
     event
   ) {
-    const drag =
-      panDragRef.current;
+    const interaction =
+      backgroundDragRef.current;
+
+
+    if (!interaction) {
+      return;
+    }
+
 
     if (
-      !drag ||
-      drag.pointerId !==
-        event.pointerId
+      interaction.pointerId !==
+      event.pointerId
     ) {
       return;
     }
 
+
     const dx =
       event.clientX -
-      drag.startX;
+      interaction.startX;
+
 
     const dy =
       event.clientY -
-      drag.startY;
+      interaction.startY;
+
 
     if (
-      Math.abs(dx) > 3 ||
-      Math.abs(dy) > 3
+      Math.abs(dx) >
+        3 ||
+      Math.abs(dy) >
+        3
     ) {
-      drag.moved =
+      interaction.moved =
         true;
     }
 
-    updatePan({
-      x:
-        drag.panX +
-        dx,
 
-      y:
-        drag.panY +
-        dy,
-    });
+    /*
+     * NODE PLACE
+     *
+     * Mouse move ไม่ต้องทำอะไร
+     */
+
+    if (
+      interaction.type ===
+      "NODE_PLACE"
+    ) {
+      return;
+    }
+
+
+    /*
+     * PAN
+     */
+
+    if (
+      interaction.type ===
+      "PAN"
+    ) {
+      updatePan({
+        x:
+          interaction.originalPanX +
+          dx,
+
+        y:
+          interaction.originalPanY +
+          dy,
+      });
+    }
   }
 
+
+  /*
+   * =====================================================
+   * BACKGROUND POINTER UP
+   * =====================================================
+   */
 
   function handleBackgroundPointerUp(
     event
   ) {
-    const drag =
-      panDragRef.current;
+    const interaction =
+      backgroundDragRef.current;
+
+
+    if (!interaction) {
+      return;
+    }
+
 
     if (
-      !drag ||
-      drag.pointerId !==
-        event.pointerId
+      interaction.pointerId !==
+      event.pointerId
     ) {
       return;
     }
 
-    panDragRef.current =
+
+    backgroundDragRef.current =
       null;
 
+
+    /*
+     * =========================================
+     * NODE PLACE
+     * =========================================
+     */
+
     if (
-      drag.moved
+      interaction.type ===
+      "NODE_PLACE"
     ) {
+      /*
+       * ถ้ากดแล้วลาก
+       * ไม่สร้าง Node
+       */
+
+      if (
+        interaction.moved
+      ) {
+        return;
+      }
+
+
+      const position =
+        screenToWorld(
+          event.clientX,
+          event.clientY
+        );
+
+
+      onCanvasClick(
+        position
+      );
+
+
       return;
     }
 
-    if (
-      event.button !== 0
-    ) {
-      return;
-    }
 
-    onCanvasClick(
-      screenToWorld(
-        event.clientX,
-        event.clientY
-      )
-    );
+    /*
+     * =========================================
+     * PAN
+     * =========================================
+     */
+
+    if (
+      interaction.type ===
+      "PAN"
+    ) {
+      /*
+       * ถ้ามีการลากจริง
+       * = แค่ Pan
+       */
+
+      if (
+        interaction.moved
+      ) {
+        return;
+      }
+
+
+      /*
+       * Middle click
+       * ไม่ clear selection
+       */
+
+      if (
+        event.button !== 0
+      ) {
+        return;
+      }
+
+
+      /*
+       * Click พื้นที่ว่าง
+       */
+
+      const position =
+        screenToWorld(
+          event.clientX,
+          event.clientY
+        );
+
+
+      onCanvasClick(
+        position
+      );
+    }
+  }
+
+
+  /*
+   * =====================================================
+   * BACKGROUND CANCEL
+   * =====================================================
+   */
+
+  function handleBackgroundPointerCancel() {
+    backgroundDragRef.current =
+      null;
+
+
+    stopAutoPan();
   }
 
 
@@ -442,28 +724,33 @@ export default function MapCanvas({
   ) {
     event.preventDefault();
 
+
     const viewport =
       viewportRef.current;
 
-    if (
-      !viewport
-    ) {
+
+    if (!viewport) {
       return;
     }
 
+
     const rect =
       viewport.getBoundingClientRect();
+
 
     const mouseX =
       event.clientX -
       rect.left;
 
+
     const mouseY =
       event.clientY -
       rect.top;
 
+
     const oldZoom =
       zoom;
+
 
     const nextZoom =
       clamp(
@@ -473,9 +760,15 @@ export default function MapCanvas({
               ? 1.1
               : 0.9
           ),
+
         0.25,
         4
       );
+
+
+    /*
+     * Keep pointer at same world location
+     */
 
     const worldX =
       (
@@ -484,12 +777,14 @@ export default function MapCanvas({
       ) /
       oldZoom;
 
+
     const worldY =
       (
         mouseY -
         panRef.current.y
       ) /
       oldZoom;
+
 
     updatePan({
       x:
@@ -503,6 +798,7 @@ export default function MapCanvas({
           nextZoom,
     });
 
+
     onZoomChange(
       Number(
         nextZoom.toFixed(
@@ -515,7 +811,7 @@ export default function MapCanvas({
 
   /*
    * =====================================================
-   * NODE DRAG
+   * NODE POINTER DOWN
    * =====================================================
    */
 
@@ -523,36 +819,109 @@ export default function MapCanvas({
     event,
     node
   ) {
-    event.stopPropagation();
+    /*
+     * =========================================
+     * MONITOR
+     * =========================================
+     */
 
     if (
-      mode !== "edit"
+      mode === "monitor"
     ) {
       return;
     }
+
+
+    /*
+     * =========================================
+     * CONNECT TOOL
+     *
+     * FIX:
+     * Click Node 1
+     * Click Node 2
+     * => Create Path
+     * =========================================
+     */
 
     if (
       tool === "connect"
     ) {
+      event.stopPropagation();
+
+      event.preventDefault();
+
+
+      if (
+        event.button !== 0
+      ) {
+        return;
+      }
+
+
       onNodeClick(
         node.id
       );
 
+
       return;
     }
 
+
+    /*
+     * =========================================
+     * NODE TOOL
+     *
+     * กด Node เดิมขณะ Add Node
+     * ไม่สร้าง Node ซ้อน
+     * =========================================
+     */
+
     if (
-      tool !== "select" ||
+      tool === "node"
+    ) {
+      event.stopPropagation();
+
+      return;
+    }
+
+
+    /*
+     * =========================================
+     * SELECT TOOL
+     * =========================================
+     */
+
+    if (
+      tool !== "select"
+    ) {
+      return;
+    }
+
+
+    if (
       event.button !== 0
     ) {
       return;
     }
 
+
+    event.stopPropagation();
+
     event.preventDefault();
+
+
+    /*
+     * Click = Select Node
+     */
 
     onNodeClick(
       node.id
     );
+
+
+    /*
+     * Hold Session
+     */
 
     nodeDragRef.current = {
       pointerId:
@@ -561,59 +930,95 @@ export default function MapCanvas({
       nodeId:
         node.id,
 
-      startX:
+      startClientX:
         event.clientX,
 
-      startY:
+      startClientY:
         event.clientY,
 
       dragging:
         false,
+
+      pointerIsDown:
+        true,
     };
 
+
     try {
-      event.currentTarget
-        .setPointerCapture(
-          event.pointerId
-        );
+      event.currentTarget.setPointerCapture(
+        event.pointerId
+      );
     } catch {
       //
     }
   }
 
 
+  /*
+   * =====================================================
+   * NODE POINTER MOVE
+   * =====================================================
+   */
+
   function handleNodePointerMove(
     event,
     node
   ) {
-    event.stopPropagation();
-
     const drag =
       nodeDragRef.current;
 
+
+    if (!drag) {
+      return;
+    }
+
+
+    event.stopPropagation();
+
+
     if (
-      !drag ||
       drag.pointerId !==
-        event.pointerId ||
-      drag.nodeId !==
-        node.id
+      event.pointerId
     ) {
       return;
     }
 
+
+    if (
+      !drag.pointerIsDown
+    ) {
+      return;
+    }
+
+
+    if (
+      drag.nodeId !==
+      node.id
+    ) {
+      return;
+    }
+
+
     const dx =
       event.clientX -
-      drag.startX;
+      drag.startClientX;
+
 
     const dy =
       event.clientY -
-      drag.startY;
+      drag.startClientY;
+
 
     const distance =
       Math.hypot(
         dx,
         dy
       );
+
+
+    /*
+     * Click ยังไม่ถือว่า Drag
+     */
 
     if (
       !drag.dragging &&
@@ -623,16 +1028,23 @@ export default function MapCanvas({
       return;
     }
 
+
+    /*
+     * Start Drag
+     */
+
     if (
       !drag.dragging
     ) {
       drag.dragging =
         true;
 
+
       onNodeDragStart?.(
         node.id
       );
     }
+
 
     dragPointerRef.current = {
       clientX:
@@ -642,18 +1054,28 @@ export default function MapCanvas({
         event.clientY,
     };
 
+
     updateDraggedNodePosition();
+
 
     startAutoPan();
   }
 
 
+  /*
+   * =====================================================
+   * UPDATE NODE POSITION
+   * =====================================================
+   */
+
   function updateDraggedNodePosition() {
     const drag =
       nodeDragRef.current;
 
+
     const pointer =
       dragPointerRef.current;
+
 
     if (
       !drag ||
@@ -663,17 +1085,20 @@ export default function MapCanvas({
       return;
     }
 
+
     const position =
       screenToWorld(
         pointer.clientX,
         pointer.clientY
       );
 
+
     const snapped =
       snapToGrid(
         position,
         mapData.gridSpacing
       );
+
 
     onNodeMove(
       drag.nodeId,
@@ -683,22 +1108,39 @@ export default function MapCanvas({
   }
 
 
+  /*
+   * =====================================================
+   * NODE POINTER UP
+   * =====================================================
+   */
+
   function handleNodePointerUp(
     event,
     node
   ) {
-    event.stopPropagation();
-
     const drag =
       nodeDragRef.current;
 
+
+    if (!drag) {
+      return;
+    }
+
+
+    event.stopPropagation();
+
+
     if (
-      !drag ||
       drag.pointerId !==
-        event.pointerId
+      event.pointerId
     ) {
       return;
     }
+
+
+    drag.pointerIsDown =
+      false;
+
 
     if (
       drag.dragging
@@ -708,31 +1150,38 @@ export default function MapCanvas({
       );
     }
 
+
     stopAutoPan();
+
 
     nodeDragRef.current =
       null;
 
+
     dragPointerRef.current =
       null;
 
+
     try {
-      event.currentTarget
-        .releasePointerCapture(
-          event.pointerId
-        );
+      event.currentTarget.releasePointerCapture(
+        event.pointerId
+      );
     } catch {
       //
     }
   }
 
 
+  /*
+   * =====================================================
+   * NODE CANCEL
+   * =====================================================
+   */
+
   function handleNodePointerCancel(
     event,
     node
   ) {
-    event.stopPropagation();
-
     if (
       nodeDragRef.current
         ?.dragging
@@ -742,9 +1191,15 @@ export default function MapCanvas({
       );
     }
 
+
     stopAutoPan();
 
+
     nodeDragRef.current =
+      null;
+
+
+    dragPointerRef.current =
       null;
   }
 
@@ -762,12 +1217,15 @@ export default function MapCanvas({
       return;
     }
 
+
     function loop() {
       const drag =
         nodeDragRef.current;
 
+
       const pointer =
         dragPointerRef.current;
+
 
       if (
         !drag ||
@@ -780,79 +1238,92 @@ export default function MapCanvas({
         return;
       }
 
+
       const viewport =
         viewportRef.current;
 
-      if (
-        !viewport
-      ) {
+
+      if (!viewport) {
+        autoPanFrameRef.current =
+          null;
+
         return;
       }
+
 
       const rect =
         viewport.getBoundingClientRect();
 
-      let dx = 0;
-      let dy = 0;
+
+      let moveX = 0;
+      let moveY = 0;
+
 
       if (
         pointer.clientX -
           rect.left <
         AUTO_PAN_EDGE
       ) {
-        dx =
+        moveX =
           AUTO_PAN_SPEED;
       }
+
 
       if (
         rect.right -
           pointer.clientX <
         AUTO_PAN_EDGE
       ) {
-        dx =
+        moveX =
           -AUTO_PAN_SPEED;
       }
+
 
       if (
         pointer.clientY -
           rect.top <
         AUTO_PAN_EDGE
       ) {
-        dy =
+        moveY =
           AUTO_PAN_SPEED;
       }
+
 
       if (
         rect.bottom -
           pointer.clientY <
         AUTO_PAN_EDGE
       ) {
-        dy =
+        moveY =
           -AUTO_PAN_SPEED;
       }
 
+
       if (
-        dx !== 0 ||
-        dy !== 0
+        moveX !== 0 ||
+        moveY !== 0
       ) {
         updatePan({
           x:
             panRef.current.x +
-            dx,
+            moveX,
 
           y:
             panRef.current.y +
-            dy,
+            moveY,
         });
+
 
         updateDraggedNodePosition();
       }
+
 
       autoPanFrameRef.current =
         requestAnimationFrame(
           loop
         );
     }
+
 
     autoPanFrameRef.current =
       requestAnimationFrame(
@@ -865,12 +1336,14 @@ export default function MapCanvas({
     dragPointerRef.current =
       null;
 
+
     if (
       autoPanFrameRef.current
     ) {
       cancelAnimationFrame(
         autoPanFrameRef.current
       );
+
 
       autoPanFrameRef.current =
         null;
@@ -888,15 +1361,29 @@ export default function MapCanvas({
     event,
     edge
   ) {
-    event.stopPropagation();
+    /*
+     * Path click ใช้เลือก Property เท่านั้น
+     */
 
     if (
       mode !== "edit" ||
-      tool !== "select" ||
+      tool !== "select"
+    ) {
+      return;
+    }
+
+
+    if (
       event.button !== 0
     ) {
       return;
     }
+
+
+    event.stopPropagation();
+
+    event.preventDefault();
+
 
     onEdgeClick(
       edge.id
@@ -906,7 +1393,12 @@ export default function MapCanvas({
 
   /*
    * =====================================================
-   * V11 - BOUNDARY
+   * BOUNDARY POINTER DOWN
+   *
+   * FIX สำคัญ
+   *
+   * Boundary ต้องไม่กิน event
+   * ตอน Add Node / Add Path
    * =====================================================
    */
 
@@ -914,7 +1406,14 @@ export default function MapCanvas({
     event,
     action
   ) {
-    event.stopPropagation();
+    /*
+     * สำคัญ:
+     *
+     * return ก่อน stopPropagation
+     *
+     * Node Tool / Connect Tool
+     * ต้องปล่อย event ผ่านไปที่ Map
+     */
 
     if (
       mode !== "edit" ||
@@ -924,15 +1423,21 @@ export default function MapCanvas({
       return;
     }
 
+
+    event.stopPropagation();
+
     event.preventDefault();
 
+
     onBoundaryClick?.();
+
 
     const start =
       screenToWorld(
         event.clientX,
         event.clientY
       );
+
 
     boundaryDragRef.current = {
       pointerId:
@@ -970,32 +1475,45 @@ export default function MapCanvas({
         false,
     };
 
+
     try {
-      event.currentTarget
-        .setPointerCapture(
-          event.pointerId
-        );
+      event.currentTarget.setPointerCapture(
+        event.pointerId
+      );
     } catch {
       //
     }
   }
 
 
+  /*
+   * =====================================================
+   * BOUNDARY MOVE / RESIZE
+   * =====================================================
+   */
+
   function handleBoundaryPointerMove(
     event
   ) {
-    event.stopPropagation();
-
     const drag =
       boundaryDragRef.current;
 
+
+    if (!drag) {
+      return;
+    }
+
+
     if (
-      !drag ||
       drag.pointerId !==
-        event.pointerId
+      event.pointerId
     ) {
       return;
     }
+
+
+    event.stopPropagation();
+
 
     const current =
       screenToWorld(
@@ -1003,13 +1521,22 @@ export default function MapCanvas({
         event.clientY
       );
 
+
     const dx =
       current.x -
       drag.startX;
 
+
     const dy =
       current.y -
       drag.startY;
+
+
+    const thresholdWorld =
+      DRAG_THRESHOLD /
+      SCALE /
+      zoom;
+
 
     if (
       !drag.started &&
@@ -1017,18 +1544,18 @@ export default function MapCanvas({
         dx,
         dy
       ) <
-        DRAG_THRESHOLD /
-          SCALE /
-          zoom
+        thresholdWorld
     ) {
       return;
     }
+
 
     if (
       !drag.started
     ) {
       drag.started =
         true;
+
 
       onBoundaryDragStart?.();
     }
@@ -1037,22 +1564,33 @@ export default function MapCanvas({
     let originX =
       drag.originX;
 
+
     let originY =
       drag.originY;
 
+
     let width =
       drag.width;
+
 
     let height =
       drag.height;
 
 
+    /*
+     * =========================================
+     * MOVE
+     * =========================================
+     */
+
     if (
-      drag.action === "MOVE"
+      drag.action ===
+      "MOVE"
     ) {
       originX =
         drag.originX +
         dx;
+
 
       originY =
         drag.originY +
@@ -1060,9 +1598,23 @@ export default function MapCanvas({
     }
 
 
+    /*
+     * =========================================
+     * EAST
+     *
+     * FIX:
+     * ห้ามใช้ action.includes("E")
+     * เพราะคำว่า MOVE ก็มีตัว E
+     * =========================================
+     */
+
     if (
-      drag.action.includes(
-        "E"
+      [
+        "E",
+        "NE",
+        "SE",
+      ].includes(
+        drag.action
       )
     ) {
       width =
@@ -1071,9 +1623,41 @@ export default function MapCanvas({
     }
 
 
+    /*
+     * WEST
+     */
+
     if (
-      drag.action.includes(
-        "S"
+      [
+        "W",
+        "NW",
+        "SW",
+      ].includes(
+        drag.action
+      )
+    ) {
+      originX =
+        drag.originX +
+        dx;
+
+
+      width =
+        drag.width -
+        dx;
+    }
+
+
+    /*
+     * SOUTH
+     */
+
+    if (
+      [
+        "S",
+        "SE",
+        "SW",
+      ].includes(
+        drag.action
       )
     ) {
       height =
@@ -1082,29 +1666,23 @@ export default function MapCanvas({
     }
 
 
-    if (
-      drag.action.includes(
-        "W"
-      )
-    ) {
-      originX =
-        drag.originX +
-        dx;
-
-      width =
-        drag.width -
-        dx;
-    }
-
+    /*
+     * NORTH
+     */
 
     if (
-      drag.action.includes(
-        "N"
+      [
+        "N",
+        "NE",
+        "NW",
+      ].includes(
+        drag.action
       )
     ) {
       originY =
         drag.originY +
         dy;
+
 
       height =
         drag.height -
@@ -1113,7 +1691,9 @@ export default function MapCanvas({
 
 
     /*
-     * Minimum size
+     * =========================================
+     * MINIMUM WIDTH
+     * =========================================
      */
 
     if (
@@ -1121,8 +1701,12 @@ export default function MapCanvas({
       MIN_BOUNDARY_SIZE
     ) {
       if (
-        drag.action.includes(
-          "W"
+        [
+          "W",
+          "NW",
+          "SW",
+        ].includes(
+          drag.action
         )
       ) {
         originX =
@@ -1131,18 +1715,29 @@ export default function MapCanvas({
           MIN_BOUNDARY_SIZE;
       }
 
+
       width =
         MIN_BOUNDARY_SIZE;
     }
 
+
+    /*
+     * =========================================
+     * MINIMUM HEIGHT
+     * =========================================
+     */
 
     if (
       height <
       MIN_BOUNDARY_SIZE
     ) {
       if (
-        drag.action.includes(
-          "N"
+        [
+          "N",
+          "NE",
+          "NW",
+        ].includes(
+          drag.action
         )
       ) {
         originY =
@@ -1151,18 +1746,30 @@ export default function MapCanvas({
           MIN_BOUNDARY_SIZE;
       }
 
+
       height =
         MIN_BOUNDARY_SIZE;
     }
 
 
+    /*
+     * =========================================
+     * SNAP BOUNDARY
+     * =========================================
+     */
+
     if (
       mapData.snapBoundaryToGrid
     ) {
       const spacing =
-        Number(
-          mapData.gridSpacing
-        ) || 1;
+        Math.max(
+          Number(
+            mapData.gridSpacing
+          ) || 1,
+
+          0.01
+        );
+
 
       originX =
         snapNumber(
@@ -1170,24 +1777,29 @@ export default function MapCanvas({
           spacing
         );
 
+
       originY =
         snapNumber(
           originY,
           spacing
         );
 
+
       width =
         Math.max(
           MIN_BOUNDARY_SIZE,
+
           snapNumber(
             width,
             spacing
           )
         );
 
+
       height =
         Math.max(
           MIN_BOUNDARY_SIZE,
+
           snapNumber(
             height,
             spacing
@@ -1228,21 +1840,34 @@ export default function MapCanvas({
   }
 
 
+  /*
+   * =====================================================
+   * BOUNDARY UP
+   * =====================================================
+   */
+
   function handleBoundaryPointerUp(
     event
   ) {
-    event.stopPropagation();
-
     const drag =
       boundaryDragRef.current;
 
+
+    if (!drag) {
+      return;
+    }
+
+
     if (
-      !drag ||
       drag.pointerId !==
-        event.pointerId
+      event.pointerId
     ) {
       return;
     }
+
+
+    event.stopPropagation();
+
 
     if (
       drag.started
@@ -1250,14 +1875,15 @@ export default function MapCanvas({
       onBoundaryDragEnd?.();
     }
 
+
     boundaryDragRef.current =
       null;
 
+
     try {
-      event.currentTarget
-        .releasePointerCapture(
-          event.pointerId
-        );
+      event.currentTarget.releasePointerCapture(
+        event.pointerId
+      );
     } catch {
       //
     }
@@ -1266,9 +1892,52 @@ export default function MapCanvas({
 
   /*
    * =====================================================
-   * MONITOR
+   * BOUNDARY CANCEL
    * =====================================================
    */
+
+  function handleBoundaryPointerCancel() {
+    const drag =
+      boundaryDragRef.current;
+
+
+    if (
+      drag?.started
+    ) {
+      onBoundaryDragEnd?.();
+    }
+
+
+    boundaryDragRef.current =
+      null;
+  }
+
+
+  /*
+   * =====================================================
+   * ROBOT
+   * =====================================================
+   */
+
+  function handleRobotPointerDown(
+    event,
+    robotId
+  ) {
+    if (
+      mode !== "monitor"
+    ) {
+      return;
+    }
+
+
+    event.stopPropagation();
+
+
+    onRobotClick(
+      robotId
+    );
+  }
+
 
   const selectedRobot =
     robots.find(
@@ -1294,10 +1963,57 @@ export default function MapCanvas({
       Number(
         mapData.gridSpacing
       ) || 1,
+
       0.01
     ) *
     SCALE *
     zoom;
+
+
+  /*
+   * =====================================================
+   * BOUNDARY COORDINATES
+   * =====================================================
+   */
+
+  const boundaryX =
+    (
+      Number(
+        mapData.originX
+      ) || 0
+    ) *
+    SCALE;
+
+
+  const boundaryY =
+    (
+      Number(
+        mapData.originY
+      ) || 0
+    ) *
+    SCALE;
+
+
+  const boundaryWidth =
+    Math.max(
+      Number(
+        mapData.width
+      ) || 1,
+
+      MIN_BOUNDARY_SIZE
+    ) *
+    SCALE;
+
+
+  const boundaryHeight =
+    Math.max(
+      Number(
+        mapData.height
+      ) || 1,
+
+      MIN_BOUNDARY_SIZE
+    ) *
+    SCALE;
 
 
   /*
@@ -1330,7 +2046,7 @@ export default function MapCanvas({
           x -
           miniBounds.minX
         ) *
-        miniTransform.scale,
+          miniTransform.scale,
 
       y:
         MINI_PADDING +
@@ -1338,7 +2054,7 @@ export default function MapCanvas({
           y -
           miniBounds.minY
         ) *
-        miniTransform.scale,
+          miniTransform.scale,
     };
   }
 
@@ -1348,45 +2064,109 @@ export default function MapCanvas({
   ) {
     event.stopPropagation();
 
+
     const rect =
-      event.currentTarget
-        .getBoundingClientRect();
+      event.currentTarget.getBoundingClientRect();
+
 
     const localX =
       event.clientX -
       rect.left;
 
-    const localY =
+
+    /*
+     * Mini Map มี Title ด้านบน
+     *
+     * SVG เริ่มหลัง title
+     */
+
+    const svg =
+      event.currentTarget.querySelector(
+        "svg"
+      );
+
+
+    if (!svg) {
+      return;
+    }
+
+
+    const svgRect =
+      svg.getBoundingClientRect();
+
+
+    const svgX =
+      event.clientX -
+      svgRect.left;
+
+
+    const svgY =
       event.clientY -
-      rect.top;
+      svgRect.top;
 
-    const worldX =
-      miniBounds.minX +
-      (
-        localX -
-        MINI_PADDING
-      ) /
-      miniTransform.scale;
-
-    const worldY =
-      miniBounds.minY +
-      (
-        localY -
-        MINI_PADDING
-      ) /
-      miniTransform.scale;
-
-    const viewport =
-      viewportRef.current;
 
     if (
-      !viewport
+      svgX < 0 ||
+      svgY < 0 ||
+      svgX >
+        svgRect.width ||
+      svgY >
+        svgRect.height
     ) {
       return;
     }
 
+
+    /*
+     * CSS resize รองรับด้วย
+     */
+
+    const scaledMiniX =
+      svgX *
+      (
+        MINI_WIDTH /
+        svgRect.width
+      );
+
+
+    const scaledMiniY =
+      svgY *
+      (
+        MINI_HEIGHT /
+        svgRect.height
+      );
+
+
+    const worldX =
+      miniBounds.minX +
+      (
+        scaledMiniX -
+        MINI_PADDING
+      ) /
+        miniTransform.scale;
+
+
+    const worldY =
+      miniBounds.minY +
+      (
+        scaledMiniY -
+        MINI_PADDING
+      ) /
+        miniTransform.scale;
+
+
+    const viewport =
+      viewportRef.current;
+
+
+    if (!viewport) {
+      return;
+    }
+
+
     const viewportRect =
       viewport.getBoundingClientRect();
+
 
     updatePan({
       x:
@@ -1412,35 +2192,6 @@ export default function MapCanvas({
    * =====================================================
    */
 
-  const boundaryX =
-    (
-      Number(
-        mapData.originX
-      ) || 0
-    ) *
-    SCALE;
-
-  const boundaryY =
-    (
-      Number(
-        mapData.originY
-      ) || 0
-    ) *
-    SCALE;
-
-  const boundaryWidth =
-    Number(
-      mapData.width
-    ) *
-    SCALE;
-
-  const boundaryHeight =
-    Number(
-      mapData.height
-    ) *
-    SCALE;
-
-
   return (
     <div
       ref={
@@ -1461,10 +2212,19 @@ export default function MapCanvas({
         handleBackgroundPointerUp
       }
 
+      onPointerCancel={
+        handleBackgroundPointerCancel
+      }
+
       onWheel={
         handleWheel
       }
     >
+
+      {/* =================================================
+          INFINITE GRID
+      ================================================= */}
+
       <div
         className="infinite-map-background"
 
@@ -1487,29 +2247,40 @@ export default function MapCanvas({
       />
 
 
+      {/* =================================================
+          WORLD
+      ================================================= */}
+
       <svg
         className="infinite-map-world"
       >
+
         <defs>
+
           <marker
             id="path-arrow"
 
             markerWidth="8"
+
             markerHeight="8"
 
             refX="7"
+
             refY="4"
 
             orient="auto"
 
             markerUnits="strokeWidth"
           >
+
             <path
               d="M 0 0 L 8 4 L 0 8 z"
 
               className="path-arrow-head"
             />
+
           </marker>
+
         </defs>
 
 
@@ -1525,12 +2296,21 @@ export default function MapCanvas({
             )
           `}
         >
-          {/* =========================================
+
+          {/* =================================================
               WAREHOUSE BOUNDARY
-          ========================================= */}
+          ================================================= */}
 
           {mapData.showBoundary && (
             <>
+
+              {/*
+               * VISUAL BOUNDARY
+               *
+               * pointerEvents none
+               * เพื่อไม่บล็อก Node Tool / Path Tool
+               */}
+
               <rect
                 x={
                   boundaryX
@@ -1554,27 +2334,139 @@ export default function MapCanvas({
                     : ""
                 }`}
 
-                onPointerDown={(event) =>
-                  handleBoundaryPointerDown(
-                    event,
-                    "MOVE"
-                  )
-                }
-
-                onPointerMove={
-                  handleBoundaryPointerMove
-                }
-
-                onPointerUp={
-                  handleBoundaryPointerUp
-                }
+                style={{
+                  pointerEvents:
+                    "none",
+                }}
               />
+
+
+              {/*
+               * SELECT BOUNDARY BY STROKE
+               *
+               * มีเฉพาะ Select Tool
+               */}
+
+              {mode === "edit" &&
+                tool ===
+                  "select" && (
+
+                <rect
+                  x={
+                    boundaryX
+                  }
+
+                  y={
+                    boundaryY
+                  }
+
+                  width={
+                    boundaryWidth
+                  }
+
+                  height={
+                    boundaryHeight
+                  }
+
+                  fill="none"
+
+                  stroke="transparent"
+
+                  strokeWidth="14"
+
+                  pointerEvents="stroke"
+
+                  className="warehouse-boundary-hit"
+
+                  onPointerDown={(event) =>
+                    handleBoundaryPointerDown(
+                      event,
+                      "MOVE"
+                    )
+                  }
+
+                  onPointerMove={
+                    handleBoundaryPointerMove
+                  }
+
+                  onPointerUp={
+                    handleBoundaryPointerUp
+                  }
+
+                  onPointerCancel={
+                    handleBoundaryPointerCancel
+                  }
+                />
+
+              )}
+
+
+              {/*
+               * SELECTED:
+               *
+               * Drag empty interior to move boundary
+               *
+               * Render ก่อน Path/Node
+               * เพราะ Node และ Path จะยัง click ได้
+               * เนื่องจาก render อยู่ด้านบน
+               */}
+
+              {boundarySelected &&
+                mode === "edit" &&
+                tool ===
+                  "select" && (
+
+                <rect
+                  x={
+                    boundaryX
+                  }
+
+                  y={
+                    boundaryY
+                  }
+
+                  width={
+                    boundaryWidth
+                  }
+
+                  height={
+                    boundaryHeight
+                  }
+
+                  fill="transparent"
+
+                  pointerEvents="all"
+
+                  className="warehouse-boundary-move-area"
+
+                  onPointerDown={(event) =>
+                    handleBoundaryPointerDown(
+                      event,
+                      "MOVE"
+                    )
+                  }
+
+                  onPointerMove={
+                    handleBoundaryPointerMove
+                  }
+
+                  onPointerUp={
+                    handleBoundaryPointerUp
+                  }
+
+                  onPointerCancel={
+                    handleBoundaryPointerCancel
+                  }
+                />
+
+              )}
 
 
               {boundarySelected &&
                 mode === "edit" &&
                 tool ===
                   "select" && (
+
                 <BoundaryHandles
                   x={
                     boundaryX
@@ -1603,15 +2495,21 @@ export default function MapCanvas({
                   onPointerUp={
                     handleBoundaryPointerUp
                   }
+
+                  onPointerCancel={
+                    handleBoundaryPointerCancel
+                  }
                 />
+
               )}
+
             </>
           )}
 
 
-          {/* =========================================
+          {/* =================================================
               PATHS
-          ========================================= */}
+          ================================================= */}
 
           {mapData.edges.map(
             (edge) => {
@@ -1622,12 +2520,14 @@ export default function MapCanvas({
                     edge.from
                 );
 
+
               const to =
                 mapData.nodes.find(
                   (node) =>
                     node.id ===
                     edge.to
                 );
+
 
               if (
                 !from ||
@@ -1636,26 +2536,32 @@ export default function MapCanvas({
                 return null;
               }
 
+
               const x1 =
                 from.x *
                 SCALE;
+
 
               const y1 =
                 from.y *
                 SCALE;
 
+
               const x2 =
                 to.x *
                 SCALE;
+
 
               const y2 =
                 to.y *
                 SCALE;
 
+
               const selected =
                 mode === "edit" &&
                 selectedEdgeId ===
                   edge.id;
+
 
               const highlighted =
                 mode === "monitor" &&
@@ -1663,6 +2569,7 @@ export default function MapCanvas({
                   edge,
                   selectedRobotPath
                 );
+
 
               const pathType =
                 edge.pathType ||
@@ -1677,13 +2584,29 @@ export default function MapCanvas({
 
                   className="map-edge-group"
                 >
-                  {mode === "edit" && (
-                    <line
-                      x1={x1}
-                      y1={y1}
 
-                      x2={x2}
-                      y2={y2}
+                  {/* PATH HITBOX */}
+
+                  {mode === "edit" &&
+                    tool ===
+                      "select" && (
+
+                    <line
+                      x1={
+                        x1
+                      }
+
+                      y1={
+                        y1
+                      }
+
+                      x2={
+                        x2
+                      }
+
+                      y2={
+                        y2
+                      }
 
                       className="map-edge-hitbox"
 
@@ -1698,15 +2621,28 @@ export default function MapCanvas({
                         event.stopPropagation()
                       }
                     />
+
                   )}
 
 
-                  <line
-                    x1={x1}
-                    y1={y1}
+                  {/* REAL PATH */}
 
-                    x2={x2}
-                    y2={y2}
+                  <line
+                    x1={
+                      x1
+                    }
+
+                    y1={
+                      y1
+                    }
+
+                    x2={
+                      x2
+                    }
+
+                    y2={
+                      y2
+                    }
 
                     markerEnd={
                       !edge.bidirectional
@@ -1727,8 +2663,7 @@ export default function MapCanvas({
                         ? "path-highlighted"
                         : "",
 
-                      edge.enabled ===
-                        false
+                      edge.enabled === false
                         ? "disabled"
                         : "",
                     ].join(" ")}
@@ -1758,21 +2693,27 @@ export default function MapCanvas({
                     className="edge-distance"
                   >
                     {edge.id}
+
                     {" • "}
+
                     {Number(
                       edge.distance
-                    ).toFixed(2)}
+                    ).toFixed(
+                      2
+                    )}
+
                     {" m"}
                   </text>
+
                 </g>
               );
             }
           )}
 
 
-          {/* =========================================
+          {/* =================================================
               NODES
-          ========================================= */}
+          ================================================= */}
 
           {mapData.nodes.map(
             (node) => (
@@ -1786,15 +2727,13 @@ export default function MapCanvas({
                 }
 
                 selected={
-                  mode ===
-                    "edit" &&
+                  mode === "edit" &&
                   selectedNodeId ===
                     node.id
                 }
 
                 connecting={
-                  mode ===
-                    "edit" &&
+                  mode === "edit" &&
                   connectionStart ===
                     node.id
                 }
@@ -1831,88 +2770,107 @@ export default function MapCanvas({
           )}
 
 
-          {/* =========================================
+          {/* =================================================
               ROBOTS
-          ========================================= */}
+          ================================================= */}
 
           {mode === "monitor" &&
             robots.map(
-              (robot) => (
-                <g
-                  key={
-                    robot.id
-                  }
+              (robot) => {
+                const selected =
+                  selectedRobotId ===
+                  robot.id;
 
-                  className="monitor-robot"
 
-                  transform={`
-                    translate(
-                      ${
-                        robot.x *
-                        SCALE
-                      }
-                      ${
-                        robot.y *
-                        SCALE
-                      }
-                    )
-                  `}
-
-                  onPointerDown={(event) => {
-                    event.stopPropagation();
-
-                    onRobotClick(
+                return (
+                  <g
+                    key={
                       robot.id
-                    );
-                  }}
-                >
-                  <circle
-                    r={
-                      selectedRobotId ===
-                      robot.id
-                        ? 16
-                        : 13
                     }
 
-                    className={[
-                      "monitor-robot-body",
+                    className="monitor-robot"
 
-                      `status-${robot.status.toLowerCase()}`,
+                    transform={`
+                      translate(
+                        ${
+                          robot.x *
+                          SCALE
+                        }
 
-                      selectedRobotId ===
-                      robot.id
-                        ? "selected"
-                        : "",
-                    ].join(" ")}
-                  />
+                        ${
+                          robot.y *
+                          SCALE
+                        }
+                      )
+                    `}
 
-                  <text
-                    x="0"
-                    y="4"
-
-                    textAnchor="middle"
-
-                    className="monitor-robot-symbol"
+                    onPointerDown={(event) =>
+                      handleRobotPointerDown(
+                        event,
+                        robot.id
+                      )
+                    }
                   >
-                    R
-                  </text>
 
-                  <text
-                    x="0"
-                    y="-20"
+                    <circle
+                      r={
+                        selected
+                          ? 16
+                          : 13
+                      }
 
-                    textAnchor="middle"
+                      className={[
+                        "monitor-robot-body",
 
-                    className="monitor-robot-label"
-                  >
-                    {robot.id}
-                  </text>
-                </g>
-              )
+                        `status-${String(
+                          robot.status
+                        ).toLowerCase()}`,
+
+                        selected
+                          ? "selected"
+                          : "",
+                      ].join(" ")}
+                    />
+
+
+                    <text
+                      x="0"
+
+                      y="4"
+
+                      textAnchor="middle"
+
+                      className="monitor-robot-symbol"
+                    >
+                      R
+                    </text>
+
+
+                    <text
+                      x="0"
+
+                      y="-20"
+
+                      textAnchor="middle"
+
+                      className="monitor-robot-label"
+                    >
+                      {robot.id}
+                    </text>
+
+                  </g>
+                );
+              }
             )}
+
         </g>
+
       </svg>
 
+
+      {/* =================================================
+          ORIGIN
+      ================================================= */}
 
       <div
         className="map-origin-marker"
@@ -1925,15 +2883,17 @@ export default function MapCanvas({
             pan.y,
         }}
       >
+
         <span>
           0,0
         </span>
+
       </div>
 
 
-      {/* =============================================
-          V11 MINI MAP
-      ============================================= */}
+      {/* =================================================
+          MINI MAP
+      ================================================= */}
 
       <MiniMap
         mapData={
@@ -1968,84 +2928,122 @@ export default function MapCanvas({
           handleMiniMapClick
         }
       />
+
     </div>
   );
 }
 
 
-/* =====================================================
-   BOUNDARY HANDLES
-===================================================== */
+/*
+ * =====================================================
+ * BOUNDARY HANDLES
+ * =====================================================
+ */
 
 function BoundaryHandles({
   x,
   y,
+
   width,
   height,
 
   onPointerDown,
   onPointerMove,
   onPointerUp,
+  onPointerCancel,
 }) {
-  const size = 10;
+  const size =
+    10;
+
 
   const handles = [
     {
-      action: "NW",
+      action:
+        "NW",
+
       x,
+
       y,
     },
+
     {
-      action: "N",
+      action:
+        "N",
+
       x:
         x +
         width / 2,
+
       y,
     },
+
     {
-      action: "NE",
+      action:
+        "NE",
+
       x:
         x +
         width,
+
       y,
     },
+
     {
-      action: "E",
+      action:
+        "E",
+
       x:
         x +
         width,
+
       y:
         y +
         height / 2,
     },
+
     {
-      action: "SE",
+      action:
+        "SE",
+
       x:
         x +
         width,
+
       y:
         y +
         height,
     },
+
     {
-      action: "S",
+      action:
+        "S",
+
       x:
         x +
         width / 2,
+
       y:
         y +
         height,
     },
+
     {
-      action: "SW",
+      action:
+        "SW",
+
       x,
+
       y:
         y +
         height,
     },
+
     {
-      action: "W",
+      action:
+        "W",
+
       x,
+
       y:
         y +
         height / 2,
@@ -2054,7 +3052,9 @@ function BoundaryHandles({
 
 
   return (
-    <g className="boundary-handles">
+    <g
+      className="boundary-handles"
+    >
       {handles.map(
         (handle) => (
           <rect
@@ -2098,6 +3098,10 @@ function BoundaryHandles({
             onPointerUp={
               onPointerUp
             }
+
+            onPointerCancel={
+              onPointerCancel
+            }
           />
         )
       )}
@@ -2106,18 +3110,24 @@ function BoundaryHandles({
 }
 
 
-/* =====================================================
-   MINI MAP
-===================================================== */
+/*
+ * =====================================================
+ * MINI MAP
+ * =====================================================
+ */
 
 function MiniMap({
   mapData,
-  bounds,
+
   transform,
+
   worldToMini,
+
   pan,
   zoom,
+
   viewportRef,
+
   onClick,
 }) {
   const viewport =
@@ -2127,11 +3137,14 @@ function MiniMap({
   let viewportWorldX =
     0;
 
+
   let viewportWorldY =
     0;
 
+
   let viewportWorldWidth =
     0;
+
 
   let viewportWorldHeight =
     0;
@@ -2143,20 +3156,24 @@ function MiniMap({
     const rect =
       viewport.getBoundingClientRect();
 
+
     viewportWorldX =
       -pan.x /
       zoom /
       SCALE;
+
 
     viewportWorldY =
       -pan.y /
       zoom /
       SCALE;
 
+
     viewportWorldWidth =
       rect.width /
       zoom /
       SCALE;
+
 
     viewportWorldHeight =
       rect.height /
@@ -2180,10 +3197,19 @@ function MiniMap({
         event.stopPropagation()
       }
 
+      onPointerMove={(event) =>
+        event.stopPropagation()
+      }
+
+      onPointerUp={(event) =>
+        event.stopPropagation()
+      }
+
       onClick={
         onClick
       }
     >
+
       <div className="map-minimap-title">
         MINI MAP
       </div>
@@ -2200,8 +3226,10 @@ function MiniMap({
 
         viewBox={`0 0 ${MINI_WIDTH} ${MINI_HEIGHT}`}
       >
+
         <rect
           x="0"
+
           y="0"
 
           width={
@@ -2242,12 +3270,14 @@ function MiniMap({
                   edge.from
               );
 
+
             const to =
               mapData.nodes.find(
                 (node) =>
                   node.id ===
                   edge.to
               );
+
 
             if (
               !from ||
@@ -2256,17 +3286,20 @@ function MiniMap({
               return null;
             }
 
-            const p1 =
+
+            const pointA =
               worldToMini(
                 from.x,
                 from.y
               );
 
-            const p2 =
+
+            const pointB =
               worldToMini(
                 to.x,
                 to.y
               );
+
 
             return (
               <line
@@ -2275,19 +3308,19 @@ function MiniMap({
                 }
 
                 x1={
-                  p1.x
+                  pointA.x
                 }
 
                 y1={
-                  p1.y
+                  pointA.y
                 }
 
                 x2={
-                  p2.x
+                  pointB.x
                 }
 
                 y2={
-                  p2.y
+                  pointB.y
                 }
 
                 className="minimap-path"
@@ -2304,6 +3337,7 @@ function MiniMap({
                 node.x,
                 node.y
               );
+
 
             return (
               <circle
@@ -2349,15 +3383,25 @@ function MiniMap({
 
           className="minimap-viewport"
         />
+
       </svg>
+
     </div>
   );
 }
 
 
+/*
+ * =====================================================
+ * MINI BOUNDARY
+ * =====================================================
+ */
+
 function MiniBoundary({
   mapData,
+
   worldToMini,
+
   scale,
 }) {
   const origin =
@@ -2402,9 +3446,11 @@ function MiniBoundary({
 }
 
 
-/* =====================================================
-   NODE SHAPE
-===================================================== */
+/*
+ * =====================================================
+ * NODE SHAPE
+ * =====================================================
+ */
 
 function NodeShape({
   node,
@@ -2421,6 +3467,7 @@ function NodeShape({
     node.x *
     SCALE;
 
+
   const y =
     node.y *
     SCALE;
@@ -2429,7 +3476,10 @@ function NodeShape({
   const classes = [
     "map-node-shape",
 
-    `node-type-${node.type.toLowerCase()}`,
+    `node-type-${String(
+      node.type ||
+      "WAYPOINT"
+    ).toLowerCase()}`,
 
     selected
       ? "selected"
@@ -2445,6 +3495,12 @@ function NodeShape({
   ].join(" ");
 
 
+  /*
+   * ===================================================
+   * STORAGE
+   * ===================================================
+   */
+
   if (
     node.type ===
     "STORAGE"
@@ -2452,16 +3508,18 @@ function NodeShape({
     const width =
       Number(
         node.config?.width ||
-          4
+        4
       ) *
       SCALE;
+
 
     const depth =
       Number(
         node.config?.depth ||
-          2
+        2
       ) *
       SCALE;
+
 
     return (
       <g
@@ -2497,6 +3555,7 @@ function NodeShape({
           onPointerCancel
         }
       >
+
         <rect
           x={
             -width / 2
@@ -2521,15 +3580,23 @@ function NodeShape({
           }
         />
 
+
         <LocalNodeLabel
           node={
             node
           }
         />
+
       </g>
     );
   }
 
+
+  /*
+   * ===================================================
+   * CHARGING / DOCK
+   * ===================================================
+   */
 
   if (
     node.type ===
@@ -2540,16 +3607,18 @@ function NodeShape({
     const width =
       Number(
         node.config?.width ||
-          2
+        2
       ) *
       SCALE;
+
 
     const depth =
       Number(
         node.config?.depth ||
-          2
+        2
       ) *
       SCALE;
+
 
     return (
       <g
@@ -2585,15 +3654,14 @@ function NodeShape({
           onPointerCancel
         }
       >
+
         <rect
           x={
-            -width /
-            2
+            -width / 2
           }
 
           y={
-            -depth /
-            2
+            -depth / 2
           }
 
           width={
@@ -2611,8 +3679,10 @@ function NodeShape({
           }
         />
 
+
         <text
           x="0"
+
           y="4"
 
           textAnchor="middle"
@@ -2625,15 +3695,23 @@ function NodeShape({
             : "D"}
         </text>
 
+
         <LocalNodeLabel
           node={
             node
           }
         />
+
       </g>
     );
   }
 
+
+  /*
+   * ===================================================
+   * ROAD
+   * ===================================================
+   */
 
   if (
     node.type ===
@@ -2676,11 +3754,14 @@ function NodeShape({
           onPointerCancel
         }
       >
+
         <rect
           x="-10"
+
           y="-10"
 
           width="20"
+
           height="20"
 
           rx="3"
@@ -2689,10 +3770,17 @@ function NodeShape({
             classes
           }
         />
+
       </g>
     );
   }
 
+
+  /*
+   * ===================================================
+   * PICKUP / DROPOFF
+   * ===================================================
+   */
 
   if (
     node.type ===
@@ -2705,6 +3793,7 @@ function NodeShape({
       "PICKUP"
         ? "-12,10 0,-12 12,10"
         : "-12,-10 0,12 12,-10";
+
 
     return (
       <g
@@ -2733,6 +3822,7 @@ function NodeShape({
           onPointerCancel
         }
       >
+
         <polygon
           points={
             points
@@ -2743,15 +3833,23 @@ function NodeShape({
           }
         />
 
+
         <LocalNodeLabel
           node={
             node
           }
         />
+
       </g>
     );
   }
 
+
+  /*
+   * ===================================================
+   * WAYPOINT / HOME / WAITING
+   * ===================================================
+   */
 
   return (
     <g
@@ -2773,6 +3871,7 @@ function NodeShape({
         onPointerCancel
       }
     >
+
       <circle
         cx={
           x
@@ -2794,10 +3893,15 @@ function NodeShape({
         }
       />
 
+
       {node.type ===
         "HOME" && (
+
         <text
-          x={x}
+          x={
+            x
+          }
+
           y={
             y + 3
           }
@@ -2808,10 +3912,15 @@ function NodeShape({
         >
           H
         </text>
+
       )}
 
+
       <text
-        x={x}
+        x={
+          x
+        }
+
         y={
           y - 15
         }
@@ -2822,10 +3931,17 @@ function NodeShape({
       >
         {node.id}
       </text>
+
     </g>
   );
 }
 
+
+/*
+ * =====================================================
+ * NODE LABEL
+ * =====================================================
+ */
 
 function LocalNodeLabel({
   node,
@@ -2833,6 +3949,7 @@ function LocalNodeLabel({
   return (
     <text
       x="0"
+
       y="-18"
 
       textAnchor="middle"
@@ -2845,9 +3962,11 @@ function LocalNodeLabel({
 }
 
 
-/* =====================================================
-   HELPERS
-===================================================== */
+/*
+ * =====================================================
+ * MAP BOUNDS
+ * =====================================================
+ */
 
 function calculateMapBounds(
   mapData,
@@ -2858,31 +3977,45 @@ function calculateMapBounds(
       mapData.originX
     ) || 0;
 
+
   const originY =
     Number(
       mapData.originY
     ) || 0;
 
+
   const width =
-    Number(
-      mapData.width
-    ) || 1;
+    Math.max(
+      Number(
+        mapData.width
+      ) || 1,
+
+      1
+    );
+
 
   const height =
-    Number(
-      mapData.height
-    ) || 1;
+    Math.max(
+      Number(
+        mapData.height
+      ) || 1,
+
+      1
+    );
 
 
   let minX =
     originX;
 
+
   let minY =
     originY;
+
 
   let maxX =
     originX +
     width;
+
 
   let maxY =
     originY +
@@ -2893,8 +4026,21 @@ function calculateMapBounds(
     const node
     of mapData.nodes
   ) {
+    const nodeX =
+      Number(
+        node.x
+      ) || 0;
+
+
+    const nodeY =
+      Number(
+        node.y
+      ) || 0;
+
+
     let halfWidth =
       0.5;
+
 
     let halfDepth =
       0.5;
@@ -2917,6 +4063,7 @@ function calculateMapBounds(
         ) /
         2;
 
+
       halfDepth =
         (
           Number(
@@ -2927,32 +4074,79 @@ function calculateMapBounds(
     }
 
 
+    /*
+     * Rotation bounds
+     */
+
+    const angle =
+      (
+        Number(
+          node.rotation
+        ) || 0
+      ) *
+      Math.PI /
+      180;
+
+
+    const cos =
+      Math.abs(
+        Math.cos(
+          angle
+        )
+      );
+
+
+    const sin =
+      Math.abs(
+        Math.sin(
+          angle
+        )
+      );
+
+
+    const rotatedHalfWidth =
+      halfWidth *
+        cos +
+      halfDepth *
+        sin;
+
+
+    const rotatedHalfDepth =
+      halfWidth *
+        sin +
+      halfDepth *
+        cos;
+
+
     minX =
       Math.min(
         minX,
-        node.x -
-          halfWidth
+        nodeX -
+          rotatedHalfWidth
       );
+
 
     maxX =
       Math.max(
         maxX,
-        node.x +
-          halfWidth
+        nodeX +
+          rotatedHalfWidth
       );
+
 
     minY =
       Math.min(
         minY,
-        node.y -
-          halfDepth
+        nodeY -
+          rotatedHalfDepth
       );
+
 
     maxY =
       Math.max(
         maxY,
-        node.y +
-          halfDepth
+        nodeY +
+          rotatedHalfDepth
       );
   }
 
@@ -2960,24 +4154,39 @@ function calculateMapBounds(
   if (
     addPadding
   ) {
+    const horizontal =
+      maxX -
+      minX;
+
+
+    const vertical =
+      maxY -
+      minY;
+
+
     const padding =
       Math.max(
-        (
-          maxX -
-          minX
-        ) *
+        horizontal *
           0.1,
+
+        vertical *
+          0.1,
+
         2
       );
+
 
     minX -=
       padding;
 
-    minY -=
-      padding;
 
     maxX +=
       padding;
+
+
+    minY -=
+      padding;
+
 
     maxY +=
       padding;
@@ -2993,6 +4202,12 @@ function calculateMapBounds(
 }
 
 
+/*
+ * =====================================================
+ * MINI TRANSFORM
+ * =====================================================
+ */
+
 function calculateMiniTransform(
   bounds
 ) {
@@ -3000,13 +4215,16 @@ function calculateMiniTransform(
     Math.max(
       bounds.maxX -
         bounds.minX,
+
       1
     );
+
 
   const height =
     Math.max(
       bounds.maxY -
         bounds.minY,
+
       1
     );
 
@@ -3030,6 +4248,12 @@ function calculateMiniTransform(
 }
 
 
+/*
+ * =====================================================
+ * SNAP GRID
+ * =====================================================
+ */
+
 function snapToGrid(
   position,
   spacing
@@ -3039,6 +4263,7 @@ function snapToGrid(
       spacing
     );
 
+
   if (
     !Number.isFinite(
       step
@@ -3047,6 +4272,7 @@ function snapToGrid(
   ) {
     return position;
   }
+
 
   return {
     x:
@@ -3064,6 +4290,12 @@ function snapToGrid(
 }
 
 
+/*
+ * =====================================================
+ * SNAP NUMBER
+ * =====================================================
+ */
+
 function snapNumber(
   value,
   step
@@ -3071,14 +4303,24 @@ function snapNumber(
   return Number(
     (
       Math.round(
-        Number(value) /
+        Number(
+          value
+        ) /
           step
       ) *
       step
-    ).toFixed(3)
+    ).toFixed(
+      3
+    )
   );
 }
 
+
+/*
+ * =====================================================
+ * CLAMP
+ * =====================================================
+ */
 
 function clamp(
   value,
@@ -3087,13 +4329,22 @@ function clamp(
 ) {
   return Math.min(
     Math.max(
-      Number(value),
+      Number(
+        value
+      ),
       min
     ),
+
     max
   );
 }
 
+
+/*
+ * =====================================================
+ * MODULO
+ * =====================================================
+ */
 
 function positiveModulo(
   value,
@@ -3108,6 +4359,7 @@ function positiveModulo(
     return 0;
   }
 
+
   return (
     (
       value %
@@ -3119,30 +4371,46 @@ function positiveModulo(
 }
 
 
+/*
+ * =====================================================
+ * ROBOT PATH CHECK
+ * =====================================================
+ */
+
 function isEdgeInRobotPath(
   edge,
   path
 ) {
   if (
     !path ||
-    path.length < 2
+    path.length <
+      2
   ) {
     return false;
   }
 
+
   for (
-    let index = 0;
+    let index =
+      0;
+
     index <
-    path.length - 1;
+    path.length -
+      1;
+
     index++
   ) {
     const from =
-      path[index];
+      path[
+        index
+      ];
+
 
     const to =
       path[
         index + 1
       ];
+
 
     if (
       (
@@ -3161,6 +4429,7 @@ function isEdgeInRobotPath(
       return true;
     }
   }
+
 
   return false;
 }
