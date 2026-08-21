@@ -11,11 +11,17 @@ const AUTO_PAN_SPEED = 12;
 export default function MapCanvas({
   mapData,
 
+  mode,
+
   tool,
 
   selectedNodeId,
   selectedObject,
   connectionStart,
+
+  robots = [],
+  selectedRobotId,
+  onRobotClick,
 
   zoom,
   onZoomChange,
@@ -34,12 +40,6 @@ export default function MapCanvas({
   onObjectDragStart,
   onObjectDragEnd,
 }) {
-  /*
-   * =========================================
-   * REFS
-   * =========================================
-   */
-
   const viewportRef =
     useRef(null);
 
@@ -61,12 +61,6 @@ export default function MapCanvas({
   const dragPointerRef =
     useRef(null);
 
-  /*
-   * =========================================
-   * STATE
-   * =========================================
-   */
-
   const [
     pan,
     setPan,
@@ -75,11 +69,6 @@ export default function MapCanvas({
     y: 150,
   });
 
-  /*
-   * =========================================
-   * UPDATE PAN
-   * =========================================
-   */
 
   function updatePan(
     nextPan
@@ -92,11 +81,6 @@ export default function MapCanvas({
     );
   }
 
-  /*
-   * =========================================
-   * SCREEN -> WORLD
-   * =========================================
-   */
 
   function screenToWorld(
     clientX,
@@ -153,6 +137,7 @@ export default function MapCanvas({
       ),
     };
   }
+
 
   /*
    * =========================================
@@ -234,6 +219,7 @@ export default function MapCanvas({
     };
   }
 
+
   function startAutoPan() {
     if (
       autoPanFrameRef.current
@@ -272,11 +258,6 @@ export default function MapCanvas({
             movement.y,
         });
 
-        /*
-         * Recalculate object position
-         * while map is moving.
-         */
-
         pointer.updatePosition?.();
       }
 
@@ -291,6 +272,7 @@ export default function MapCanvas({
         loop
       );
   }
+
 
   function stopAutoPan() {
     dragPointerRef.current =
@@ -307,6 +289,7 @@ export default function MapCanvas({
         null;
     }
   }
+
 
   /*
    * =========================================
@@ -354,14 +337,14 @@ export default function MapCanvas({
     };
 
     try {
-      event.currentTarget
-        .setPointerCapture(
-          event.pointerId
-        );
+      event.currentTarget.setPointerCapture(
+        event.pointerId
+      );
     } catch {
       //
     }
   }
+
 
   function handleBackgroundPointerMove(
     event
@@ -407,6 +390,7 @@ export default function MapCanvas({
     });
   }
 
+
   function handleBackgroundPointerUp(
     event
   ) {
@@ -445,9 +429,10 @@ export default function MapCanvas({
     );
   }
 
+
   /*
    * =========================================
-   * WHEEL ZOOM
+   * ZOOM
    * =========================================
    */
 
@@ -522,12 +507,11 @@ export default function MapCanvas({
 
     onZoomChange(
       Number(
-        nextZoom.toFixed(
-          3
-        )
+        nextZoom.toFixed(3)
       )
     );
   }
+
 
   /*
    * =========================================
@@ -540,6 +524,12 @@ export default function MapCanvas({
     node
   ) {
     event.stopPropagation();
+
+    if (
+      mode === "monitor"
+    ) {
+      return;
+    }
 
     if (
       tool === "connect"
@@ -672,9 +662,10 @@ export default function MapCanvas({
     );
   }
 
+
   /*
    * =========================================
-   * RACK / STATION DRAG
+   * OBJECT DRAG
    * =========================================
    */
 
@@ -684,6 +675,12 @@ export default function MapCanvas({
     object
   ) {
     event.stopPropagation();
+
+    if (
+      mode === "monitor"
+    ) {
+      return;
+    }
 
     if (
       tool !== "select"
@@ -811,11 +808,18 @@ export default function MapCanvas({
     );
   }
 
-  /*
-   * =========================================
-   * GRID SIZE
-   * =========================================
-   */
+
+  const selectedRobot =
+    robots.find(
+      (robot) =>
+        robot.id ===
+        selectedRobotId
+    ) || null;
+
+  const selectedRobotPath =
+    selectedRobot?.plannedPath ||
+    [];
+
 
   const gridSize =
     Math.max(
@@ -827,11 +831,6 @@ export default function MapCanvas({
     SCALE *
     zoom;
 
-  /*
-   * =========================================
-   * RENDER
-   * =========================================
-   */
 
   return (
     <div
@@ -864,7 +863,7 @@ export default function MapCanvas({
         handleWheel
       }
     >
-      {/* INFINITE GRID */}
+      {/* GRID */}
 
       <div
         className="infinite-map-background"
@@ -904,7 +903,8 @@ export default function MapCanvas({
             )
           `}
         >
-          {/* WAREHOUSE BOUNDARY */}
+
+          {/* BOUNDARY */}
 
           <rect
             x="0"
@@ -965,6 +965,13 @@ export default function MapCanvas({
                 to.y *
                 SCALE;
 
+              const highlighted =
+                mode === "monitor" &&
+                isEdgeInRobotPath(
+                  edge,
+                  selectedRobotPath
+                );
+
               return (
                 <g
                   key={
@@ -980,7 +987,11 @@ export default function MapCanvas({
                     x2={x2}
                     y2={y2}
 
-                    className="map-edge"
+                    className={
+                      highlighted
+                        ? "map-edge path-highlighted"
+                        : "map-edge"
+                    }
                   />
 
                   <text
@@ -1021,6 +1032,7 @@ export default function MapCanvas({
           {mapData.racks.map(
             (rack) => {
               const selected =
+                mode === "edit" &&
                 selectedObject?.type ===
                   "rack" &&
                 selectedObject?.id ===
@@ -1120,6 +1132,7 @@ export default function MapCanvas({
           {mapData.stations.map(
             (station) => {
               const selected =
+                mode === "edit" &&
                 selectedObject?.type ===
                   "station" &&
                 selectedObject?.id ===
@@ -1226,12 +1239,14 @@ export default function MapCanvas({
           {mapData.nodes.map(
             (node) => {
               const selected =
+                mode === "edit" &&
                 selectedNodeId ===
-                node.id;
+                  node.id;
 
               const connecting =
+                mode === "edit" &&
                 connectionStart ===
-                node.id;
+                  node.id;
 
               return (
                 <g
@@ -1305,6 +1320,91 @@ export default function MapCanvas({
               );
             }
           )}
+
+
+          {/* ROBOTS */}
+
+          {mode === "monitor" &&
+            robots.map(
+              (robot) => {
+                const selected =
+                  selectedRobotId ===
+                  robot.id;
+
+                return (
+                  <g
+                    key={
+                      robot.id
+                    }
+
+                    className="monitor-robot"
+
+                    transform={`
+                      translate(
+                        ${
+                          robot.x *
+                          SCALE
+                        }
+                        ${
+                          robot.y *
+                          SCALE
+                        }
+                      )
+                    `}
+
+                    onPointerDown={(
+                      event
+                    ) => {
+                      event.stopPropagation();
+
+                      onRobotClick(
+                        robot.id
+                      );
+                    }}
+                  >
+                    <circle
+                      r={
+                        selected
+                          ? 16
+                          : 13
+                      }
+
+                      className={[
+                        "monitor-robot-body",
+
+                        `status-${robot.status.toLowerCase()}`,
+
+                        selected
+                          ? "selected"
+                          : "",
+                      ].join(" ")}
+                    />
+
+                    <text
+                      x="0"
+                      y="4"
+
+                      textAnchor="middle"
+
+                      className="monitor-robot-symbol"
+                    >
+                      R
+                    </text>
+
+                    <text
+                      x="0"
+                      y="-20"
+
+                      textAnchor="middle"
+
+                      className="monitor-robot-label"
+                    >
+                      {robot.id}
+                    </text>
+                  </g>
+                );
+              }
+            )}
         </g>
       </svg>
 
@@ -1330,12 +1430,6 @@ export default function MapCanvas({
   );
 }
 
-
-/*
- * =========================================
- * HELPERS
- * =========================================
- */
 
 function snapToGrid(
   position,
@@ -1415,4 +1509,49 @@ function positiveModulo(
     divisor
   ) %
   divisor;
+}
+
+
+function isEdgeInRobotPath(
+  edge,
+  path
+) {
+  if (
+    !path ||
+    path.length < 2
+  ) {
+    return false;
+  }
+
+  for (
+    let index = 0;
+    index <
+    path.length - 1;
+    index++
+  ) {
+    const from =
+      path[index];
+
+    const to =
+      path[index + 1];
+
+    if (
+      (
+        edge.from ===
+          from &&
+        edge.to ===
+          to
+      ) ||
+      (
+        edge.from ===
+          to &&
+        edge.to ===
+          from
+      )
+    ) {
+      return true;
+    }
+  }
+
+  return false;
 }

@@ -16,16 +16,20 @@ import {
   Maximize2,
   Minimize2,
   Scan,
+  Pencil,
+  Radio,
 } from "lucide-react";
 
 export default function MapToolbar({
+  mode,
+  setMode,
+
   tool,
   setTool,
 
   onDelete,
   onExport,
   onReset,
-
   onSave,
 
   onUndo,
@@ -35,6 +39,7 @@ export default function MapToolbar({
   canRedo,
 
   zoom,
+
   onZoomIn,
   onZoomOut,
   onFit,
@@ -42,103 +47,171 @@ export default function MapToolbar({
   expanded,
   onToggleExpand,
 }) {
+  const editing =
+    mode === "edit";
+
   return (
     <div className="map-toolbar">
 
-      {/* =====================
-          EDIT TOOLS
-      ====================== */}
+      {/* MODE */}
 
       <ToolbarButton
-        active={tool === "select"}
-        icon={MousePointer2}
-        label="Select"
-        onClick={() => setTool("select")}
+        icon={Pencil}
+        label="Edit Map"
+        active={
+          mode === "edit"
+        }
+        onClick={() =>
+          setMode("edit")
+        }
       />
 
       <ToolbarButton
-        active={tool === "node"}
-        icon={MapPin}
-        label="Node"
-        onClick={() => setTool("node")}
-      />
-
-      <ToolbarButton
-        active={tool === "connect"}
-        icon={Link2}
-        label="Path"
-        onClick={() => setTool("connect")}
-      />
-
-      <div className="toolbar-divider" />
-
-      <ToolbarButton
-        active={tool === "rack"}
-        icon={Boxes}
-        label="Rack"
-        onClick={() => setTool("rack")}
-      />
-
-      <ToolbarButton
-        active={tool === "dock"}
-        icon={DoorOpen}
-        label="Dock"
-        onClick={() => setTool("dock")}
-      />
-
-      <ToolbarButton
-        active={tool === "charging"}
-        icon={BatteryCharging}
-        label="Charge"
-        onClick={() => setTool("charging")}
+        icon={Radio}
+        label="Monitor"
+        active={
+          mode === "monitor"
+        }
+        onClick={() =>
+          setMode("monitor")
+        }
       />
 
       <div className="toolbar-divider" />
 
-      {/* =====================
-          HISTORY
-      ====================== */}
+      {/* EDIT TOOLS */}
 
-      <ToolbarButton
-        icon={Undo2}
-        label="Undo"
-        disabled={!canUndo}
-        onClick={onUndo}
-      />
+      {editing && (
+        <>
+          <ToolbarButton
+            active={
+              tool === "select"
+            }
+            icon={MousePointer2}
+            label="Select"
+            onClick={() =>
+              setTool("select")
+            }
+          />
 
-      <ToolbarButton
-        icon={Redo2}
-        label="Redo"
-        disabled={!canRedo}
-        onClick={onRedo}
-      />
+          <ToolbarButton
+            active={
+              tool === "node"
+            }
+            icon={MapPin}
+            label="Node"
+            onClick={() =>
+              setTool("node")
+            }
+          />
+
+          <ToolbarButton
+            active={
+              tool === "connect"
+            }
+            icon={Link2}
+            label="Path"
+            onClick={() =>
+              setTool("connect")
+            }
+          />
+
+          <ToolbarButton
+            active={
+              tool === "rack"
+            }
+            icon={Boxes}
+            label="Rack"
+            onClick={() =>
+              setTool("rack")
+            }
+          />
+
+          <ToolbarButton
+            active={
+              tool === "dock"
+            }
+            icon={DoorOpen}
+            label="Dock"
+            onClick={() =>
+              setTool("dock")
+            }
+          />
+
+          <ToolbarButton
+            active={
+              tool === "charging"
+            }
+            icon={
+              BatteryCharging
+            }
+            label="Charge"
+            onClick={() =>
+              setTool(
+                "charging"
+              )
+            }
+          />
+
+          <div className="toolbar-divider" />
+
+          <ToolbarButton
+            icon={Undo2}
+            label="Undo"
+            disabled={
+              !canUndo
+            }
+            onClick={
+              onUndo
+            }
+          />
+
+          <ToolbarButton
+            icon={Redo2}
+            label="Redo"
+            disabled={
+              !canRedo
+            }
+            onClick={
+              onRedo
+            }
+          />
+        </>
+      )}
 
       <div className="toolbar-divider" />
 
-      {/* =====================
-          ZOOM
-      ====================== */}
+      {/* ZOOM */}
 
       <ToolbarButton
         icon={ZoomOut}
         label="-"
-        onClick={onZoomOut}
+        onClick={
+          onZoomOut
+        }
       />
 
       <div className="zoom-display">
-        {Math.round(zoom * 100)}%
+        {Math.round(
+          zoom * 100
+        )}
+        %
       </div>
 
       <ToolbarButton
         icon={ZoomIn}
         label="+"
-        onClick={onZoomIn}
+        onClick={
+          onZoomIn
+        }
       />
 
       <ToolbarButton
         icon={Scan}
         label="Fit"
-        onClick={onFit}
+        onClick={
+          onFit
+        }
       />
 
       <ToolbarButton
@@ -152,43 +225,56 @@ export default function MapToolbar({
             ? "Collapse"
             : "Expand"
         }
-        onClick={onToggleExpand}
+        onClick={
+          onToggleExpand
+        }
       />
 
       <div className="toolbar-spacer" />
 
-      {/* =====================
-          FILE
-      ====================== */}
+      {/* FILE */}
 
-      <ToolbarButton
-        primary
-        icon={Save}
-        label="Save"
-        onClick={onSave}
-      />
+      {editing && (
+        <>
+          <ToolbarButton
+            primary
+            icon={Save}
+            label="Save"
+            onClick={
+              onSave
+            }
+          />
 
-      <ToolbarButton
-        icon={Download}
-        label="Export"
-        onClick={onExport}
-      />
+          <ToolbarButton
+            icon={Download}
+            label="Export"
+            onClick={
+              onExport
+            }
+          />
 
-      <ToolbarButton
-        danger
-        icon={Trash2}
-        label="Delete"
-        onClick={onDelete}
-      />
+          <ToolbarButton
+            danger
+            icon={Trash2}
+            label="Delete"
+            onClick={
+              onDelete
+            }
+          />
 
-      <ToolbarButton
-        icon={RotateCcw}
-        label="Reset"
-        onClick={onReset}
-      />
+          <ToolbarButton
+            icon={RotateCcw}
+            label="Reset"
+            onClick={
+              onReset
+            }
+          />
+        </>
+      )}
     </div>
   );
 }
+
 
 function ToolbarButton({
   icon: Icon,
@@ -204,7 +290,11 @@ function ToolbarButton({
   return (
     <button
       type="button"
-      disabled={disabled}
+
+      disabled={
+        disabled
+      }
+
       className={[
         "map-tool-button",
 
@@ -220,9 +310,14 @@ function ToolbarButton({
           ? "primary"
           : "",
       ].join(" ")}
-      onClick={onClick}
+
+      onClick={
+        onClick
+      }
     >
-      <Icon size={16} />
+      <Icon
+        size={16}
+      />
 
       <span>
         {label}
