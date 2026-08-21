@@ -3,6 +3,11 @@ import {
   useState,
 } from "react";
 
+const SCALE = 30;
+
+const AUTO_PAN_EDGE = 60;
+const AUTO_PAN_SPEED = 12;
+
 export default function MapCanvas({
   mapData,
 
@@ -10,7 +15,6 @@ export default function MapCanvas({
 
   selectedNodeId,
   selectedObject,
-
   connectionStart,
 
   zoom,
@@ -30,42 +34,78 @@ export default function MapCanvas({
   onObjectDragStart,
   onObjectDragEnd,
 }) {
-  const svgRef = useRef(null);
-
-  const [pan, setPan] =
-    useState({
-      x: 0,
-      y: 0,
-    });
-
-  const panStartRef =
-    useRef(null);
-
-  const dragMovedRef =
-    useRef(false);
-
-  const SCALE = 30;
-
-  const canvasWidth =
-    mapData.width * SCALE;
-
-  const canvasHeight =
-    mapData.height * SCALE;
-
   /*
-   * ========================================
-   * SCREEN POSITION -> MAP COORDINATE
-   * ========================================
+   * =========================================
+   * REFS
+   * =========================================
    */
 
-  function screenToMap(
+  const viewportRef =
+    useRef(null);
+
+  const panRef =
+    useRef({
+      x: 220,
+      y: 150,
+    });
+
+  const panDragRef =
+    useRef(null);
+
+  const movedRef =
+    useRef(false);
+
+  const autoPanFrameRef =
+    useRef(null);
+
+  const dragPointerRef =
+    useRef(null);
+
+  /*
+   * =========================================
+   * STATE
+   * =========================================
+   */
+
+  const [
+    pan,
+    setPan,
+  ] = useState({
+    x: 220,
+    y: 150,
+  });
+
+  /*
+   * =========================================
+   * UPDATE PAN
+   * =========================================
+   */
+
+  function updatePan(
+    nextPan
+  ) {
+    panRef.current =
+      nextPan;
+
+    setPan(
+      nextPan
+    );
+  }
+
+  /*
+   * =========================================
+   * SCREEN -> WORLD
+   * =========================================
+   */
+
+  function screenToWorld(
     clientX,
     clientY
   ) {
-    const svg =
-      svgRef.current;
+    const viewport =
+      viewportRef.current;
 
-    if (!svg) {
+    if (!viewport) {
       return {
         x: 0,
         y: 0,
@@ -73,77 +113,329 @@ export default function MapCanvas({
     }
 
     const rect =
-      svg.getBoundingClientRect();
+      viewport.getBoundingClientRect();
 
-    /*
-     * SVG displayed size after zoom/pan.
-     *
-     * SVG viewBox still represents:
-     * 0..canvasWidth
-     * 0..canvasHeight
-     */
+    const screenX =
+      clientX -
+      rect.left;
 
-    const normalizedX =
-      (clientX -
-        rect.left) /
-      rect.width;
+    const screenY =
+      clientY -
+      rect.top;
 
-    const normalizedY =
-      (clientY -
-        rect.top) /
-      rect.height;
+    const worldPixelX =
+      (
+        screenX -
+        panRef.current.x
+      ) /
+      zoom;
 
-    const svgX =
-      normalizedX *
-      canvasWidth;
-
-    const svgY =
-      normalizedY *
-      canvasHeight;
-
-    const mapX =
-      svgX / SCALE;
-
-    const mapY =
-      svgY / SCALE;
+    const worldPixelY =
+      (
+        screenY -
+        panRef.current.y
+      ) /
+      zoom;
 
     return {
       x: Number(
-        mapX.toFixed(3)
+        (
+          worldPixelX /
+          SCALE
+        ).toFixed(3)
       ),
 
       y: Number(
-        mapY.toFixed(3)
+        (
+          worldPixelY /
+          SCALE
+        ).toFixed(3)
       ),
     };
   }
 
-
   /*
-   * ========================================
-   * BACKGROUND CLICK
-   * ========================================
+   * =========================================
+   * AUTO PAN
+   * =========================================
    */
 
-  function handleCanvasClick(
+  function calculateAutoPan(
+    clientX,
+    clientY
+  ) {
+    const viewport =
+      viewportRef.current;
+
+    if (!viewport) {
+      return {
+        x: 0,
+        y: 0,
+      };
+    }
+
+    const rect =
+      viewport.getBoundingClientRect();
+
+    const leftDistance =
+      clientX -
+      rect.left;
+
+    const rightDistance =
+      rect.right -
+      clientX;
+
+    const topDistance =
+      clientY -
+      rect.top;
+
+    const bottomDistance =
+      rect.bottom -
+      clientY;
+
+    let moveX = 0;
+    let moveY = 0;
+
+    if (
+      leftDistance <
+      AUTO_PAN_EDGE
+    ) {
+      moveX =
+        AUTO_PAN_SPEED;
+    }
+
+    if (
+      rightDistance <
+      AUTO_PAN_EDGE
+    ) {
+      moveX =
+        -AUTO_PAN_SPEED;
+    }
+
+    if (
+      topDistance <
+      AUTO_PAN_EDGE
+    ) {
+      moveY =
+        AUTO_PAN_SPEED;
+    }
+
+    if (
+      bottomDistance <
+      AUTO_PAN_EDGE
+    ) {
+      moveY =
+        -AUTO_PAN_SPEED;
+    }
+
+    return {
+      x: moveX,
+      y: moveY,
+    };
+  }
+
+  function startAutoPan() {
+    if (
+      autoPanFrameRef.current
+    ) {
+      return;
+    }
+
+    function loop() {
+      const pointer =
+        dragPointerRef.current;
+
+      if (!pointer) {
+        autoPanFrameRef.current =
+          null;
+
+        return;
+      }
+
+      const movement =
+        calculateAutoPan(
+          pointer.clientX,
+          pointer.clientY
+        );
+
+      if (
+        movement.x !== 0 ||
+        movement.y !== 0
+      ) {
+        updatePan({
+          x:
+            panRef.current.x +
+            movement.x,
+
+          y:
+            panRef.current.y +
+            movement.y,
+        });
+
+        /*
+         * Recalculate object position
+         * while map is moving.
+         */
+
+        pointer.updatePosition?.();
+      }
+
+      autoPanFrameRef.current =
+        requestAnimationFrame(
+          loop
+        );
+    }
+
+    autoPanFrameRef.current =
+      requestAnimationFrame(
+        loop
+      );
+  }
+
+  function stopAutoPan() {
+    dragPointerRef.current =
+      null;
+
+    if (
+      autoPanFrameRef.current
+    ) {
+      cancelAnimationFrame(
+        autoPanFrameRef.current
+      );
+
+      autoPanFrameRef.current =
+        null;
+    }
+  }
+
+  /*
+   * =========================================
+   * BACKGROUND PAN
+   * =========================================
+   */
+
+  function handleBackgroundPointerDown(
     event
   ) {
+    const middleMouse =
+      event.button === 1;
+
+    const selectPan =
+      event.button === 0 &&
+      tool === "select";
+
     if (
-      dragMovedRef.current
+      !middleMouse &&
+      !selectPan
     ) {
-      dragMovedRef.current =
+      return;
+    }
+
+    event.preventDefault();
+
+    movedRef.current =
+      false;
+
+    panDragRef.current = {
+      pointerId:
+        event.pointerId,
+
+      startX:
+        event.clientX,
+
+      startY:
+        event.clientY,
+
+      originalPanX:
+        panRef.current.x,
+
+      originalPanY:
+        panRef.current.y,
+    };
+
+    try {
+      event.currentTarget
+        .setPointerCapture(
+          event.pointerId
+        );
+    } catch {
+      //
+    }
+  }
+
+  function handleBackgroundPointerMove(
+    event
+  ) {
+    const drag =
+      panDragRef.current;
+
+    if (!drag) {
+      return;
+    }
+
+    if (
+      drag.pointerId !==
+      event.pointerId
+    ) {
+      return;
+    }
+
+    const dx =
+      event.clientX -
+      drag.startX;
+
+    const dy =
+      event.clientY -
+      drag.startY;
+
+    if (
+      Math.abs(dx) > 3 ||
+      Math.abs(dy) > 3
+    ) {
+      movedRef.current =
+        true;
+    }
+
+    updatePan({
+      x:
+        drag.originalPanX +
+        dx,
+
+      y:
+        drag.originalPanY +
+        dy,
+    });
+  }
+
+  function handleBackgroundPointerUp(
+    event
+  ) {
+    const wasPanning =
+      Boolean(
+        panDragRef.current
+      );
+
+    panDragRef.current =
+      null;
+
+    if (
+      wasPanning &&
+      movedRef.current
+    ) {
+      movedRef.current =
         false;
 
       return;
     }
 
-    /*
-     * Object clicks already stop
-     * propagation.
-     */
+    if (
+      event.button !== 0
+    ) {
+      return;
+    }
 
     const position =
-      screenToMap(
+      screenToWorld(
         event.clientX,
         event.clientY
       );
@@ -153,128 +445,10 @@ export default function MapCanvas({
     );
   }
 
-
   /*
-   * ========================================
-   * PAN
-   * ========================================
-   */
-
-  function handleCanvasMouseDown(
-    event
-  ) {
-    /*
-     * Pan only in Select mode.
-     */
-
-    if (
-      tool !== "select"
-    ) {
-      return;
-    }
-
-    /*
-     * Do not pan when clicking
-     * Node / Rack / Station.
-     */
-
-    if (
-      event.target.closest(
-        ".map-node-group"
-      ) ||
-      event.target.closest(
-        ".map-object"
-      )
-    ) {
-      return;
-    }
-
-    event.preventDefault();
-
-    panStartRef.current = {
-      mouseX:
-        event.clientX,
-
-      mouseY:
-        event.clientY,
-
-      panX:
-        pan.x,
-
-      panY:
-        pan.y,
-    };
-
-    dragMovedRef.current =
-      false;
-
-    function handleMove(
-      moveEvent
-    ) {
-      if (
-        !panStartRef.current
-      ) {
-        return;
-      }
-
-      const dx =
-        moveEvent.clientX -
-        panStartRef.current.mouseX;
-
-      const dy =
-        moveEvent.clientY -
-        panStartRef.current.mouseY;
-
-      if (
-        Math.abs(dx) > 2 ||
-        Math.abs(dy) > 2
-      ) {
-        dragMovedRef.current =
-          true;
-      }
-
-      setPan({
-        x:
-          panStartRef.current.panX +
-          dx,
-
-        y:
-          panStartRef.current.panY +
-          dy,
-      });
-    }
-
-    function handleUp() {
-      panStartRef.current =
-        null;
-
-      window.removeEventListener(
-        "mousemove",
-        handleMove
-      );
-
-      window.removeEventListener(
-        "mouseup",
-        handleUp
-      );
-    }
-
-    window.addEventListener(
-      "mousemove",
-      handleMove
-    );
-
-    window.addEventListener(
-      "mouseup",
-      handleUp
-    );
-  }
-
-
-  /*
-   * ========================================
-   * MOUSE WHEEL ZOOM
-   * ========================================
+   * =========================================
+   * WHEEL ZOOM
+   * =========================================
    */
 
   function handleWheel(
@@ -282,51 +456,104 @@ export default function MapCanvas({
   ) {
     event.preventDefault();
 
-    const step =
+    const viewport =
+      viewportRef.current;
+
+    if (!viewport) {
+      return;
+    }
+
+    const rect =
+      viewport.getBoundingClientRect();
+
+    const mouseX =
+      event.clientX -
+      rect.left;
+
+    const mouseY =
+      event.clientY -
+      rect.top;
+
+    const oldZoom =
+      zoom;
+
+    const factor =
       event.deltaY < 0
-        ? 0.1
-        : -0.1;
+        ? 1.1
+        : 0.9;
 
     const nextZoom =
       clamp(
-        zoom + step,
-        0.4,
-        2.5
+        oldZoom *
+          factor,
+        0.25,
+        4
       );
+
+    const worldX =
+      (
+        mouseX -
+        panRef.current.x
+      ) /
+      oldZoom;
+
+    const worldY =
+      (
+        mouseY -
+        panRef.current.y
+      ) /
+      oldZoom;
+
+    const nextPan = {
+      x:
+        mouseX -
+        worldX *
+          nextZoom,
+
+      y:
+        mouseY -
+        worldY *
+          nextZoom,
+    };
+
+    updatePan(
+      nextPan
+    );
 
     onZoomChange(
       Number(
-        nextZoom.toFixed(2)
+        nextZoom.toFixed(
+          3
+        )
       )
     );
   }
 
-
   /*
-   * ========================================
+   * =========================================
    * NODE DRAG
-   * ========================================
+   * =========================================
    */
 
-  function handleNodeMouseDown(
+  function handleNodePointerDown(
     event,
     node
   ) {
     event.stopPropagation();
 
-    /*
-     * Path mode:
-     * clicking Node selects it
-     * for connection.
-     */
-
     if (
-      tool !== "select"
+      tool === "connect"
     ) {
       onNodeClick(
         node.id
       );
 
+      return;
+    }
+
+    if (
+      tool !== "select"
+    ) {
       return;
     }
 
@@ -340,16 +567,24 @@ export default function MapCanvas({
       node.id
     );
 
-    dragMovedRef.current =
+    const pointerId =
+      event.pointerId;
+
+    let moved =
       false;
 
-    function handleMove(
-      moveEvent
-    ) {
+    function updateNodePosition() {
+      const pointer =
+        dragPointerRef.current;
+
+      if (!pointer) {
+        return;
+      }
+
       const position =
-        screenToMap(
-          moveEvent.clientX,
-          moveEvent.clientY
+        screenToWorld(
+          pointer.clientX,
+          pointer.clientY
         );
 
       const snapped =
@@ -358,36 +593,68 @@ export default function MapCanvas({
           mapData.gridSpacing
         );
 
-      dragMovedRef.current =
-        true;
-
       onNodeMove(
         node.id,
-
-        clamp(
-          snapped.x,
-          0,
-          mapData.width
-        ),
-
-        clamp(
-          snapped.y,
-          0,
-          mapData.height
-        )
+        snapped.x,
+        snapped.y
       );
     }
 
-    function handleUp() {
+    function handleMove(
+      moveEvent
+    ) {
+      if (
+        moveEvent.pointerId !==
+        pointerId
+      ) {
+        return;
+      }
+
+      moved =
+        true;
+
+      dragPointerRef.current = {
+        clientX:
+          moveEvent.clientX,
+
+        clientY:
+          moveEvent.clientY,
+
+        updatePosition:
+          updateNodePosition,
+      };
+
+      updateNodePosition();
+
+      startAutoPan();
+    }
+
+    function handleUp(
+      upEvent
+    ) {
+      if (
+        upEvent.pointerId !==
+        pointerId
+      ) {
+        return;
+      }
+
       window.removeEventListener(
-        "mousemove",
+        "pointermove",
         handleMove
       );
 
       window.removeEventListener(
-        "mouseup",
+        "pointerup",
         handleUp
       );
+
+      stopAutoPan();
+
+      if (moved) {
+        movedRef.current =
+          true;
+      }
 
       onNodeDragEnd?.(
         node.id
@@ -395,24 +662,23 @@ export default function MapCanvas({
     }
 
     window.addEventListener(
-      "mousemove",
+      "pointermove",
       handleMove
     );
 
     window.addEventListener(
-      "mouseup",
+      "pointerup",
       handleUp
     );
   }
 
-
   /*
-   * ========================================
-   * OBJECT DRAG
-   * ========================================
+   * =========================================
+   * RACK / STATION DRAG
+   * =========================================
    */
 
-  function handleObjectMouseDown(
+  function handleObjectPointerDown(
     event,
     type,
     object
@@ -438,16 +704,24 @@ export default function MapCanvas({
       object.id
     );
 
-    dragMovedRef.current =
+    const pointerId =
+      event.pointerId;
+
+    let moved =
       false;
 
-    function handleMove(
-      moveEvent
-    ) {
+    function updateObjectPosition() {
+      const pointer =
+        dragPointerRef.current;
+
+      if (!pointer) {
+        return;
+      }
+
       const position =
-        screenToMap(
-          moveEvent.clientX,
-          moveEvent.clientY
+        screenToWorld(
+          pointer.clientX,
+          pointer.clientY
         );
 
       const snapped =
@@ -456,37 +730,69 @@ export default function MapCanvas({
           mapData.gridSpacing
         );
 
-      dragMovedRef.current =
-        true;
-
       onObjectMove(
         type,
         object.id,
-
-        clamp(
-          snapped.x,
-          0,
-          mapData.width
-        ),
-
-        clamp(
-          snapped.y,
-          0,
-          mapData.height
-        )
+        snapped.x,
+        snapped.y
       );
     }
 
-    function handleUp() {
+    function handleMove(
+      moveEvent
+    ) {
+      if (
+        moveEvent.pointerId !==
+        pointerId
+      ) {
+        return;
+      }
+
+      moved =
+        true;
+
+      dragPointerRef.current = {
+        clientX:
+          moveEvent.clientX,
+
+        clientY:
+          moveEvent.clientY,
+
+        updatePosition:
+          updateObjectPosition,
+      };
+
+      updateObjectPosition();
+
+      startAutoPan();
+    }
+
+    function handleUp(
+      upEvent
+    ) {
+      if (
+        upEvent.pointerId !==
+        pointerId
+      ) {
+        return;
+      }
+
       window.removeEventListener(
-        "mousemove",
+        "pointermove",
         handleMove
       );
 
       window.removeEventListener(
-        "mouseup",
+        "pointerup",
         handleUp
       );
+
+      stopAutoPan();
+
+      if (moved) {
+        movedRef.current =
+          true;
+      }
 
       onObjectDragEnd?.(
         type,
@@ -495,288 +801,130 @@ export default function MapCanvas({
     }
 
     window.addEventListener(
-      "mousemove",
+      "pointermove",
       handleMove
     );
 
     window.addEventListener(
-      "mouseup",
+      "pointerup",
       handleUp
     );
   }
 
+  /*
+   * =========================================
+   * GRID SIZE
+   * =========================================
+   */
+
+  const gridSize =
+    Math.max(
+      Number(
+        mapData.gridSpacing
+      ) || 1,
+      0.01
+    ) *
+    SCALE *
+    zoom;
 
   /*
-   * ========================================
-   * UI
-   * ========================================
+   * =========================================
+   * RENDER
+   * =========================================
    */
 
   return (
     <div
-      className="map-canvas-wrapper"
+      ref={
+        viewportRef
+      }
+
+      className={`map-canvas-wrapper tool-${tool}`}
+
+      onPointerDown={
+        handleBackgroundPointerDown
+      }
+
+      onPointerMove={
+        handleBackgroundPointerMove
+      }
+
+      onPointerUp={
+        handleBackgroundPointerUp
+      }
+
+      onPointerCancel={() => {
+        panDragRef.current =
+          null;
+
+        stopAutoPan();
+      }}
+
       onWheel={
         handleWheel
       }
     >
+      {/* INFINITE GRID */}
+
       <div
-        className="map-transform-layer"
+        className="infinite-map-background"
 
         style={{
-          transform:
-            `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+          "--grid-size":
+            `${gridSize}px`,
+
+          "--grid-x":
+            `${positiveModulo(
+              pan.x,
+              gridSize
+            )}px`,
+
+          "--grid-y":
+            `${positiveModulo(
+              pan.y,
+              gridSize
+            )}px`,
         }}
+      />
+
+
+      {/* WORLD */}
+
+      <svg
+        className="infinite-map-world"
       >
-        <svg
-          ref={svgRef}
-
-          className={`map-editor-canvas tool-${tool}`}
-
-          viewBox={
-            `0 0 ${canvasWidth} ${canvasHeight}`
-          }
-
-          onClick={
-            handleCanvasClick
-          }
-
-          onMouseDown={
-            handleCanvasMouseDown
-          }
+        <g
+          transform={`
+            translate(
+              ${pan.x}
+              ${pan.y}
+            )
+            scale(
+              ${zoom}
+            )
+          `}
         >
-
-          {/* ======================
-              BACKGROUND
-          ====================== */}
+          {/* WAREHOUSE BOUNDARY */}
 
           <rect
             x="0"
             y="0"
 
             width={
-              canvasWidth
-            }
-
-            height={
-              canvasHeight
-            }
-
-            className="map-background"
-          />
-
-
-          {/* ======================
-              GRID
-          ====================== */}
-
-          <Grid
-            width={
-              canvasWidth
-            }
-
-            height={
-              canvasHeight
-            }
-
-            spacing={
-              mapData.gridSpacing *
+              mapData.width *
               SCALE
             }
+
+            height={
+              mapData.height *
+              SCALE
+            }
+
+            className="warehouse-boundary"
           />
 
 
-          {/* ======================
-              RACKS
-          ====================== */}
-
-          {mapData.racks.map(
-            (rack) => {
-              const selected =
-                selectedObject?.type ===
-                  "rack" &&
-                selectedObject?.id ===
-                  rack.id;
-
-              return (
-                <g
-                  key={
-                    rack.id
-                  }
-
-                  className="map-object"
-
-                  transform={`
-                    translate(
-                      ${rack.x * SCALE}
-                      ${rack.y * SCALE}
-                    )
-                    rotate(
-                      ${rack.rotation}
-                    )
-                  `}
-
-                  onMouseDown={(
-                    event
-                  ) =>
-                    handleObjectMouseDown(
-                      event,
-                      "rack",
-                      rack
-                    )
-                  }
-                >
-                  <rect
-                    x={
-                      -(
-                        rack.width *
-                        SCALE
-                      ) / 2
-                    }
-
-                    y={
-                      -(
-                        rack.depth *
-                        SCALE
-                      ) / 2
-                    }
-
-                    width={
-                      rack.width *
-                      SCALE
-                    }
-
-                    height={
-                      rack.depth *
-                      SCALE
-                    }
-
-                    rx="5"
-
-                    className={
-                      `map-rack ${
-                        selected
-                          ? "selected"
-                          : ""
-                      }`
-                    }
-                  />
-
-                  <text
-                    x="0"
-                    y="4"
-
-                    textAnchor="middle"
-
-                    className="map-object-label"
-                  >
-                    {rack.name}
-                  </text>
-                </g>
-              );
-            }
-          )}
-
-
-          {/* ======================
-              STATIONS
-          ====================== */}
-
-          {mapData.stations.map(
-            (station) => {
-              const selected =
-                selectedObject?.type ===
-                  "station" &&
-                selectedObject?.id ===
-                  station.id;
-
-              return (
-                <g
-                  key={
-                    station.id
-                  }
-
-                  className="map-object"
-
-                  transform={`
-                    translate(
-                      ${station.x * SCALE}
-                      ${station.y * SCALE}
-                    )
-                    rotate(
-                      ${station.rotation}
-                    )
-                  `}
-
-                  onMouseDown={(
-                    event
-                  ) =>
-                    handleObjectMouseDown(
-                      event,
-                      "station",
-                      station
-                    )
-                  }
-                >
-                  <rect
-                    x={
-                      -(
-                        station.width *
-                        SCALE
-                      ) / 2
-                    }
-
-                    y={
-                      -(
-                        station.depth *
-                        SCALE
-                      ) / 2
-                    }
-
-                    width={
-                      station.width *
-                      SCALE
-                    }
-
-                    height={
-                      station.depth *
-                      SCALE
-                    }
-
-                    rx="6"
-
-                    className={[
-                      "map-station",
-
-                      station.type ===
-                      "CHARGING"
-                        ? "charging"
-                        : "dock",
-
-                      selected
-                        ? "selected"
-                        : "",
-                    ].join(" ")}
-                  />
-
-                  <text
-                    x="0"
-                    y="4"
-
-                    textAnchor="middle"
-
-                    className="map-object-label"
-                  >
-                    {station.name}
-                  </text>
-                </g>
-              );
-            }
-          )}
-
-
-          {/* ======================
-              EDGES
-          ====================== */}
+          {/* PATHS */}
 
           {mapData.edges.map(
             (edge) => {
@@ -837,26 +985,30 @@ export default function MapCanvas({
 
                   <text
                     x={
-                      (x1 + x2) /
+                      (
+                        x1 +
+                        x2
+                      ) /
                       2
                     }
 
                     y={
-                      (y1 + y2) /
+                      (
+                        y1 +
+                        y2
+                      ) /
                         2 -
-                      8
+                      9
                     }
 
                     textAnchor="middle"
 
                     className="edge-distance"
                   >
-                    {
-                      edge.distance.toFixed(
-                        2
-                      )
-                    }{" "}
-                    m
+                    {Number(
+                      edge.distance
+                    ).toFixed(2)}
+                    {" m"}
                   </text>
                 </g>
               );
@@ -864,9 +1016,212 @@ export default function MapCanvas({
           )}
 
 
-          {/* ======================
-              NODES
-          ====================== */}
+          {/* RACKS */}
+
+          {mapData.racks.map(
+            (rack) => {
+              const selected =
+                selectedObject?.type ===
+                  "rack" &&
+                selectedObject?.id ===
+                  rack.id;
+
+              return (
+                <g
+                  key={
+                    rack.id
+                  }
+
+                  className="map-object"
+
+                  transform={`
+                    translate(
+                      ${
+                        rack.x *
+                        SCALE
+                      }
+                      ${
+                        rack.y *
+                        SCALE
+                      }
+                    )
+
+                    rotate(
+                      ${
+                        rack.rotation
+                      }
+                    )
+                  `}
+
+                  onPointerDown={(
+                    event
+                  ) =>
+                    handleObjectPointerDown(
+                      event,
+                      "rack",
+                      rack
+                    )
+                  }
+                >
+                  <rect
+                    x={
+                      -(
+                        rack.width *
+                        SCALE
+                      ) /
+                      2
+                    }
+
+                    y={
+                      -(
+                        rack.depth *
+                        SCALE
+                      ) /
+                      2
+                    }
+
+                    width={
+                      rack.width *
+                      SCALE
+                    }
+
+                    height={
+                      rack.depth *
+                      SCALE
+                    }
+
+                    rx="5"
+
+                    className={`map-rack ${
+                      selected
+                        ? "selected"
+                        : ""
+                    }`}
+                  />
+
+                  <text
+                    x="0"
+                    y="4"
+
+                    textAnchor="middle"
+
+                    className="map-object-label"
+                  >
+                    {rack.name}
+                  </text>
+                </g>
+              );
+            }
+          )}
+
+
+          {/* STATIONS */}
+
+          {mapData.stations.map(
+            (station) => {
+              const selected =
+                selectedObject?.type ===
+                  "station" &&
+                selectedObject?.id ===
+                  station.id;
+
+              return (
+                <g
+                  key={
+                    station.id
+                  }
+
+                  className="map-object"
+
+                  transform={`
+                    translate(
+                      ${
+                        station.x *
+                        SCALE
+                      }
+                      ${
+                        station.y *
+                        SCALE
+                      }
+                    )
+
+                    rotate(
+                      ${
+                        station.rotation
+                      }
+                    )
+                  `}
+
+                  onPointerDown={(
+                    event
+                  ) =>
+                    handleObjectPointerDown(
+                      event,
+                      "station",
+                      station
+                    )
+                  }
+                >
+                  <rect
+                    x={
+                      -(
+                        station.width *
+                        SCALE
+                      ) /
+                      2
+                    }
+
+                    y={
+                      -(
+                        station.depth *
+                        SCALE
+                      ) /
+                      2
+                    }
+
+                    width={
+                      station.width *
+                      SCALE
+                    }
+
+                    height={
+                      station.depth *
+                      SCALE
+                    }
+
+                    rx="6"
+
+                    className={[
+                      "map-station",
+
+                      station.type ===
+                      "CHARGING"
+                        ? "charging"
+                        : "dock",
+
+                      selected
+                        ? "selected"
+                        : "",
+                    ].join(" ")}
+                  />
+
+                  <text
+                    x="0"
+                    y="4"
+
+                    textAnchor="middle"
+
+                    className="map-object-label"
+                  >
+                    {station.name}
+                  </text>
+                </g>
+              );
+            }
+          )}
+
+
+          {/* NODES */}
 
           {mapData.nodes.map(
             (node) => {
@@ -886,10 +1241,10 @@ export default function MapCanvas({
 
                   className="map-node-group"
 
-                  onMouseDown={(
+                  onPointerDown={(
                     event
                   ) =>
-                    handleNodeMouseDown(
+                    handleNodePointerDown(
                       event,
                       node
                     )
@@ -950,8 +1305,26 @@ export default function MapCanvas({
               );
             }
           )}
+        </g>
+      </svg>
 
-        </svg>
+
+      {/* ORIGIN */}
+
+      <div
+        className="map-origin-marker"
+
+        style={{
+          left:
+            pan.x,
+
+          top:
+            pan.y,
+        }}
+      >
+        <span>
+          0,0
+        </span>
       </div>
     </div>
   );
@@ -959,113 +1332,52 @@ export default function MapCanvas({
 
 
 /*
- * ========================================
- * GRID
- * ========================================
- */
-
-function Grid({
-  width,
-  height,
-  spacing,
-}) {
-  if (
-    !spacing ||
-    spacing <= 0
-  ) {
-    return null;
-  }
-
-  const lines = [];
-
-  for (
-    let x = 0;
-    x <= width;
-    x += spacing
-  ) {
-    lines.push(
-      <line
-        key={`vertical-${x}`}
-
-        x1={x}
-        y1="0"
-
-        x2={x}
-        y2={height}
-
-        className="grid-line"
-      />
-    );
-  }
-
-  for (
-    let y = 0;
-    y <= height;
-    y += spacing
-  ) {
-    lines.push(
-      <line
-        key={`horizontal-${y}`}
-
-        x1="0"
-        y1={y}
-
-        x2={width}
-        y2={y}
-
-        className="grid-line"
-      />
-    );
-  }
-
-  return (
-    <g className="grid-layer">
-      {lines}
-    </g>
-  );
-}
-
-
-/*
- * ========================================
- * GRID SNAP
- * ========================================
+ * =========================================
+ * HELPERS
+ * =========================================
  */
 
 function snapToGrid(
   position,
   spacing
 ) {
+  const step =
+    Number(
+      spacing
+    );
+
   if (
-    !spacing ||
-    spacing <= 0
+    !Number.isFinite(
+      step
+    ) ||
+    step <= 0
   ) {
     return position;
   }
 
   return {
-    x:
-      Math.round(
-        position.x /
-          spacing
-      ) *
-      spacing,
+    x: Number(
+      (
+        Math.round(
+          position.x /
+          step
+        ) *
+        step
+      ).toFixed(3)
+    ),
 
-    y:
-      Math.round(
-        position.y /
-          spacing
-      ) *
-      spacing,
+    y: Number(
+      (
+        Math.round(
+          position.y /
+          step
+        ) *
+        step
+      ).toFixed(3)
+    ),
   };
 }
 
-
-/*
- * ========================================
- * CLAMP
- * ========================================
- */
 
 function clamp(
   value,
@@ -1079,4 +1391,28 @@ function clamp(
     ),
     max
   );
+}
+
+
+function positiveModulo(
+  value,
+  divisor
+) {
+  if (
+    !Number.isFinite(
+      divisor
+    ) ||
+    divisor <= 0
+  ) {
+    return 0;
+  }
+
+  return (
+    (
+      value %
+      divisor
+    ) +
+    divisor
+  ) %
+  divisor;
 }

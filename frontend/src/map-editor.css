@@ -2,18 +2,38 @@
    MAP EDITOR LAYOUT
 ========================================== */
 
-.map-editor-layout {
-  display: grid;
+.map-editor-layout-v4 {
+  width: 100%;
+
+  display: grid !important;
 
   grid-template-columns:
-    minmax(0, 1fr)
-    300px;
+    220px
+    minmax(500px, 1fr)
+    280px !important;
 
-  gap: 16px;
+  align-items: start;
+
+  gap: 14px;
+
+  margin-top: 14px;
+}
+
+.map-editor-layout-v4.expanded {
+  grid-template-columns: 1fr !important;
 }
 
 .map-main-panel {
+  width: 100%;
   min-width: 0;
+
+  overflow: hidden;
+}
+
+.map-main-panel .panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
 .map-editor-info {
@@ -39,6 +59,47 @@
 
 
 /* ==========================================
+   HEADER
+========================================== */
+
+.map-header-right {
+  display: flex;
+  align-items: center;
+
+  gap: 10px;
+}
+
+.map-save-status {
+  padding: 7px 10px;
+
+  border: 1px solid #854d0e;
+
+  border-radius: 7px;
+
+  background: #422006;
+
+  color: #fbbf24;
+
+  font-size: 10px;
+
+  font-weight: 700;
+}
+
+.map-save-status.saved {
+  display: flex;
+  align-items: center;
+
+  gap: 5px;
+
+  border-color: #166534;
+
+  background: #052e16;
+
+  color: #4ade80;
+}
+
+
+/* ==========================================
    TOOLBAR
 ========================================== */
 
@@ -59,6 +120,10 @@
   border: 1px solid #1b2a3d;
 
   border-radius: 10px;
+
+  position: relative;
+
+  z-index: 5;
 }
 
 .map-tool-button {
@@ -103,12 +168,30 @@
   color: #67e8f9;
 }
 
+.map-tool-button.primary {
+  background: #0e7490;
+
+  border-color: #22d3ee;
+
+  color: #ecfeff;
+}
+
+.map-tool-button.primary:hover {
+  background: #0891b2;
+}
+
 .map-tool-button.danger:hover {
   background: #45151c;
 
   border-color: #fb7185;
 
   color: #fb7185;
+}
+
+.map-tool-button:disabled {
+  cursor: not-allowed;
+
+  opacity: 0.35;
 }
 
 .toolbar-divider {
@@ -125,9 +208,29 @@
   flex: 1;
 }
 
+.zoom-display {
+  min-width: 48px;
+
+  padding: 7px 6px;
+
+  text-align: center;
+
+  background: #07111f;
+
+  border: 1px solid #263b53;
+
+  border-radius: 6px;
+
+  color: #67e8f9;
+
+  font-size: 10px;
+
+  font-weight: 800;
+}
+
 
 /* ==========================================
-   EDITOR MESSAGES
+   EDITOR MESSAGE
 ========================================== */
 
 .map-editor-message {
@@ -153,57 +256,377 @@
 
 
 /* ==========================================
-   CANVAS
+   MAP OBJECT TREE
 ========================================== */
 
-.map-canvas-wrapper {
+.map-object-tree {
   width: 100%;
 
-  overflow: auto;
+  min-width: 0;
 
-  background: #030a12;
+  max-height: 720px;
 
-  border: 1px solid #1b2a3d;
+  overflow-y: auto;
 
-  border-radius: 8px;
+  padding: 14px;
+
+  align-self: start;
 }
 
-.map-editor-canvas {
+.map-object-tree .panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  margin-bottom: 12px;
+}
+
+.tree-section {
+  width: 100%;
+
+  margin-bottom: 14px;
+}
+
+.tree-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  width: 100%;
+
+  padding: 6px 4px;
+
+  color: #94a3b8;
+}
+
+.tree-section-header > div {
+  display: flex;
+  align-items: center;
+
+  gap: 6px;
+}
+
+.tree-section-header strong {
+  font-size: 11px;
+}
+
+.tree-section-header > span {
+  color: #64748b;
+
+  font-size: 10px;
+}
+
+.tree-section-content {
+  display: flex;
+
+  flex-direction: column;
+
+  gap: 4px;
+
+  width: 100%;
+}
+
+.tree-item {
+  width: 100%;
+
+  display: flex;
+  align-items: center;
+
+  gap: 8px;
+
+  padding: 8px 9px;
+
+  border: 1px solid transparent;
+
+  border-radius: 6px;
+
+  background: transparent;
+
+  color: #94a3b8;
+
+  text-align: left;
+
+  cursor: pointer;
+}
+
+.tree-item:hover {
+  background: #102135;
+
+  border-color: #1e3a52;
+}
+
+.tree-item.active {
+  background: #083344;
+
+  border-color: #22d3ee;
+
+  color: #67e8f9;
+}
+
+.tree-item svg {
+  flex-shrink: 0;
+}
+
+.tree-item > div {
+  display: flex;
+
+  flex-direction: column;
+
+  min-width: 0;
+}
+
+.tree-item strong {
   display: block;
 
-  width: 100%;
+  color: inherit;
 
-  min-height: 620px;
-
-  background: #07111f;
-
-  user-select: none;
+  font-size: 10px;
 }
 
-.map-editor-canvas.tool-node,
-.map-editor-canvas.tool-rack,
-.map-editor-canvas.tool-dock,
-.map-editor-canvas.tool-charging {
-  cursor: crosshair;
-}
+.tree-item span {
+  display: block;
 
-.map-background {
-  fill: #07111f;
+  margin-top: 2px;
+
+  overflow: hidden;
+
+  text-overflow: ellipsis;
+
+  white-space: nowrap;
+
+  color: #64748b;
+
+  font-size: 9px;
 }
 
 
 /* ==========================================
-   GRID
+   PROPERTIES PANEL
 ========================================== */
 
-.grid-layer {
+.map-properties {
+  width: 100%;
+
+  min-width: 0;
+
+  align-self: start;
+
+  position: sticky;
+
+  top: 15px;
+}
+
+.property-group {
+  margin-bottom: 13px;
+}
+
+.property-label {
+  display: block;
+
+  margin-bottom: 5px;
+
+  color: #94a3b8;
+
+  font-size: 10px;
+
+  font-weight: 600;
+}
+
+.property-input-wrapper {
+  position: relative;
+}
+
+.property-input {
+  width: 100%;
+
+  padding: 9px 10px;
+
+  background: #07111f;
+
+  border: 1px solid #263b53;
+
+  border-radius: 6px;
+
+  color: #e2e8f0;
+
+  outline: none;
+
+  font-size: 11px;
+}
+
+.property-input:hover {
+  border-color: #36506b;
+}
+
+.property-input:focus {
+  border-color: #22d3ee;
+}
+
+.property-input-wrapper .property-input {
+  padding-right: 40px;
+}
+
+.property-unit {
+  position: absolute;
+
+  right: 10px;
+
+  top: 50%;
+
+  transform: translateY(-50%);
+
+  color: #64748b;
+
+  font-size: 9px;
+
   pointer-events: none;
 }
 
-.grid-line {
-  stroke: #17283b;
+.property-section-title {
+  margin-top: 19px;
 
-  stroke-width: 0.7;
+  margin-bottom: 11px;
+
+  padding-bottom: 6px;
+
+  border-bottom: 1px solid #1b2a3d;
+
+  color: #67e8f9;
+
+  font-size: 9px;
+
+  font-weight: 800;
+
+  letter-spacing: 1px;
+
+  text-transform: uppercase;
+}
+
+.property-readonly {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  margin-bottom: 14px;
+
+  padding: 10px;
+
+  background: #0f1d30;
+
+  border: 1px solid #1b2a3d;
+
+  border-radius: 7px;
+
+  font-size: 10px;
+}
+
+.property-readonly span {
+  color: #64748b;
+}
+
+.property-readonly strong {
+  color: #67e8f9;
+}
+
+
+/* ==========================================
+   PROPERTY SUMMARY
+========================================== */
+
+.map-property-summary {
+  display: grid;
+
+  grid-template-columns:
+    repeat(2, 1fr);
+
+  gap: 7px;
+
+  margin-top: 20px;
+}
+
+.map-property-summary > div {
+  padding: 10px;
+
+  background: #0f1d30;
+
+  border: 1px solid #1b2a3d;
+
+  border-radius: 7px;
+}
+
+.map-property-summary span {
+  display: block;
+
+  color: #64748b;
+
+  font-size: 9px;
+}
+
+.map-property-summary strong {
+  display: block;
+
+  margin-top: 4px;
+
+  color: #e2e8f0;
+
+  font-size: 17px;
+}
+
+
+/* ==========================================
+   RACK SUMMARY
+========================================== */
+
+.rack-slot-summary {
+  display: flex;
+
+  align-items: center;
+  justify-content: space-between;
+
+  margin-top: 14px;
+
+  padding: 12px;
+
+  background: #0c303b;
+
+  border: 1px solid #164e63;
+
+  border-radius: 7px;
+}
+
+.rack-slot-summary span {
+  color: #94a3b8;
+
+  font-size: 10px;
+}
+
+.rack-slot-summary strong {
+  color: #67e8f9;
+
+  font-size: 18px;
+}
+
+
+/* ==========================================
+   HELP BOX
+========================================== */
+
+.map-help-box {
+  margin-top: 18px;
+
+  padding: 10px;
+
+  background: #0f1d30;
+
+  border: 1px solid #1b2a3d;
+
+  border-radius: 7px;
+
+  color: #64748b;
+
+  font-size: 10px;
+
+  line-height: 1.6;
 }
 
 
@@ -239,7 +662,7 @@
 ========================================== */
 
 .map-node-group {
-  cursor: pointer;
+  cursor: move;
 }
 
 .map-node-circle {
@@ -318,11 +741,8 @@
 ========================================== */
 
 .map-object {
-  cursor: pointer;
+  cursor: move;
 }
-
-
-/* Rack */
 
 .map-rack {
   fill: #1d3852;
@@ -347,9 +767,6 @@
 
   stroke-width: 4;
 }
-
-
-/* Stations */
 
 .map-station {
   stroke-width: 2;
@@ -387,235 +804,244 @@
 
 
 /* ==========================================
-   PROPERTIES PANEL
+   INFINITE MAP CANVAS
 ========================================== */
 
-.map-properties {
-  align-self: start;
-
-  position: sticky;
-
-  top: 15px;
-}
-
-.property-group {
-  margin-bottom: 13px;
-}
-
-.property-label {
-  display: block;
-
-  margin-bottom: 5px;
-
-  color: #94a3b8;
-
-  font-size: 10px;
-
-  font-weight: 600;
-}
-
-.property-input-wrapper {
+.map-canvas-wrapper {
   position: relative;
-}
 
-.property-input {
   width: 100%;
 
-  padding: 9px 10px;
+  min-width: 0;
+
+  height: 650px;
+
+  overflow: hidden;
 
   background: #07111f;
 
-  border: 1px solid #263b53;
+  border: 1px solid #1b2a3d;
 
-  border-radius: 6px;
+  border-radius: 8px;
 
-  color: #e2e8f0;
+  touch-action: none;
 
-  outline: none;
+  user-select: none;
 
-  font-size: 11px;
+  cursor: grab;
 }
 
-.property-input:hover {
-  border-color: #36506b;
+.map-canvas-wrapper:active {
+  cursor: grabbing;
 }
 
-.property-input:focus {
-  border-color: #22d3ee;
-}
 
-.property-input-wrapper
-  .property-input {
-  padding-right: 40px;
-}
+/* ==========================================
+   INFINITE GRID
+========================================== */
 
-.property-unit {
+.infinite-map-background {
   position: absolute;
 
-  right: 10px;
+  inset: 0;
 
-  top: 50%;
+  z-index: 0;
 
-  transform: translateY(-50%);
+  pointer-events: none;
 
-  color: #64748b;
+  background-color: #07111f;
 
-  font-size: 9px;
+  background-image:
+    linear-gradient(
+      to right,
+      #1b2c40 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      to bottom,
+      #1b2c40 1px,
+      transparent 1px
+    );
+
+  background-size:
+    var(--grid-size, 30px)
+    var(--grid-size, 30px);
+
+  background-position:
+    var(--grid-x, 0px)
+    var(--grid-y, 0px);
+}
+
+
+/* ==========================================
+   SVG WORLD
+========================================== */
+
+.infinite-map-world {
+  position: absolute;
+
+  inset: 0;
+
+  z-index: 2;
+
+  width: 100%;
+  height: 100%;
+
+  overflow: visible;
+
+  pointer-events: none;
+}
+
+.infinite-map-world .map-object,
+.infinite-map-world .map-node-group {
+  pointer-events: all;
+}
+
+.infinite-map-world .map-edge-group {
+  pointer-events: none;
+}
+
+
+/* ==========================================
+   WAREHOUSE BOUNDARY
+========================================== */
+
+.warehouse-boundary {
+  fill: transparent;
+
+  stroke: #22d3ee55;
+
+  stroke-width: 2;
+
+  stroke-dasharray: 8 6;
 
   pointer-events: none;
 }
 
 
-/* Sections */
+/* ==========================================
+   ORIGIN
+========================================== */
 
-.property-section-title {
-  margin-top: 19px;
+.map-origin-marker {
+  position: absolute;
 
-  margin-bottom: 11px;
+  z-index: 4;
 
-  padding-bottom: 6px;
+  width: 9px;
+  height: 9px;
 
-  border-bottom: 1px solid #1b2a3d;
+  transform:
+    translate(
+      -4.5px,
+      -4.5px
+    );
+
+  border-radius: 50%;
+
+  background: #22d3ee;
+
+  pointer-events: none;
+}
+
+.map-origin-marker::before {
+  content: "";
+
+  position: absolute;
+
+  left: -11px;
+
+  top: 4px;
+
+  width: 30px;
+  height: 1px;
+
+  background: #22d3ee88;
+}
+
+.map-origin-marker::after {
+  content: "";
+
+  position: absolute;
+
+  left: 4px;
+
+  top: -11px;
+
+  width: 1px;
+  height: 30px;
+
+  background: #22d3ee88;
+}
+
+.map-origin-marker span {
+  position: absolute;
+
+  left: 9px;
+
+  top: 7px;
+
+  white-space: nowrap;
 
   color: #67e8f9;
 
-  font-size: 9px;
-
-  font-weight: 800;
-
-  letter-spacing: 1px;
-
-  text-transform: uppercase;
-}
-
-.property-readonly {
-  display: flex;
-
-  align-items: center;
-
-  justify-content: space-between;
-
-  margin-bottom: 14px;
-
-  padding: 10px;
-
-  background: #0f1d30;
-
-  border: 1px solid #1b2a3d;
-
-  border-radius: 7px;
-
-  font-size: 10px;
-}
-
-.property-readonly span {
-  color: #64748b;
-}
-
-.property-readonly strong {
-  color: #67e8f9;
+  font-size: 8px;
 }
 
 
 /* ==========================================
-   PROPERTY SUMMARY
+   TOOL CURSORS
 ========================================== */
 
-.map-property-summary {
-  display: grid;
-
-  grid-template-columns:
-    repeat(2, 1fr);
-
-  gap: 7px;
-
-  margin-top: 20px;
+.map-canvas-wrapper.tool-node,
+.map-canvas-wrapper.tool-rack,
+.map-canvas-wrapper.tool-dock,
+.map-canvas-wrapper.tool-charging {
+  cursor: crosshair;
 }
 
-.map-property-summary > div {
-  padding: 10px;
-
-  background: #0f1d30;
-
-  border: 1px solid #1b2a3d;
-
-  border-radius: 7px;
-}
-
-.map-property-summary span {
-  display: block;
-
-  color: #64748b;
-
-  font-size: 9px;
-}
-
-.map-property-summary strong {
-  display: block;
-
-  margin-top: 4px;
-
-  color: #e2e8f0;
-
-  font-size: 17px;
+.map-canvas-wrapper.tool-connect {
+  cursor: default;
 }
 
 
 /* ==========================================
-   RACK SUMMARY
+   EXPANDED MODE
 ========================================== */
 
-.rack-slot-summary {
-  display: flex;
+.map-page-expanded {
+  width: 100%;
 
-  align-items: center;
-
-  justify-content: space-between;
-
-  margin-top: 14px;
-
-  padding: 12px;
-
-  background: #0c303b;
-
-  border: 1px solid #164e63;
-
-  border-radius: 7px;
+  max-width: none;
 }
 
-.rack-slot-summary span {
-  color: #94a3b8;
-
-  font-size: 10px;
+.map-editor-layout-v4.expanded
+.map-main-panel {
+  width: 100%;
 }
 
-.rack-slot-summary strong {
-  color: #67e8f9;
-
-  font-size: 18px;
+.map-editor-layout-v4.expanded
+.map-canvas-wrapper {
+  height: 78vh;
 }
 
 
 /* ==========================================
-   HELP
+   SCROLLBAR OBJECT TREE
 ========================================== */
 
-.map-help-box {
-  margin-top: 18px;
+.map-object-tree::-webkit-scrollbar {
+  width: 7px;
+}
 
-  padding: 10px;
+.map-object-tree::-webkit-scrollbar-track {
+  background: transparent;
+}
 
-  background: #0f1d30;
+.map-object-tree::-webkit-scrollbar-thumb {
+  background: #263b53;
 
-  border: 1px solid #1b2a3d;
-
-  border-radius: 7px;
-
-  color: #64748b;
-
-  font-size: 10px;
-
-  line-height: 1.6;
+  border-radius: 10px;
 }
 
 
@@ -623,18 +1049,35 @@
    RESPONSIVE
 ========================================== */
 
-@media (max-width: 1100px) {
-  .map-editor-layout {
+@media (max-width: 1300px) {
+
+  .map-editor-layout-v4 {
     grid-template-columns:
-      1fr
-      260px;
+      190px
+      minmax(450px, 1fr)
+      250px !important;
+  }
+}
+
+@media (max-width: 1050px) {
+
+  .map-editor-layout-v4 {
+    grid-template-columns:
+      minmax(0, 1fr)
+      260px !important;
+  }
+
+  .map-object-tree {
+    display: none;
   }
 }
 
 @media (max-width: 900px) {
-  .map-editor-layout {
-    grid-template-columns:
-      1fr;
+
+  .map-header-right {
+    margin-top: 10px;
+
+    flex-wrap: wrap;
   }
 
   .map-properties {
@@ -646,7 +1089,24 @@
   }
 }
 
+@media (max-width: 800px) {
+
+  .map-editor-layout-v4 {
+    grid-template-columns:
+      1fr !important;
+  }
+
+  .map-properties {
+    width: 100%;
+  }
+
+  .map-canvas-wrapper {
+    height: 520px;
+  }
+}
+
 @media (max-width: 600px) {
+
   .map-toolbar {
     align-items: stretch;
   }
@@ -665,571 +1125,7 @@
 
   .page-header {
     align-items: flex-start;
+
     flex-direction: column;
   }
-}
-
-/* ==========================================
-   MAP EDITOR V3
-   Zoom / Save / Undo / Expand
-========================================== */
-
-
-/* =========================
-   HEADER
-========================= */
-
-.map-header-right {
-  display: flex;
-  align-items: center;
-
-  gap: 10px;
-}
-
-.map-save-status {
-  padding: 7px 10px;
-
-  border: 1px solid #854d0e;
-
-  border-radius: 7px;
-
-  background: #422006;
-
-  color: #fbbf24;
-
-  font-size: 10px;
-
-  font-weight: 700;
-}
-
-.map-save-status.saved {
-  display: flex;
-  align-items: center;
-
-  gap: 5px;
-
-  border-color: #166534;
-
-  background: #052e16;
-
-  color: #4ade80;
-}
-
-
-/* =========================
-   SAVE BUTTON
-========================= */
-
-.map-tool-button.primary {
-  background: #0e7490;
-
-  border-color: #22d3ee;
-
-  color: #ecfeff;
-}
-
-.map-tool-button.primary:hover {
-  background: #0891b2;
-}
-
-
-/* =========================
-   DISABLED BUTTON
-========================= */
-
-.map-tool-button:disabled {
-  cursor: not-allowed;
-
-  opacity: 0.35;
-}
-
-
-/* =========================
-   ZOOM
-========================= */
-
-.zoom-display {
-  min-width: 48px;
-
-  padding: 7px 6px;
-
-  text-align: center;
-
-  background: #07111f;
-
-  border: 1px solid #263b53;
-
-  border-radius: 6px;
-
-  color: #67e8f9;
-
-  font-size: 10px;
-
-  font-weight: 800;
-}
-
-
-/*
- * Container scrolls when
- * map is larger than viewport
- */
-
-.map-canvas-wrapper {
-  overflow: auto;
-
-  max-height: 680px;
-}
-
-
-/*
- * Zoom layer controls real
- * rendered width of SVG
- */
-
-.map-zoom-layer {
-  min-width: 40%;
-
-  transition:
-    width 0.15s ease;
-
-  transform-origin:
-    top left;
-}
-
-
-.map-editor-canvas {
-  width: 100%;
-
-  height: auto;
-
-  min-height: 620px;
-}
-
-
-/* =========================
-   EXPAND MODE
-========================= */
-
-.map-page-expanded {
-  max-width: none;
-
-  width: 100%;
-}
-
-
-.map-editor-layout.expanded {
-  grid-template-columns:
-    1fr;
-}
-
-
-.map-editor-layout.expanded
-.map-main-panel {
-  min-height: 78vh;
-}
-
-
-.map-editor-layout.expanded
-.map-canvas-wrapper {
-  max-height: 78vh;
-}
-
-
-.map-editor-layout.expanded
-.map-editor-canvas {
-  min-height: 75vh;
-}
-
-
-/* =========================
-   TOOLBAR IMPROVEMENT
-========================= */
-
-.map-toolbar {
-  position: relative;
-
-  z-index: 5;
-}
-
-
-/* =========================
-   SCROLLBAR
-========================= */
-
-.map-canvas-wrapper::-webkit-scrollbar {
-  width: 10px;
-
-  height: 10px;
-}
-
-
-.map-canvas-wrapper::-webkit-scrollbar-track {
-  background: #07111f;
-}
-
-
-.map-canvas-wrapper::-webkit-scrollbar-thumb {
-  background: #263b53;
-
-  border-radius: 10px;
-}
-
-
-.map-canvas-wrapper::-webkit-scrollbar-thumb:hover {
-  background: #36506b;
-}
-
-
-/* =========================
-   RESPONSIVE
-========================= */
-
-@media (
-  max-width: 900px
-) {
-
-  .map-header-right {
-    margin-top: 10px;
-
-    flex-wrap: wrap;
-  }
-}
-
-/* =====================================================
-   MAP EDITOR V4 - LAYOUT FIX
-===================================================== */
-
-.map-editor-layout-v4 {
-  width: 100%;
-
-  display: grid !important;
-
-  grid-template-columns:
-    220px
-    minmax(500px, 1fr)
-    280px !important;
-
-  align-items: start;
-
-  gap: 14px;
-
-  margin-top: 14px;
-}
-
-
-/* =====================================================
-   LEFT OBJECT TREE
-===================================================== */
-
-.map-object-tree {
-  width: 100%;
-  min-width: 0;
-
-  max-height: 720px;
-
-  overflow-y: auto;
-
-  padding: 14px;
-}
-
-
-.map-object-tree .panel-header {
-  display: flex;
-
-  align-items: center;
-  justify-content: space-between;
-
-  margin-bottom: 12px;
-}
-
-
-/* =====================================================
-   TREE SECTION
-===================================================== */
-
-.tree-section {
-  width: 100%;
-
-  margin-bottom: 14px;
-}
-
-
-.tree-section-header {
-  display: flex;
-
-  align-items: center;
-  justify-content: space-between;
-
-  width: 100%;
-
-  padding: 6px 4px;
-
-  color: #94a3b8;
-}
-
-
-.tree-section-header > div {
-  display: flex;
-
-  align-items: center;
-
-  gap: 6px;
-}
-
-
-.tree-section-header strong {
-  font-size: 11px;
-}
-
-
-.tree-section-header > span {
-  font-size: 10px;
-
-  color: #64748b;
-}
-
-
-.tree-section-content {
-  display: flex;
-
-  flex-direction: column;
-
-  gap: 4px;
-
-  width: 100%;
-}
-
-
-/* =====================================================
-   TREE ITEM
-===================================================== */
-
-.tree-item {
-  width: 100%;
-
-  display: flex;
-
-  align-items: center;
-
-  gap: 8px;
-
-  padding: 8px 9px;
-
-  border: 1px solid transparent;
-
-  border-radius: 6px;
-
-  background: transparent;
-
-  color: #94a3b8;
-
-  text-align: left;
-
-  cursor: pointer;
-}
-
-
-.tree-item:hover {
-  background: #102135;
-
-  border-color: #1e3a52;
-}
-
-
-.tree-item.active {
-  background: #083344;
-
-  border-color: #22d3ee;
-
-  color: #67e8f9;
-}
-
-
-.tree-item svg {
-  flex-shrink: 0;
-}
-
-
-.tree-item > div {
-  display: flex;
-
-  flex-direction: column;
-
-  min-width: 0;
-}
-
-
-.tree-item strong {
-  display: block;
-
-  font-size: 10px;
-
-  color: inherit;
-}
-
-
-.tree-item span {
-  display: block;
-
-  margin-top: 2px;
-
-  overflow: hidden;
-
-  text-overflow: ellipsis;
-
-  white-space: nowrap;
-
-  font-size: 9px;
-
-  color: #64748b;
-}
-
-
-/* =====================================================
-   CENTER MAP
-===================================================== */
-
-.map-main-panel {
-  width: 100%;
-
-  min-width: 0;
-
-  overflow: hidden;
-}
-
-
-.map-main-panel .panel-header {
-  display: flex;
-
-  align-items: center;
-
-  justify-content: space-between;
-}
-
-
-/* =====================================================
-   RIGHT PROPERTIES
-===================================================== */
-
-.map-properties {
-  width: 100%;
-
-  min-width: 0;
-
-  align-self: start;
-}
-
-
-/* =====================================================
-   CANVAS
-===================================================== */
-
-.map-canvas-wrapper {
-  position: relative;
-
-  width: 100%;
-
-  min-width: 0;
-
-  height: 620px;
-
-  overflow: hidden;
-
-  background: #030a12;
-
-  border-radius: 8px;
-}
-
-
-.map-transform-layer {
-  width: 100%;
-
-  transform-origin: 0 0;
-}
-
-
-.map-editor-canvas {
-  display: block;
-
-  width: 100%;
-
-  height: 620px;
-
-  user-select: none;
-}
-
-
-/* =====================================================
-   EXPANDED MODE
-===================================================== */
-
-.map-editor-layout-v4.expanded {
-  display: grid !important;
-
-  grid-template-columns: 1fr !important;
-}
-
-
-.map-editor-layout-v4.expanded
-.map-main-panel {
-  width: 100%;
-}
-
-
-.map-editor-layout-v4.expanded
-.map-canvas-wrapper {
-  height: 78vh;
-}
-
-
-.map-editor-layout-v4.expanded
-.map-editor-canvas {
-  height: 78vh;
-}
-
-
-/* =====================================================
-   RESPONSIVE
-===================================================== */
-
-@media (max-width: 1300px) {
-
-  .map-editor-layout-v4 {
-    grid-template-columns:
-      190px
-      minmax(450px, 1fr)
-      250px !important;
-  }
-
-}
-
-
-@media (max-width: 1050px) {
-
-  .map-editor-layout-v4 {
-    grid-template-columns:
-      minmax(0, 1fr)
-      260px !important;
-  }
-
-
-  .map-object-tree {
-    display: none;
-  }
-
-}
-
-
-@media (max-width: 800px) {
-
-  .map-editor-layout-v4 {
-    grid-template-columns:
-      1fr !important;
-  }
-
-
-  .map-properties {
-    width: 100%;
-  }
-
 }
