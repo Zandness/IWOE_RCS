@@ -1,4 +1,7 @@
-import { useRef } from "react";
+import {
+  useRef,
+  useState,
+} from "react";
 
 export default function MapCanvas({
   mapData,
@@ -11,6 +14,7 @@ export default function MapCanvas({
   connectionStart,
 
   zoom,
+  onZoomChange,
 
   onCanvasClick,
 
@@ -21,8 +25,21 @@ export default function MapCanvas({
   onNodeDragEnd,
 
   onObjectClick,
+  onObjectMove,
+
+  onObjectDragStart,
+  onObjectDragEnd,
 }) {
   const svgRef = useRef(null);
+
+  const [pan, setPan] =
+    useState({
+      x: 0,
+      y: 0,
+    });
+
+  const panStart =
+    useRef(null);
 
   const SCALE = 30;
 
@@ -32,16 +49,8 @@ export default function MapCanvas({
   const canvasHeight =
     mapData.height * SCALE;
 
-  /*
-   * Convert mouse position
-   * to warehouse coordinate
-   */
-
-  function getMousePosition(
-    event
-  ) {
-    const svg =
-      svgRef.current;
+  function getMousePosition(event) {
+    const svg = svgRef.current;
 
     if (!svg) {
       return {
@@ -53,76 +62,170 @@ export default function MapCanvas({
     const rect =
       svg.getBoundingClientRect();
 
-    const ratioX =
-      canvasWidth /
-      rect.width;
-
-    const ratioY =
-      canvasHeight /
-      rect.height;
-
     const pixelX =
-      (event.clientX -
-        rect.left) *
-      ratioX;
+      ((event.clientX -
+        rect.left -
+        pan.x) /
+        zoom);
 
     const pixelY =
-      (event.clientY -
-        rect.top) *
-      ratioY;
+      ((event.clientY -
+        rect.top -
+        pan.y) /
+        zoom);
 
     return {
       x: Number(
         (
-          pixelX /
-          SCALE
+          (pixelX /
+            rect.width) *
+          mapData.width
         ).toFixed(2)
       ),
 
       y: Number(
         (
-          pixelY /
-          SCALE
+          (pixelY /
+            rect.height) *
+          mapData.height
         ).toFixed(2)
       ),
     };
   }
 
-  /*
-   * Background click
-   */
-
-  function handleCanvasClick(
-    event
-  ) {
-    /*
-     * Don't create object when
-     * clicking existing object
-     */
-
+  function handleBackgroundClick(event) {
     if (
       event.target.closest(
-        ".map-object"
+        ".map-node-group"
       ) ||
       event.target.closest(
-        ".map-node-group"
+        ".map-object"
       )
     ) {
       return;
     }
 
+    if (
+      panStart.current
+    ) {
+      return;
+    }
+
     const position =
-      getMousePosition(
-        event
+      getMousePosition(event);
+
+    onCanvasClick(position);
+  }
+
+  /*
+   * =========================
+   * PAN
+   * =========================
+   */
+
+  function handleCanvasMouseDown(event) {
+    if (
+      tool !== "select"
+    ) {
+      return;
+    }
+
+    if (
+      event.target.closest(
+        ".map-node-group"
+      ) ||
+      event.target.closest(
+        ".map-object"
+      )
+    ) {
+      return;
+    }
+
+    panStart.current = {
+      mouseX: event.clientX,
+      mouseY: event.clientY,
+
+      panX: pan.x,
+      panY: pan.y,
+    };
+
+    function handleMove(moveEvent) {
+      if (!panStart.current) return;
+
+      const dx =
+        moveEvent.clientX -
+        panStart.current.mouseX;
+
+      const dy =
+        moveEvent.clientY -
+        panStart.current.mouseY;
+
+      setPan({
+        x:
+          panStart.current.panX +
+          dx,
+
+        y:
+          panStart.current.panY +
+          dy,
+      });
+    }
+
+    function handleUp() {
+      panStart.current = null;
+
+      window.removeEventListener(
+        "mousemove",
+        handleMove
       );
 
-    onCanvasClick(
-      position
+      window.removeEventListener(
+        "mouseup",
+        handleUp
+      );
+    }
+
+    window.addEventListener(
+      "mousemove",
+      handleMove
+    );
+
+    window.addEventListener(
+      "mouseup",
+      handleUp
     );
   }
 
   /*
-   * Node dragging
+   * =========================
+   * MOUSE WHEEL ZOOM
+   * =========================
+   */
+
+  function handleWheel(event) {
+    event.preventDefault();
+
+    const delta =
+      event.deltaY < 0
+        ? 0.1
+        : -0.1;
+
+    const nextZoom =
+      Math.min(
+        Math.max(
+          zoom + delta,
+          0.4
+        ),
+        2.5
+      );
+
+    onZoomChange(nextZoom);
+  }
+
+  /*
+   * =========================
+   * NODE DRAG
+   * =========================
    */
 
   function handleNodeMouseDown(
@@ -131,31 +234,20 @@ export default function MapCanvas({
   ) {
     event.stopPropagation();
 
-    /*
-     * Connect mode
-     */
-
     if (
       tool !== "select"
     ) {
-      onNodeClick(
-        node.id
-      );
-
+      onNodeClick(node.id);
       return;
     }
 
-    onNodeClick(
-      node.id
-    );
+    onNodeClick(node.id);
 
     onNodeDragStart?.(
       node.id
     );
 
-    function handleMove(
-      moveEvent
-    ) {
+    function handleMove(moveEvent) {
       const position =
         getMousePosition(
           moveEvent
@@ -201,14 +293,95 @@ export default function MapCanvas({
     );
   }
 
-  return (
-    <div className="map-canvas-wrapper">
+  /*
+   * =========================
+   * OBJECT DRAG
+   * =========================
+   */
 
+  function handleObjectMouseDown(
+    event,
+    type,
+    object
+  ) {
+    event.stopPropagation();
+
+    if (
+      tool !== "select"
+    ) {
+      return;
+    }
+
+    onObjectClick({
+      type,
+      id: object.id,
+    });
+
+    onObjectDragStart?.(
+      type,
+      object.id
+    );
+
+    function handleMove(moveEvent) {
+      const position =
+        getMousePosition(
+          moveEvent
+        );
+
+      const snapped =
+        snapToGrid(
+          position,
+          mapData.gridSpacing
+        );
+
+      onObjectMove(
+        type,
+        object.id,
+        snapped.x,
+        snapped.y
+      );
+    }
+
+    function handleUp() {
+      window.removeEventListener(
+        "mousemove",
+        handleMove
+      );
+
+      window.removeEventListener(
+        "mouseup",
+        handleUp
+      );
+
+      onObjectDragEnd?.(
+        type,
+        object.id
+      );
+    }
+
+    window.addEventListener(
+      "mousemove",
+      handleMove
+    );
+
+    window.addEventListener(
+      "mouseup",
+      handleUp
+    );
+  }
+
+  return (
+    <div
+      className="map-canvas-wrapper"
+      onWheel={handleWheel}
+    >
       <div
-        className="map-zoom-layer"
+        className="map-transform-layer"
         style={{
-          width:
-            `${zoom * 100}%`,
+          transform: `
+            translate(${pan.x}px, ${pan.y}px)
+            scale(${zoom})
+          `,
         }}
       >
         <svg
@@ -216,17 +389,16 @@ export default function MapCanvas({
 
           className={`map-editor-canvas tool-${tool}`}
 
-          viewBox={
-            `0 0 ${canvasWidth} ${canvasHeight}`
-          }
+          viewBox={`0 0 ${canvasWidth} ${canvasHeight}`}
 
           onClick={
-            handleCanvasClick
+            handleBackgroundClick
+          }
+
+          onMouseDown={
+            handleCanvasMouseDown
           }
         >
-
-          {/* BACKGROUND */}
-
           <rect
             x="0"
             y="0"
@@ -241,8 +413,6 @@ export default function MapCanvas({
 
             className="map-background"
           />
-
-          {/* GRID */}
 
           <Grid
             width={
@@ -271,9 +441,7 @@ export default function MapCanvas({
 
               return (
                 <g
-                  key={
-                    rack.id
-                  }
+                  key={rack.id}
 
                   className="map-object"
 
@@ -287,19 +455,15 @@ export default function MapCanvas({
                     )
                   `}
 
-                  onClick={(
+                  onMouseDown={(
                     event
-                  ) => {
-                    event.stopPropagation();
-
-                    onObjectClick({
-                      type:
-                        "rack",
-
-                      id:
-                        rack.id,
-                    });
-                  }}
+                  ) =>
+                    handleObjectMouseDown(
+                      event,
+                      "rack",
+                      rack
+                    )
+                  }
                 >
                   <rect
                     x={
@@ -328,13 +492,11 @@ export default function MapCanvas({
 
                     rx="5"
 
-                    className={
-                      `map-rack ${
-                        selected
-                          ? "selected"
-                          : ""
-                      }`
-                    }
+                    className={`map-rack ${
+                      selected
+                        ? "selected"
+                        : ""
+                    }`}
                   />
 
                   <text
@@ -364,9 +526,7 @@ export default function MapCanvas({
 
               return (
                 <g
-                  key={
-                    station.id
-                  }
+                  key={station.id}
 
                   className="map-object"
 
@@ -380,19 +540,15 @@ export default function MapCanvas({
                     )
                   `}
 
-                  onClick={(
+                  onMouseDown={(
                     event
-                  ) => {
-                    event.stopPropagation();
-
-                    onObjectClick({
-                      type:
-                        "station",
-
-                      id:
-                        station.id,
-                    });
-                  }}
+                  ) =>
+                    handleObjectMouseDown(
+                      event,
+                      "station",
+                      station
+                    )
+                  }
                 >
                   <rect
                     x={
@@ -450,7 +606,7 @@ export default function MapCanvas({
             }
           )}
 
-          {/* PATHS */}
+          {/* EDGES */}
 
           {mapData.edges.map(
             (edge) => {
@@ -493,9 +649,7 @@ export default function MapCanvas({
 
               return (
                 <g
-                  key={
-                    edge.id
-                  }
+                  key={edge.id}
                   className="map-edge-group"
                 >
                   <line
@@ -509,17 +663,12 @@ export default function MapCanvas({
 
                   <text
                     x={
-                      (
-                        x1 +
-                        x2
-                      ) / 2
+                      (x1 + x2) /
+                      2
                     }
 
                     y={
-                      (
-                        y1 +
-                        y2
-                      ) /
+                      (y1 + y2) /
                         2 -
                       8
                     }
@@ -528,12 +677,7 @@ export default function MapCanvas({
 
                     className="edge-distance"
                   >
-                    {
-                      edge.distance.toFixed(
-                        2
-                      )
-                    }{" "}
-                    m
+                    {edge.distance.toFixed(2)} m
                   </text>
                 </g>
               );
@@ -554,9 +698,7 @@ export default function MapCanvas({
 
               return (
                 <g
-                  key={
-                    node.id
-                  }
+                  key={node.id}
 
                   className="map-node-group"
 
@@ -624,17 +766,11 @@ export default function MapCanvas({
               );
             }
           )}
-
         </svg>
       </div>
     </div>
   );
 }
-
-
-/* =========================
-   GRID
-========================= */
 
 function Grid({
   width,
@@ -648,24 +784,20 @@ function Grid({
     return null;
   }
 
-  const vertical = [];
-  const horizontal = [];
+  const lines = [];
 
   for (
     let x = 0;
     x <= width;
     x += spacing
   ) {
-    vertical.push(
+    lines.push(
       <line
         key={`v-${x}`}
-
         x1={x}
         y1="0"
-
         x2={x}
         y2={height}
-
         className="grid-line"
       />
     );
@@ -676,16 +808,13 @@ function Grid({
     y <= height;
     y += spacing
   ) {
-    horizontal.push(
+    lines.push(
       <line
         key={`h-${y}`}
-
         x1="0"
         y1={y}
-
         x2={width}
         y2={y}
-
         className="grid-line"
       />
     );
@@ -693,12 +822,10 @@ function Grid({
 
   return (
     <g className="grid-layer">
-      {vertical}
-      {horizontal}
+      {lines}
     </g>
   );
 }
-
 
 function snapToGrid(
   position,
@@ -715,14 +842,14 @@ function snapToGrid(
     x:
       Math.round(
         position.x /
-        spacing
+          spacing
       ) *
       spacing,
 
     y:
       Math.round(
         position.y /
-        spacing
+          spacing
       ) *
       spacing,
   };

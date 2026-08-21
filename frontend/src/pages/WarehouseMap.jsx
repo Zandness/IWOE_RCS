@@ -1,8 +1,12 @@
-import { useState } from "react";
+import {
+  useRef,
+  useState,
+} from "react";
 
 import {
   Map,
   Info,
+  CheckCircle2,
 } from "lucide-react";
 
 import MapToolbar
@@ -17,64 +21,124 @@ import MapProperties
 import MapObjectProperties
   from "../components/map/MapObjectProperties";
 
+import MapObjectTree
+  from "../components/map/MapObjectTree";
+
 import {
   INITIAL_MAP,
 } from "../data/mockWarehouseMap";
 
 import "../map-editor.css";
 
+
+const STORAGE_KEY =
+  "wms-warehouse-map";
+
+
 export default function WarehouseMap() {
   /*
-   * ==========================
-   * MAP STATE
-   * ==========================
+   * ================================
+   * INITIAL MAP
+   * ================================
    */
 
   const [
     mapData,
     setMapData,
-  ] = useState(() =>
-    structuredClone(
+  ] = useState(() => {
+    try {
+      const saved =
+        localStorage.getItem(
+          STORAGE_KEY
+        );
+
+      if (saved) {
+        return JSON.parse(
+          saved
+        );
+      }
+    } catch (error) {
+      console.warn(
+        "Could not load saved map.",
+        error
+      );
+    }
+
+    return structuredClone(
       INITIAL_MAP
-    )
-  );
+    );
+  });
+
+
+  /*
+   * ================================
+   * EDITOR STATE
+   * ================================
+   */
 
   const [
     tool,
     setTool,
   ] = useState("select");
 
-  /*
-   * Selected topology node
-   */
-
   const [
     selectedNodeId,
     setSelectedNodeId,
   ] = useState(null);
-
-  /*
-   * Rack or station selection
-   */
 
   const [
     selectedObject,
     setSelectedObject,
   ] = useState(null);
 
-  /*
-   * First node when connecting
-   */
-
   const [
     connectionStart,
     setConnectionStart,
   ] = useState(null);
 
+  const [
+    zoom,
+    setZoom,
+  ] = useState(1);
+
+  const [
+    expanded,
+    setExpanded,
+  ] = useState(false);
+
+  const [
+    saveStatus,
+    setSaveStatus,
+  ] = useState("");
+
+
   /*
-   * ==========================
-   * DERIVED DATA
-   * ==========================
+   * ================================
+   * UNDO / REDO
+   * ================================
+   */
+
+  const [
+    undoStack,
+    setUndoStack,
+  ] = useState([]);
+
+  const [
+    redoStack,
+    setRedoStack,
+  ] = useState([]);
+
+  const dragStartSnapshot =
+    useRef(null);
+
+  const objectDragStartSnapshot =
+    useRef(null);
+
+
+  /*
+   * ================================
+   * SELECTED DATA
+   * ================================
    */
 
   const selectedNode =
@@ -90,49 +154,209 @@ export default function WarehouseMap() {
       selectedObject
     );
 
+
   /*
-   * ==========================
+   * ================================
+   * HISTORY
+   * ================================
+   */
+
+  function commitMap(updater) {
+    setMapData((current) => {
+      const next =
+        typeof updater ===
+        "function"
+          ? updater(
+              structuredClone(
+                current
+              )
+            )
+          : updater;
+
+      setUndoStack(
+        (history) => [
+          ...history.slice(-49),
+          structuredClone(
+            current
+          ),
+        ]
+      );
+
+      setRedoStack([]);
+
+      setSaveStatus(
+        "Unsaved changes"
+      );
+
+      return next;
+    });
+  }
+
+
+  function handleUndo() {
+    if (
+      undoStack.length === 0
+    ) {
+      return;
+    }
+
+    const previous =
+      undoStack[
+        undoStack.length - 1
+      ];
+
+    setRedoStack(
+      (current) => [
+        ...current,
+        structuredClone(
+          mapData
+        ),
+      ]
+    );
+
+    setUndoStack(
+      (current) =>
+        current.slice(0, -1)
+    );
+
+    setMapData(
+      structuredClone(
+        previous
+      )
+    );
+
+    clearSelection();
+
+    setSaveStatus(
+      "Unsaved changes"
+    );
+  }
+
+
+  function handleRedo() {
+    if (
+      redoStack.length === 0
+    ) {
+      return;
+    }
+
+    const next =
+      redoStack[
+        redoStack.length - 1
+      ];
+
+    setUndoStack(
+      (current) => [
+        ...current,
+        structuredClone(
+          mapData
+        ),
+      ]
+    );
+
+    setRedoStack(
+      (current) =>
+        current.slice(0, -1)
+    );
+
+    setMapData(
+      structuredClone(next)
+    );
+
+    clearSelection();
+
+    setSaveStatus(
+      "Unsaved changes"
+    );
+  }
+
+
+  /*
+   * ================================
+   * SAVE
+   * ================================
+   */
+
+  function handleSave() {
+    try {
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify(
+          mapData
+        )
+      );
+
+      setSaveStatus("Saved");
+    } catch (error) {
+      console.error(
+        "Save error:",
+        error
+      );
+
+      setSaveStatus(
+        "Save failed"
+      );
+    }
+  }
+
+
+  /*
+   * ================================
+   * ZOOM
+   * ================================
+   */
+
+  function zoomIn() {
+    setZoom((current) =>
+      Math.min(
+        current + 0.1,
+        2.5
+      )
+    );
+  }
+
+
+  function zoomOut() {
+    setZoom((current) =>
+      Math.max(
+        current - 0.1,
+        0.4
+      )
+    );
+  }
+
+
+  function fitMap() {
+    setZoom(1);
+  }
+
+
+  /*
+   * ================================
    * CANVAS CLICK
-   * ==========================
+   * ================================
    */
 
   function handleCanvasClick(
     position
   ) {
-    /*
-     * Add topology node
-     */
-
     if (tool === "node") {
       addNode(position);
       return;
     }
-
-    /*
-     * Add Rack
-     */
 
     if (tool === "rack") {
       addRack(position);
       return;
     }
 
-    /*
-     * Add Dock
-     */
-
     if (tool === "dock") {
       addStation(
         position,
         "DOCK"
       );
-
       return;
     }
-
-    /*
-     * Add Charging Station
-     */
 
     if (
       tool === "charging"
@@ -141,29 +365,19 @@ export default function WarehouseMap() {
         position,
         "CHARGING"
       );
-
       return;
     }
 
-    /*
-     * Clear selection
-     */
-
     if (tool === "select") {
-      setSelectedNodeId(
-        null
-      );
-
-      setSelectedObject(
-        null
-      );
+      clearSelection();
     }
   }
 
+
   /*
-   * ==========================
+   * ================================
    * ADD NODE
-   * ==========================
+   * ================================
    */
 
   function addNode({
@@ -171,8 +385,7 @@ export default function WarehouseMap() {
     y,
   }) {
     const spacing =
-      mapData.gridSpacing ||
-      1;
+      mapData.gridSpacing || 1;
 
     const position =
       snapPosition(
@@ -212,7 +425,7 @@ export default function WarehouseMap() {
       ),
     };
 
-    setMapData(
+    commitMap(
       (previous) => ({
         ...previous,
 
@@ -224,16 +437,15 @@ export default function WarehouseMap() {
     );
 
     setSelectedNodeId(id);
-
     setSelectedObject(null);
-
     setTool("select");
   }
 
+
   /*
-   * ==========================
+   * ================================
    * ADD RACK
-   * ==========================
+   * ================================
    */
 
   function addRack({
@@ -244,8 +456,7 @@ export default function WarehouseMap() {
       snapPosition(
         x,
         y,
-        mapData.gridSpacing ||
-          1
+        mapData.gridSpacing || 1
       );
 
     const id =
@@ -258,10 +469,10 @@ export default function WarehouseMap() {
     const newRack = {
       id,
 
-      name: `Rack ${
-        mapData.racks.length +
-        1
-      }`,
+      name:
+        `Rack ${
+          mapData.racks.length + 1
+        }`,
 
       x: clamp(
         position.x,
@@ -286,7 +497,7 @@ export default function WarehouseMap() {
       slotsPerLevel: 6,
     };
 
-    setMapData(
+    commitMap(
       (previous) => ({
         ...previous,
 
@@ -297,9 +508,7 @@ export default function WarehouseMap() {
       })
     );
 
-    setSelectedNodeId(
-      null
-    );
+    setSelectedNodeId(null);
 
     setSelectedObject({
       type: "rack",
@@ -309,10 +518,11 @@ export default function WarehouseMap() {
     setTool("select");
   }
 
+
   /*
-   * ==========================
+   * ================================
    * ADD STATION
-   * ==========================
+   * ================================
    */
 
   function addStation(
@@ -323,8 +533,7 @@ export default function WarehouseMap() {
       snapPosition(
         position.x,
         position.y,
-        mapData.gridSpacing ||
-          1
+        mapData.gridSpacing || 1
       );
 
     const prefix =
@@ -332,23 +541,21 @@ export default function WarehouseMap() {
         ? "DOCK-"
         : "CHARGE-";
 
+    const sameType =
+      mapData.stations.filter(
+        (station) =>
+          station.type === type
+      );
+
     const id =
       getNextId(
-        mapData.stations.filter(
-          (station) =>
-            station.type ===
-            type
-        ),
+        sameType,
         prefix,
         2
       );
 
     const count =
-      mapData.stations.filter(
-        (station) =>
-          station.type ===
-          type
-      ).length + 1;
+      sameType.length + 1;
 
     const station = {
       id,
@@ -382,7 +589,7 @@ export default function WarehouseMap() {
       rotation: 0,
     };
 
-    setMapData(
+    commitMap(
       (previous) => ({
         ...previous,
 
@@ -393,9 +600,7 @@ export default function WarehouseMap() {
       })
     );
 
-    setSelectedNodeId(
-      null
-    );
+    setSelectedNodeId(null);
 
     setSelectedObject({
       type: "station",
@@ -405,29 +610,20 @@ export default function WarehouseMap() {
     setTool("select");
   }
 
+
   /*
-   * ==========================
+   * ================================
    * NODE CLICK
-   * ==========================
+   * ================================
    */
 
   function handleNodeClick(
     nodeId
   ) {
-    /*
-     * Path creation
-     */
-
     if (
       tool === "connect"
     ) {
-      /*
-       * First Node
-       */
-
-      if (
-        !connectionStart
-      ) {
+      if (!connectionStart) {
         setConnectionStart(
           nodeId
         );
@@ -435,55 +631,39 @@ export default function WarehouseMap() {
         return;
       }
 
-      /*
-       * Cancel same Node
-       */
-
       if (
         connectionStart ===
         nodeId
       ) {
-        setConnectionStart(
-          null
-        );
-
+        setConnectionStart(null);
         return;
       }
-
-      /*
-       * Create connection
-       */
 
       createConnection(
         connectionStart,
         nodeId
       );
 
-      setConnectionStart(
-        null
-      );
+      setConnectionStart(null);
 
       return;
     }
 
     setSelectedObject(null);
-
-    setSelectedNodeId(
-      nodeId
-    );
+    setSelectedNodeId(nodeId);
   }
 
+
   /*
-   * ==========================
+   * ================================
    * OBJECT CLICK
-   * ==========================
+   * ================================
    */
 
   function handleObjectClick(
     object
   ) {
     setSelectedNodeId(null);
-
     setConnectionStart(null);
 
     setSelectedObject(
@@ -493,10 +673,11 @@ export default function WarehouseMap() {
     setTool("select");
   }
 
+
   /*
-   * ==========================
+   * ================================
    * CREATE PATH
-   * ==========================
+   * ================================
    */
 
   function createConnection(
@@ -506,14 +687,14 @@ export default function WarehouseMap() {
     const alreadyExists =
       mapData.edges.some(
         (edge) =>
-          (edge.from ===
-            fromId &&
-            edge.to ===
-              toId) ||
-          (edge.from ===
-            toId &&
-            edge.to ===
-              fromId)
+          (
+            edge.from === fromId &&
+            edge.to === toId
+          ) ||
+          (
+            edge.from === toId &&
+            edge.to === fromId
+          )
       );
 
     if (alreadyExists) {
@@ -523,15 +704,13 @@ export default function WarehouseMap() {
     const from =
       mapData.nodes.find(
         (node) =>
-          node.id ===
-          fromId
+          node.id === fromId
       );
 
     const to =
       mapData.nodes.find(
         (node) =>
-          node.id ===
-          toId
+          node.id === toId
       );
 
     if (!from || !to) {
@@ -561,7 +740,7 @@ export default function WarehouseMap() {
       bidirectional: true,
     };
 
-    setMapData(
+    commitMap(
       (previous) => ({
         ...previous,
 
@@ -573,11 +752,20 @@ export default function WarehouseMap() {
     );
   }
 
+
   /*
-   * ==========================
-   * DRAG NODE
-   * ==========================
+   * ================================
+   * NODE DRAG
+   * ================================
    */
+
+  function handleNodeDragStart() {
+    dragStartSnapshot.current =
+      structuredClone(
+        mapData
+      );
+  }
+
 
   function handleNodeMove(
     nodeId,
@@ -589,8 +777,7 @@ export default function WarehouseMap() {
         const nodes =
           previous.nodes.map(
             (node) =>
-              node.id ===
-              nodeId
+              node.id === nodeId
                 ? {
                     ...node,
 
@@ -622,25 +809,163 @@ export default function WarehouseMap() {
         };
       }
     );
+
+    setSaveStatus(
+      "Unsaved changes"
+    );
   }
 
+
+  function handleNodeDragEnd() {
+    if (
+      !dragStartSnapshot.current
+    ) {
+      return;
+    }
+
+    setUndoStack(
+      (history) => [
+        ...history.slice(-49),
+        dragStartSnapshot.current,
+      ]
+    );
+
+    setRedoStack([]);
+
+    dragStartSnapshot.current =
+      null;
+  }
+
+
   /*
-   * ==========================
+   * ================================
+   * OBJECT DRAG
+   * ================================
+   */
+
+  function handleObjectDragStart() {
+    objectDragStartSnapshot.current =
+      structuredClone(
+        mapData
+      );
+  }
+
+
+  function handleObjectMove(
+    type,
+    objectId,
+    x,
+    y
+  ) {
+    setMapData(
+      (previous) => {
+        if (
+          type === "rack"
+        ) {
+          return {
+            ...previous,
+
+            racks:
+              previous.racks.map(
+                (rack) =>
+                  rack.id === objectId
+                    ? {
+                        ...rack,
+
+                        x: clamp(
+                          x,
+                          0,
+                          previous.width
+                        ),
+
+                        y: clamp(
+                          y,
+                          0,
+                          previous.height
+                        ),
+                      }
+                    : rack
+              ),
+          };
+        }
+
+        if (
+          type === "station"
+        ) {
+          return {
+            ...previous,
+
+            stations:
+              previous.stations.map(
+                (station) =>
+                  station.id === objectId
+                    ? {
+                        ...station,
+
+                        x: clamp(
+                          x,
+                          0,
+                          previous.width
+                        ),
+
+                        y: clamp(
+                          y,
+                          0,
+                          previous.height
+                        ),
+                      }
+                    : station
+              ),
+          };
+        }
+
+        return previous;
+      }
+    );
+
+    setSaveStatus(
+      "Unsaved changes"
+    );
+  }
+
+
+  function handleObjectDragEnd() {
+    if (
+      !objectDragStartSnapshot.current
+    ) {
+      return;
+    }
+
+    setUndoStack(
+      (history) => [
+        ...history.slice(-49),
+
+        objectDragStartSnapshot.current,
+      ]
+    );
+
+    setRedoStack([]);
+
+    objectDragStartSnapshot.current =
+      null;
+  }
+
+
+  /*
+   * ================================
    * NODE PROPERTY CHANGE
-   * ==========================
+   * ================================
    */
 
   function handleNodeChange(
     field,
     value
   ) {
-    if (
-      !selectedNodeId
-    ) {
+    if (!selectedNodeId) {
       return;
     }
 
-    setMapData(
+    commitMap(
       (previous) => {
         const nodes =
           previous.nodes.map(
@@ -701,19 +1026,18 @@ export default function WarehouseMap() {
     );
   }
 
+
   /*
-   * ==========================
+   * ================================
    * OBJECT PROPERTY CHANGE
-   * ==========================
+   * ================================
    */
 
   function handleObjectChange(
     field,
     value
   ) {
-    if (
-      !selectedObject
-    ) {
+    if (!selectedObject) {
       return;
     }
 
@@ -721,7 +1045,7 @@ export default function WarehouseMap() {
       selectedObject.type ===
       "rack"
     ) {
-      setMapData(
+      commitMap(
         (previous) => ({
           ...previous,
 
@@ -752,7 +1076,7 @@ export default function WarehouseMap() {
       selectedObject.type ===
       "station"
     ) {
-      setMapData(
+      commitMap(
         (previous) => ({
           ...previous,
 
@@ -778,10 +1102,11 @@ export default function WarehouseMap() {
     }
   }
 
+
   /*
-   * ==========================
+   * ================================
    * MAP PROPERTY CHANGE
-   * ==========================
+   * ================================
    */
 
   function handleMapChange(
@@ -789,57 +1114,41 @@ export default function WarehouseMap() {
     value
   ) {
     if (
-      field === "width" ||
-      field === "height"
-    ) {
-      if (
+      (
+        field === "width" ||
+        field === "height" ||
+        field === "gridSpacing"
+      ) &&
+      (
         !Number.isFinite(
           value
         ) ||
         value <= 0
-      ) {
-        return;
-      }
-    }
-
-    if (
-      field ===
-      "gridSpacing"
+      )
     ) {
-      if (
-        !Number.isFinite(
-          value
-        ) ||
-        value <= 0
-      ) {
-        return;
-      }
+      return;
     }
 
-    setMapData(
+    commitMap(
       (previous) => ({
         ...previous,
 
-        [field]: value,
+        [field]:
+          value,
       })
     );
   }
 
+
   /*
-   * ==========================
+   * ================================
    * DELETE
-   * ==========================
+   * ================================
    */
 
   function handleDelete() {
-    /*
-     * Delete selected node
-     */
-
-    if (
-      selectedNodeId
-    ) {
-      setMapData(
+    if (selectedNodeId) {
+      commitMap(
         (previous) => ({
           ...previous,
 
@@ -861,26 +1170,15 @@ export default function WarehouseMap() {
         })
       );
 
-      setSelectedNodeId(
-        null
-      );
-
-      setConnectionStart(
-        null
-      );
-
+      clearSelection();
       return;
     }
-
-    /*
-     * Delete rack
-     */
 
     if (
       selectedObject?.type ===
       "rack"
     ) {
-      setMapData(
+      commitMap(
         (previous) => ({
           ...previous,
 
@@ -893,22 +1191,15 @@ export default function WarehouseMap() {
         })
       );
 
-      setSelectedObject(
-        null
-      );
-
+      clearSelection();
       return;
     }
-
-    /*
-     * Delete station
-     */
 
     if (
       selectedObject?.type ===
       "station"
     ) {
-      setMapData(
+      commitMap(
         (previous) => ({
           ...previous,
 
@@ -921,16 +1212,15 @@ export default function WarehouseMap() {
         })
       );
 
-      setSelectedObject(
-        null
-      );
+      clearSelection();
     }
   }
 
+
   /*
-   * ==========================
-   * EXPORT JSON
-   * ==========================
+   * ================================
+   * EXPORT
+   * ================================
    */
 
   function handleExport() {
@@ -980,44 +1270,54 @@ export default function WarehouseMap() {
     );
   }
 
+
   /*
-   * ==========================
+   * ================================
    * RESET
-   * ==========================
+   * ================================
    */
 
   function handleReset() {
-    setMapData(
+    commitMap(
       structuredClone(
         INITIAL_MAP
       )
     );
 
+    clearSelection();
+
     setTool("select");
-
-    setSelectedNodeId(
-      null
-    );
-
-    setSelectedObject(
-      null
-    );
-
-    setConnectionStart(
-      null
-    );
+    setZoom(1);
   }
 
+
   /*
-   * ==========================
+   * ================================
+   * SELECTION
+   * ================================
+   */
+
+  function clearSelection() {
+    setSelectedNodeId(null);
+    setSelectedObject(null);
+    setConnectionStart(null);
+  }
+
+
+  /*
+   * ================================
    * UI
-   * ==========================
+   * ================================
    */
 
   return (
-    <div className="page">
-      {/* HEADER */}
-
+    <div
+      className={
+        expanded
+          ? "page map-page-expanded"
+          : "page"
+      }
+    >
       <div className="page-header">
         <div>
           <span className="page-label">
@@ -1029,54 +1329,171 @@ export default function WarehouseMap() {
           </h2>
 
           <p>
-            Create warehouse
-            topology, racks,
-            stations and travel
-            paths.
+            Create warehouse topology,
+            racks, stations and travel paths.
           </p>
         </div>
 
-        <div className="map-editor-info">
-          <Map size={16} />
+        <div className="map-header-right">
+          {saveStatus && (
+            <div
+              className={
+                saveStatus === "Saved"
+                  ? "map-save-status saved"
+                  : "map-save-status"
+              }
+            >
+              {saveStatus ===
+                "Saved" && (
+                <CheckCircle2
+                  size={14}
+                />
+              )}
 
-          <span>
-            {mapData.width}
-            {" × "}
-            {mapData.height}
-            {" "}
-            {mapData.unit}
-          </span>
+              {saveStatus}
+            </div>
+          )}
+
+          <div className="map-editor-info">
+            <Map size={16} />
+
+            <span>
+              {mapData.width}
+              {" × "}
+              {mapData.height}
+              {" "}
+              {mapData.unit}
+            </span>
+          </div>
         </div>
       </div>
 
-      {/* TOOLBAR */}
 
       <MapToolbar
         tool={tool}
+
         setTool={(nextTool) => {
-          setTool(
-            nextTool
-          );
+          setTool(nextTool);
 
           setConnectionStart(
             null
           );
         }}
+
         onDelete={
           handleDelete
         }
+
         onExport={
           handleExport
         }
+
         onReset={
           handleReset
         }
+
+        onSave={
+          handleSave
+        }
+
+        onUndo={
+          handleUndo
+        }
+
+        onRedo={
+          handleRedo
+        }
+
+        canUndo={
+          undoStack.length > 0
+        }
+
+        canRedo={
+          redoStack.length > 0
+        }
+
+        zoom={zoom}
+
+        onZoomIn={
+          zoomIn
+        }
+
+        onZoomOut={
+          zoomOut
+        }
+
+        onFit={
+          fitMap
+        }
+
+        expanded={
+          expanded
+        }
+
+        onToggleExpand={() =>
+          setExpanded(
+            (current) =>
+              !current
+          )
+        }
       />
 
-      {/* EDITOR */}
 
-      <div className="map-editor-layout">
-        {/* CANVAS */}
+      <div
+        className={
+          expanded
+            ? "map-editor-layout-v4 expanded"
+            : "map-editor-layout-v4"
+        }
+      >
+        {!expanded && (
+          <MapObjectTree
+            mapData={
+              mapData
+            }
+
+            selectedNodeId={
+              selectedNodeId
+            }
+
+            selectedObject={
+              selectedObject
+            }
+
+            onSelectNode={(
+              nodeId
+            ) => {
+              setSelectedObject(
+                null
+              );
+
+              setSelectedNodeId(
+                nodeId
+              );
+
+              setTool(
+                "select"
+              );
+            }}
+
+            onSelectObject={(
+              object
+            ) => {
+              setSelectedNodeId(
+                null
+              );
+
+              setSelectedObject(
+                object
+              );
+
+              setTool(
+                "select"
+              );
+            }}
+          />
+        )}
+
 
         <section className="panel map-main-panel">
           <div className="panel-header">
@@ -1085,143 +1502,182 @@ export default function WarehouseMap() {
             </h3>
 
             <span>
-              {
-                mapData.nodes
-                  .length
-              }{" "}
-              nodes
-              {" • "}
-              {
-                mapData.edges
-                  .length
-              }{" "}
-              paths
-              {" • "}
-              {
-                mapData.racks
-                  .length
-              }{" "}
-              racks
+              {mapData.nodes.length}
+              {" nodes • "}
+
+              {mapData.edges.length}
+              {" paths • "}
+
+              {mapData.racks.length}
+              {" racks • "}
+
+              {mapData.stations.length}
+              {" stations"}
             </span>
           </div>
 
-          {/* INFORMATION */}
 
           {tool ===
             "connect" && (
             <EditorMessage>
               {connectionStart
-                ? `Start node ${connectionStart} selected. Select destination node.`
+                ? `Start: ${connectionStart}. Select destination node.`
                 : "Select the first node to create a path."}
             </EditorMessage>
           )}
 
+
           {tool ===
             "node" && (
             <EditorMessage>
-              Click on the grid
-              to create a topology
-              node.
+              Click on the map to
+              create a node.
             </EditorMessage>
           )}
+
 
           {tool ===
             "rack" && (
             <EditorMessage>
-              Click on the grid
-              to place a new rack.
+              Click on the map to
+              place a rack.
             </EditorMessage>
           )}
+
 
           {tool ===
             "dock" && (
             <EditorMessage>
-              Click on the grid
-              to place a dock.
+              Click on the map to
+              place a dock.
             </EditorMessage>
           )}
+
 
           {tool ===
             "charging" && (
             <EditorMessage>
-              Click on the grid
-              to place a charging
-              station.
+              Click on the map to
+              place a charging station.
             </EditorMessage>
           )}
 
-          {/* MAP */}
 
           <MapCanvas
             mapData={
               mapData
             }
-            tool={tool}
+
+            tool={
+              tool
+            }
+
+            zoom={
+              zoom
+            }
+
+            onZoomChange={
+              setZoom
+            }
+
             selectedNodeId={
               selectedNodeId
             }
+
             selectedObject={
               selectedObject
             }
+
             connectionStart={
               connectionStart
             }
+
             onCanvasClick={
               handleCanvasClick
             }
+
             onNodeClick={
               handleNodeClick
             }
+
             onNodeMove={
               handleNodeMove
             }
+
+            onNodeDragStart={
+              handleNodeDragStart
+            }
+
+            onNodeDragEnd={
+              handleNodeDragEnd
+            }
+
             onObjectClick={
               handleObjectClick
+            }
+
+            onObjectMove={
+              handleObjectMove
+            }
+
+            onObjectDragStart={
+              handleObjectDragStart
+            }
+
+            onObjectDragEnd={
+              handleObjectDragEnd
             }
           />
         </section>
 
-        {/* PROPERTIES */}
 
-        <aside className="panel map-properties">
-          {selectedMapObject ? (
-            <MapObjectProperties
-              object={
-                selectedMapObject
-              }
-              objectType={
-                selectedObject.type
-              }
-              onChange={
-                handleObjectChange
-              }
-            />
-          ) : (
-            <MapProperties
-              mapData={
-                mapData
-              }
-              selectedNode={
-                selectedNode
-              }
-              onMapChange={
-                handleMapChange
-              }
-              onNodeChange={
-                handleNodeChange
-              }
-            />
-          )}
-        </aside>
+        {!expanded && (
+          <aside className="panel map-properties">
+            {selectedMapObject ? (
+              <MapObjectProperties
+                object={
+                  selectedMapObject
+                }
+
+                objectType={
+                  selectedObject.type
+                }
+
+                onChange={
+                  handleObjectChange
+                }
+              />
+            ) : (
+              <MapProperties
+                mapData={
+                  mapData
+                }
+
+                selectedNode={
+                  selectedNode
+                }
+
+                onMapChange={
+                  handleMapChange
+                }
+
+                onNodeChange={
+                  handleNodeChange
+                }
+              />
+            )}
+          </aside>
+        )}
       </div>
     </div>
   );
 }
 
+
 /*
- * ==========================================
- * SMALL COMPONENTS
- * ==========================================
+ * ================================
+ * MESSAGE
+ * ================================
  */
 
 function EditorMessage({
@@ -1231,36 +1687,38 @@ function EditorMessage({
     <div className="map-editor-message">
       <Info size={15} />
 
-      <span>{children}</span>
+      <span>
+        {children}
+      </span>
     </div>
   );
 }
 
+
 /*
- * ==========================================
+ * ================================
  * HELPERS
- * ==========================================
+ * ================================
  */
 
 function calculateDistance(
-  pointA,
-  pointB
+  a,
+  b
 ) {
   const dx =
-    pointB.x -
-    pointA.x;
+    b.x - a.x;
 
   const dy =
-    pointB.y -
-    pointA.y;
+    b.y - a.y;
 
   return Number(
     Math.sqrt(
       dx * dx +
-        dy * dy
+      dy * dy
     ).toFixed(2)
   );
 }
+
 
 function recalculateEdges(
   edges,
@@ -1305,6 +1763,7 @@ function recalculateEdges(
   );
 }
 
+
 function getSelectedMapObject(
   mapData,
   selection
@@ -1342,6 +1801,7 @@ function getSelectedMapObject(
   return null;
 }
 
+
 function snapPosition(
   x,
   y,
@@ -1361,39 +1821,43 @@ function snapPosition(
     x:
       Math.round(
         x / spacing
-      ) * spacing,
+      ) *
+      spacing,
 
     y:
       Math.round(
         y / spacing
-      ) * spacing,
+      ) *
+      spacing,
   };
 }
 
+
 function clamp(
   value,
-  minimum,
-  maximum
+  min,
+  max
 ) {
-  const numeric =
+  const number =
     Number(value);
 
   if (
     !Number.isFinite(
-      numeric
+      number
     )
   ) {
-    return minimum;
+    return min;
   }
 
   return Math.min(
     Math.max(
-      numeric,
-      minimum
+      number,
+      min
     ),
-    maximum
+    max
   );
 }
+
 
 function normalizeObjectValue(
   field,
@@ -1442,11 +1906,14 @@ function normalizeObjectValue(
   if (
     field === "rotation"
   ) {
-    return Number(value) || 0;
+    return (
+      Number(value) || 0
+    );
   }
 
   return value;
 }
+
 
 function getNextId(
   items,
@@ -1455,7 +1922,9 @@ function getNextId(
 ) {
   let highest = 0;
 
-  for (const item of items) {
+  for (
+    const item of items
+  ) {
     if (
       !item.id.startsWith(
         prefix
@@ -1493,6 +1962,7 @@ function getNextId(
   )}`;
 }
 
+
 function sanitizeFilename(
   name
 ) {
@@ -1503,7 +1973,10 @@ function sanitizeFilename(
         /[^a-zA-Z0-9-_ ]/g,
         ""
       )
-      .replace(/\s+/g, "_") ||
+      .replace(
+        /\s+/g,
+        "_"
+      ) ||
     "warehouse-map"
   );
 }

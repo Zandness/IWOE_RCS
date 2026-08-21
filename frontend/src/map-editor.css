@@ -894,3 +894,342 @@
     flex-wrap: wrap;
   }
 }
+
+/* =====================================================
+   MAP EDITOR V4 - LAYOUT FIX
+===================================================== */
+
+.map-editor-layout-v4 {
+  width: 100%;
+
+  display: grid !important;
+
+  grid-template-columns:
+    220px
+    minmax(500px, 1fr)
+    280px !important;
+
+  align-items: start;
+
+  gap: 14px;
+
+  margin-top: 14px;
+}
+
+
+/* =====================================================
+   LEFT OBJECT TREE
+===================================================== */
+
+.map-object-tree {
+  width: 100%;
+  min-width: 0;
+
+  max-height: 720px;
+
+  overflow-y: auto;
+
+  padding: 14px;
+}
+
+
+.map-object-tree .panel-header {
+  display: flex;
+
+  align-items: center;
+  justify-content: space-between;
+
+  margin-bottom: 12px;
+}
+
+
+/* =====================================================
+   TREE SECTION
+===================================================== */
+
+.tree-section {
+  width: 100%;
+
+  margin-bottom: 14px;
+}
+
+
+.tree-section-header {
+  display: flex;
+
+  align-items: center;
+  justify-content: space-between;
+
+  width: 100%;
+
+  padding: 6px 4px;
+
+  color: #94a3b8;
+}
+
+
+.tree-section-header > div {
+  display: flex;
+
+  align-items: center;
+
+  gap: 6px;
+}
+
+
+.tree-section-header strong {
+  font-size: 11px;
+}
+
+
+.tree-section-header > span {
+  font-size: 10px;
+
+  color: #64748b;
+}
+
+
+.tree-section-content {
+  display: flex;
+
+  flex-direction: column;
+
+  gap: 4px;
+
+  width: 100%;
+}
+
+
+/* =====================================================
+   TREE ITEM
+===================================================== */
+
+.tree-item {
+  width: 100%;
+
+  display: flex;
+
+  align-items: center;
+
+  gap: 8px;
+
+  padding: 8px 9px;
+
+  border: 1px solid transparent;
+
+  border-radius: 6px;
+
+  background: transparent;
+
+  color: #94a3b8;
+
+  text-align: left;
+
+  cursor: pointer;
+}
+
+
+.tree-item:hover {
+  background: #102135;
+
+  border-color: #1e3a52;
+}
+
+
+.tree-item.active {
+  background: #083344;
+
+  border-color: #22d3ee;
+
+  color: #67e8f9;
+}
+
+
+.tree-item svg {
+  flex-shrink: 0;
+}
+
+
+.tree-item > div {
+  display: flex;
+
+  flex-direction: column;
+
+  min-width: 0;
+}
+
+
+.tree-item strong {
+  display: block;
+
+  font-size: 10px;
+
+  color: inherit;
+}
+
+
+.tree-item span {
+  display: block;
+
+  margin-top: 2px;
+
+  overflow: hidden;
+
+  text-overflow: ellipsis;
+
+  white-space: nowrap;
+
+  font-size: 9px;
+
+  color: #64748b;
+}
+
+
+/* =====================================================
+   CENTER MAP
+===================================================== */
+
+.map-main-panel {
+  width: 100%;
+
+  min-width: 0;
+
+  overflow: hidden;
+}
+
+
+.map-main-panel .panel-header {
+  display: flex;
+
+  align-items: center;
+
+  justify-content: space-between;
+}
+
+
+/* =====================================================
+   RIGHT PROPERTIES
+===================================================== */
+
+.map-properties {
+  width: 100%;
+
+  min-width: 0;
+
+  align-self: start;
+}
+
+
+/* =====================================================
+   CANVAS
+===================================================== */
+
+.map-canvas-wrapper {
+  position: relative;
+
+  width: 100%;
+
+  min-width: 0;
+
+  height: 620px;
+
+  overflow: hidden;
+
+  background: #030a12;
+
+  border-radius: 8px;
+}
+
+
+.map-transform-layer {
+  width: 100%;
+
+  transform-origin: 0 0;
+}
+
+
+.map-editor-canvas {
+  display: block;
+
+  width: 100%;
+
+  height: 620px;
+
+  user-select: none;
+}
+
+
+/* =====================================================
+   EXPANDED MODE
+===================================================== */
+
+.map-editor-layout-v4.expanded {
+  display: grid !important;
+
+  grid-template-columns: 1fr !important;
+}
+
+
+.map-editor-layout-v4.expanded
+.map-main-panel {
+  width: 100%;
+}
+
+
+.map-editor-layout-v4.expanded
+.map-canvas-wrapper {
+  height: 78vh;
+}
+
+
+.map-editor-layout-v4.expanded
+.map-editor-canvas {
+  height: 78vh;
+}
+
+
+/* =====================================================
+   RESPONSIVE
+===================================================== */
+
+@media (max-width: 1300px) {
+
+  .map-editor-layout-v4 {
+    grid-template-columns:
+      190px
+      minmax(450px, 1fr)
+      250px !important;
+  }
+
+}
+
+
+@media (max-width: 1050px) {
+
+  .map-editor-layout-v4 {
+    grid-template-columns:
+      minmax(0, 1fr)
+      260px !important;
+  }
+
+
+  .map-object-tree {
+    display: none;
+  }
+
+}
+
+
+@media (max-width: 800px) {
+
+  .map-editor-layout-v4 {
+    grid-template-columns:
+      1fr !important;
+  }
+
+
+  .map-properties {
+    width: 100%;
+  }
+
+}
