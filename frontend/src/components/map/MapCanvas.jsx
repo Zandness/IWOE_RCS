@@ -1,4 +1,5 @@
 import {
+  useEffect,
   useRef,
   useState,
 } from "react";
@@ -15,6 +16,12 @@ const AUTO_PAN_SPEED = 12;
  * ถึงจะเริ่ม Drag
  */
 const DRAG_THRESHOLD = 6;
+
+
+/*
+ * Padding ตอน Fit Map
+ */
+const FIT_PADDING = 70;
 
 
 export default function MapCanvas({
@@ -36,6 +43,13 @@ export default function MapCanvas({
   zoom,
   onZoomChange,
 
+  /*
+   * V10
+   * WarehouseMap.jsx จะเพิ่มค่านี้
+   * ทุกครั้งที่กด Fit
+   */
+  fitRequest,
+
   onCanvasClick,
 
   onNodeClick,
@@ -55,14 +69,17 @@ export default function MapCanvas({
   const viewportRef =
     useRef(null);
 
+
   const panRef =
     useRef({
       x: 220,
       y: 150,
     });
 
+
   const panDragRef =
     useRef(null);
+
 
   /*
    * Node drag session
@@ -72,11 +89,14 @@ export default function MapCanvas({
   const nodeDragRef =
     useRef(null);
 
+
   const autoPanFrameRef =
     useRef(null);
 
+
   const movedRef =
     useRef(false);
+
 
   /*
    * Last pointer location
@@ -113,8 +133,256 @@ export default function MapCanvas({
     panRef.current =
       nextPan;
 
+
     setPan(
       nextPan
+    );
+  }
+
+
+  /*
+   * =====================================================
+   * V10 - FIT MAP REQUEST
+   * =====================================================
+   *
+   * fitRequest เริ่มที่ 0
+   *
+   * เมื่อกด Fit:
+   *
+   * 0 -> 1
+   * 1 -> 2
+   * 2 -> 3
+   *
+   * useEffect นี้จึงทำงานทุกครั้งที่กด Fit
+   */
+
+  useEffect(() => {
+    /*
+     * ไม่ Fit อัตโนมัติตอนเปิดหน้า
+     */
+    if (
+      !fitRequest
+    ) {
+      return;
+    }
+
+
+    fitMapToViewport();
+
+    /*
+     * ต้องการ trigger จาก fitRequest เท่านั้น
+     */
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fitRequest]);
+
+
+  /*
+   * =====================================================
+   * V10 - FIT MAP TO VIEWPORT
+   * =====================================================
+   */
+
+  function fitMapToViewport() {
+    const viewport =
+      viewportRef.current;
+
+
+    if (
+      !viewport
+    ) {
+      return;
+    }
+
+
+    const rect =
+      viewport.getBoundingClientRect();
+
+
+    const viewportWidth =
+      rect.width;
+
+
+    const viewportHeight =
+      rect.height;
+
+
+    if (
+      viewportWidth <= 0 ||
+      viewportHeight <= 0
+    ) {
+      return;
+    }
+
+
+    /*
+     * -----------------------------------------
+     * Calculate complete map bounds
+     * -----------------------------------------
+     */
+
+    const bounds =
+      calculateMapBounds(
+        mapData
+      );
+
+
+    /*
+     * Meter -> SVG Pixel
+     */
+
+    const worldMinX =
+      bounds.minX *
+      SCALE;
+
+
+    const worldMinY =
+      bounds.minY *
+      SCALE;
+
+
+    const worldMaxX =
+      bounds.maxX *
+      SCALE;
+
+
+    const worldMaxY =
+      bounds.maxY *
+      SCALE;
+
+
+    const worldWidth =
+      Math.max(
+        worldMaxX -
+          worldMinX,
+        SCALE
+      );
+
+
+    const worldHeight =
+      Math.max(
+        worldMaxY -
+          worldMinY,
+        SCALE
+      );
+
+
+    /*
+     * -----------------------------------------
+     * Available viewport
+     * -----------------------------------------
+     */
+
+    const availableWidth =
+      Math.max(
+        viewportWidth -
+          FIT_PADDING * 2,
+        100
+      );
+
+
+    const availableHeight =
+      Math.max(
+        viewportHeight -
+          FIT_PADDING * 2,
+        100
+      );
+
+
+    /*
+     * -----------------------------------------
+     * Calculate Zoom
+     * -----------------------------------------
+     */
+
+    const zoomX =
+      availableWidth /
+      worldWidth;
+
+
+    const zoomY =
+      availableHeight /
+      worldHeight;
+
+
+    const nextZoom =
+      clamp(
+        Math.min(
+          zoomX,
+          zoomY
+        ),
+        0.25,
+        4
+      );
+
+
+    /*
+     * -----------------------------------------
+     * World Center
+     * -----------------------------------------
+     */
+
+    const worldCenterX =
+      (
+        worldMinX +
+        worldMaxX
+      ) /
+      2;
+
+
+    const worldCenterY =
+      (
+        worldMinY +
+        worldMaxY
+      ) /
+      2;
+
+
+    /*
+     * -----------------------------------------
+     * Screen Center
+     * -----------------------------------------
+     */
+
+    const screenCenterX =
+      viewportWidth /
+      2;
+
+
+    const screenCenterY =
+      viewportHeight /
+      2;
+
+
+    /*
+     * -----------------------------------------
+     * Calculate Pan
+     * -----------------------------------------
+     */
+
+    const nextPan = {
+      x:
+        screenCenterX -
+        worldCenterX *
+          nextZoom,
+
+      y:
+        screenCenterY -
+        worldCenterY *
+          nextZoom,
+    };
+
+
+    updatePan(
+      nextPan
+    );
+
+
+    onZoomChange(
+      Number(
+        nextZoom.toFixed(
+          3
+        )
+      )
     );
   }
 
@@ -132,6 +400,7 @@ export default function MapCanvas({
     const viewport =
       viewportRef.current;
 
+
     if (!viewport) {
       return {
         x: 0,
@@ -139,16 +408,20 @@ export default function MapCanvas({
       };
     }
 
+
     const rect =
       viewport.getBoundingClientRect();
+
 
     const screenX =
       clientX -
       rect.left;
 
+
     const screenY =
       clientY -
       rect.top;
+
 
     const worldPixelX =
       (
@@ -157,12 +430,14 @@ export default function MapCanvas({
       ) /
       zoom;
 
+
     const worldPixelY =
       (
         screenY -
         panRef.current.y
       ) /
       zoom;
+
 
     return {
       x: Number(
@@ -195,6 +470,7 @@ export default function MapCanvas({
     const viewport =
       viewportRef.current;
 
+
     if (!viewport) {
       return {
         x: 0,
@@ -202,8 +478,10 @@ export default function MapCanvas({
       };
     }
 
+
     const rect =
       viewport.getBoundingClientRect();
+
 
     let moveX = 0;
     let moveY = 0;
@@ -284,14 +562,14 @@ export default function MapCanvas({
       const drag =
         nodeDragRef.current;
 
+
       const pointer =
         dragPointerRef.current;
 
 
       /*
-       * ถ้าไม่ได้ drag อยู่
-       * หรือ mouse ไม่ได้ down แล้ว
-       * หยุดทันที
+       * ถ้าไม่ได้ Drag อยู่
+       * หยุด Auto Pan
        */
 
       if (
@@ -301,6 +579,7 @@ export default function MapCanvas({
       ) {
         autoPanFrameRef.current =
           null;
+
 
         return;
       }
@@ -329,8 +608,8 @@ export default function MapCanvas({
 
 
         /*
-         * map ขยับแล้ว
-         * ต้องคำนวณ Node ใหม่
+         * Map ขยับ
+         * Node ต้องขยับตาม pointer
          */
 
         updateDraggedNodePosition();
@@ -363,6 +642,7 @@ export default function MapCanvas({
         autoPanFrameRef.current
       );
 
+
       autoPanFrameRef.current =
         null;
     }
@@ -378,13 +658,9 @@ export default function MapCanvas({
   function handleBackgroundPointerDown(
     event
   ) {
-    /*
-     * ถ้า event มาจาก Node/Path
-     * stopPropagation จะกันไว้ก่อนถึงตรงนี้
-     */
-
     const middleMouse =
       event.button === 1;
+
 
     const leftPan =
       event.button === 0 &&
@@ -444,7 +720,9 @@ export default function MapCanvas({
       panDragRef.current;
 
 
-    if (!drag) {
+    if (
+      !drag
+    ) {
       return;
     }
 
@@ -460,6 +738,7 @@ export default function MapCanvas({
     const dx =
       event.clientX -
       drag.startX;
+
 
     const dy =
       event.clientY -
@@ -494,12 +773,9 @@ export default function MapCanvas({
       panDragRef.current;
 
 
-    /*
-     * ถ้าไม่ได้เริ่ม background interaction
-     * ไม่ต้องทำอะไร
-     */
-
-    if (!drag) {
+    if (
+      !drag
+    ) {
       return;
     }
 
@@ -517,9 +793,8 @@ export default function MapCanvas({
 
 
     /*
-     * ถ้ามีการลากจริง
-     * = เป็น Pan
-     * ไม่ clear selection
+     * ถ้ามีการ Pan
+     * ไม่กลับ Map Properties
      */
 
     if (
@@ -528,12 +803,13 @@ export default function MapCanvas({
       movedRef.current =
         false;
 
+
       return;
     }
 
 
     /*
-     * Click พื้นที่ว่างจริง
+     * Click พื้นที่ว่าง
      */
 
     if (
@@ -572,7 +848,9 @@ export default function MapCanvas({
       viewportRef.current;
 
 
-    if (!viewport) {
+    if (
+      !viewport
+    ) {
       return;
     }
 
@@ -584,6 +862,7 @@ export default function MapCanvas({
     const mouseX =
       event.clientX -
       rect.left;
+
 
     const mouseY =
       event.clientY -
@@ -616,6 +895,7 @@ export default function MapCanvas({
       ) /
       oldZoom;
 
+
     const worldY =
       (
         mouseY -
@@ -639,7 +919,9 @@ export default function MapCanvas({
 
     onZoomChange(
       Number(
-        nextZoom.toFixed(3)
+        nextZoom.toFixed(
+          3
+        )
       )
     );
   }
@@ -649,12 +931,11 @@ export default function MapCanvas({
    * =====================================================
    * NODE POINTER DOWN
    *
-   * จุดสำคัญ:
+   * CLICK
+   * = Select / Edit Properties
    *
-   * pointerDown = SELECT เท่านั้นก่อน
-   *
-   * Node จะยังไม่ขยับ
-   * จนกว่า mouse ยัง hold และ move > threshold
+   * HOLD + MOVE
+   * = Drag
    * =====================================================
    */
 
@@ -690,12 +971,13 @@ export default function MapCanvas({
         node.id
       );
 
+
       return;
     }
 
 
     /*
-     * SELECT MODE ONLY
+     * SELECT MODE
      */
 
     if (
@@ -716,9 +998,7 @@ export default function MapCanvas({
 
 
     /*
-     * ===============================================
-     * CLICK = SELECT NODE
-     * ===============================================
+     * Click = Select Node
      */
 
     onNodeClick(
@@ -727,11 +1007,9 @@ export default function MapCanvas({
 
 
     /*
-     * ===============================================
-     * เริ่ม HOLD SESSION
+     * สร้าง Hold Session
      *
-     * ยังไม่ได้ drag
-     * ===============================================
+     * ตอนนี้ยังไม่ Drag
      */
 
     nodeDragRef.current = {
@@ -755,14 +1033,6 @@ export default function MapCanvas({
     };
 
 
-    /*
-     * Pointer Capture สำคัญมาก
-     *
-     * หลังจากกด node
-     * move/up จะถูกส่งกลับมาที่ node นี้
-     * เฉพาะจนกว่าจะปล่อย mouse
-     */
-
     try {
       event.currentTarget.setPointerCapture(
         event.pointerId
@@ -776,10 +1046,6 @@ export default function MapCanvas({
   /*
    * =====================================================
    * NODE POINTER MOVE
-   *
-   * สำคัญ:
-   * function นี้จะทำงานเฉพาะระหว่าง pointer down
-   * เพราะใช้ pointer capture
    * =====================================================
    */
 
@@ -795,20 +1061,16 @@ export default function MapCanvas({
 
 
     /*
-     * ไม่มี hold session
-     *
-     * = ขยับ mouse เฉย ๆ
-     * Node ห้ามขยับ
+     * Mouse ไม่ได้ Hold
+     * = ห้ามขยับ Node
      */
 
-    if (!drag) {
+    if (
+      !drag
+    ) {
       return;
     }
 
-
-    /*
-     * pointer คนละตัว
-     */
 
     if (
       drag.pointerId !==
@@ -818,20 +1080,12 @@ export default function MapCanvas({
     }
 
 
-    /*
-     * ต้องยังอยู่ในสถานะ pointer down
-     */
-
     if (
       !drag.pointerIsDown
     ) {
       return;
     }
 
-
-    /*
-     * ต้องเป็น Node เดิม
-     */
 
     if (
       drag.nodeId !==
@@ -844,6 +1098,7 @@ export default function MapCanvas({
     const dx =
       event.clientX -
       drag.startClientX;
+
 
     const dy =
       event.clientY -
@@ -858,13 +1113,9 @@ export default function MapCanvas({
 
 
     /*
-     * ===============================================
      * ยังไม่ถึง threshold
      *
-     * = แค่ click / hold
-     *
-     * Node ยังห้ามขยับ
-     * ===============================================
+     * = ยังเป็น Click/Hold
      */
 
     if (
@@ -877,9 +1128,7 @@ export default function MapCanvas({
 
 
     /*
-     * ===============================================
      * START DRAG
-     * ===============================================
      */
 
     if (
@@ -899,11 +1148,6 @@ export default function MapCanvas({
     }
 
 
-    /*
-     * Pointer location
-     * สำหรับ move + auto pan
-     */
-
     dragPointerRef.current = {
       clientX:
         event.clientX,
@@ -913,16 +1157,8 @@ export default function MapCanvas({
     };
 
 
-    /*
-     * Move Node
-     */
-
     updateDraggedNodePosition();
 
-
-    /*
-     * Auto-pan
-     */
 
     startAutoPan();
   }
@@ -930,13 +1166,14 @@ export default function MapCanvas({
 
   /*
    * =====================================================
-   * UPDATE CURRENT DRAGGED NODE
+   * UPDATE DRAGGED NODE
    * =====================================================
    */
 
   function updateDraggedNodePosition() {
     const drag =
       nodeDragRef.current;
+
 
     const pointer =
       dragPointerRef.current;
@@ -976,12 +1213,6 @@ export default function MapCanvas({
   /*
    * =====================================================
    * NODE POINTER UP
-   *
-   * พอปล่อย:
-   *
-   * hold session ถูกลบทิ้งทันที
-   *
-   * จากนั้นขยับ mouse ไปไหนก็ไม่สามารถลาก Node ได้
    * =====================================================
    */
 
@@ -996,7 +1227,9 @@ export default function MapCanvas({
       nodeDragRef.current;
 
 
-    if (!drag) {
+    if (
+      !drag
+    ) {
       return;
     }
 
@@ -1009,18 +1242,9 @@ export default function MapCanvas({
     }
 
 
-    /*
-     * pointer ไม่ down แล้ว
-     */
-
     drag.pointerIsDown =
       false;
 
-
-    /*
-     * ถ้าลากจริง
-     * ปิด history transaction
-     */
 
     if (
       drag.dragging
@@ -1035,13 +1259,10 @@ export default function MapCanvas({
 
 
     /*
-     * สำคัญมาก
+     * สำคัญ
      *
-     * ลบ drag session
-     *
-     * เพราะฉะนั้นหลังจาก Mouse Up
-     * ต่อให้ขยับ mouse
-     * Node ก็ไม่สามารถขยับอีก
+     * ปล่อยเมาส์แล้ว
+     * Node ต้องไม่ติด Mouse
      */
 
     nodeDragRef.current =
@@ -1094,6 +1315,7 @@ export default function MapCanvas({
     nodeDragRef.current =
       null;
 
+
     dragPointerRef.current =
       null;
   }
@@ -1130,12 +1352,6 @@ export default function MapCanvas({
     event.preventDefault();
 
 
-    /*
-     * Path ไม่มี drag
-     *
-     * Click ครั้งเดียว = select
-     */
-
     onEdgeClick(
       edge.id
     );
@@ -1170,7 +1386,7 @@ export default function MapCanvas({
 
   /*
    * =====================================================
-   * ROBOT PATH
+   * SELECTED ROBOT PATH
    * =====================================================
    */
 
@@ -1233,6 +1449,7 @@ export default function MapCanvas({
       onPointerCancel={() => {
         panDragRef.current =
           null;
+
 
         stopAutoPan();
       }}
@@ -1317,7 +1534,7 @@ export default function MapCanvas({
         >
 
           {/* =============================================
-              BOUNDARY
+              WAREHOUSE BOUNDARY
           ============================================= */}
 
           <rect
@@ -1372,13 +1589,16 @@ export default function MapCanvas({
                 from.x *
                 SCALE;
 
+
               const y1 =
                 from.y *
                 SCALE;
 
+
               const x2 =
                 to.x *
                 SCALE;
+
 
               const y2 =
                 to.y *
@@ -1419,11 +1639,21 @@ export default function MapCanvas({
                     "edit" && (
 
                     <line
-                      x1={x1}
-                      y1={y1}
+                      x1={
+                        x1
+                      }
 
-                      x2={x2}
-                      y2={y2}
+                      y1={
+                        y1
+                      }
+
+                      x2={
+                        x2
+                      }
+
+                      y2={
+                        y2
+                      }
 
                       className="map-edge-hitbox"
 
@@ -1449,11 +1679,21 @@ export default function MapCanvas({
                   {/* REAL PATH */}
 
                   <line
-                    x1={x1}
-                    y1={y1}
+                    x1={
+                      x1
+                    }
 
-                    x2={x2}
-                    y2={y2}
+                    y1={
+                      y1
+                    }
+
+                    x2={
+                      x2
+                    }
+
+                    y2={
+                      y2
+                    }
 
                     markerEnd={
                       !edge.bidirectional
@@ -1474,12 +1714,17 @@ export default function MapCanvas({
                         ? "path-highlighted"
                         : "",
 
-                      edge.enabled === false
+                      edge.enabled ===
+                        false
                         ? "disabled"
                         : "",
-                    ].join(" ")}
+                    ].join(
+                      " "
+                    )}
                   />
 
+
+                  {/* PATH LABEL */}
 
                   <text
                     x={
@@ -1509,7 +1754,9 @@ export default function MapCanvas({
 
                     {Number(
                       edge.distance
-                    ).toFixed(2)}
+                    ).toFixed(
+                      2
+                    )}
 
                     {" m"}
                   </text>
@@ -1663,7 +1910,9 @@ export default function MapCanvas({
                         selected
                           ? "selected"
                           : "",
-                      ].join(" ")}
+                      ].join(
+                        " "
+                      )}
                     />
 
 
@@ -1715,9 +1964,11 @@ export default function MapCanvas({
             pan.y,
         }}
       >
+
         <span>
           0,0
         </span>
+
       </div>
 
     </div>
@@ -1746,6 +1997,7 @@ function NodeShape({
     node.x *
     SCALE;
 
+
   const y =
     node.y *
     SCALE;
@@ -1767,7 +2019,9 @@ function NodeShape({
     node.enabled === false
       ? "disabled"
       : "",
-  ].join(" ");
+  ].join(
+    " "
+  );
 
 
   /*
@@ -1777,7 +2031,8 @@ function NodeShape({
    */
 
   if (
-    node.type === "STORAGE"
+    node.type ===
+    "STORAGE"
   ) {
     const width =
       Number(
@@ -1785,6 +2040,7 @@ function NodeShape({
           4
       ) *
       SCALE;
+
 
     const depth =
       Number(
@@ -1885,6 +2141,7 @@ function NodeShape({
           2
       ) *
       SCALE;
+
 
     const depth =
       Number(
@@ -1989,7 +2246,8 @@ function NodeShape({
    */
 
   if (
-    node.type === "ROAD"
+    node.type ===
+    "ROAD"
   ) {
     return (
       <g
@@ -2221,6 +2479,7 @@ function LocalNodeLabel({
   return (
     <text
       x="0"
+
       y="-18"
 
       textAnchor="middle"
@@ -2230,6 +2489,208 @@ function LocalNodeLabel({
       {node.id}
     </text>
   );
+}
+
+
+/*
+ * =====================================================
+ * V10 - CALCULATE MAP BOUNDS
+ * =====================================================
+ *
+ * รวม:
+ *
+ * - Warehouse Boundary
+ * - Waypoint
+ * - Road
+ * - Pickup
+ * - Dropoff
+ * - Home
+ * - Waiting
+ * - Storage
+ * - Charging
+ * - Dock
+ *
+ * ดังนั้นถ้ามี Node อยู่นอก Warehouse
+ * Fit ก็จะเห็น Node นั้นด้วย
+ */
+
+function calculateMapBounds(
+  mapData
+) {
+  /*
+   * Warehouse boundary
+   */
+
+  let minX =
+    0;
+
+
+  let minY =
+    0;
+
+
+  let maxX =
+    Number(
+      mapData.width
+    ) || 1;
+
+
+  let maxY =
+    Number(
+      mapData.height
+    ) || 1;
+
+
+  /*
+   * Include every Node
+   */
+
+  for (
+    const node
+    of mapData.nodes
+  ) {
+    const x =
+      Number(
+        node.x
+      ) || 0;
+
+
+    const y =
+      Number(
+        node.y
+      ) || 0;
+
+
+    /*
+     * Default point size
+     */
+
+    let halfWidth =
+      0.5;
+
+
+    let halfDepth =
+      0.5;
+
+
+    /*
+     * Object Node ที่มีขนาดจริง
+     */
+
+    if (
+      node.type ===
+        "STORAGE" ||
+      node.type ===
+        "CHARGING" ||
+      node.type ===
+        "DOCK"
+    ) {
+      halfWidth =
+        Math.max(
+          Number(
+            node.config?.width
+          ) || 1,
+          0.1
+        ) /
+        2;
+
+
+      halfDepth =
+        Math.max(
+          Number(
+            node.config?.depth
+          ) || 1,
+          0.1
+        ) /
+        2;
+    }
+
+
+    /*
+     * Include rotation approximately
+     *
+     * ใช้ bounding box หลังหมุน
+     */
+
+    const rotation =
+      (
+        Number(
+          node.rotation
+        ) || 0
+      ) *
+      Math.PI /
+      180;
+
+
+    const cos =
+      Math.abs(
+        Math.cos(
+          rotation
+        )
+      );
+
+
+    const sin =
+      Math.abs(
+        Math.sin(
+          rotation
+        )
+      );
+
+
+    const rotatedHalfWidth =
+      halfWidth *
+        cos +
+      halfDepth *
+        sin;
+
+
+    const rotatedHalfDepth =
+      halfWidth *
+        sin +
+      halfDepth *
+        cos;
+
+
+    minX =
+      Math.min(
+        minX,
+        x -
+          rotatedHalfWidth
+      );
+
+
+    maxX =
+      Math.max(
+        maxX,
+        x +
+          rotatedHalfWidth
+      );
+
+
+    minY =
+      Math.min(
+        minY,
+        y -
+          rotatedHalfDepth
+      );
+
+
+    maxY =
+      Math.max(
+        maxY,
+        y +
+          rotatedHalfDepth
+      );
+  }
+
+
+  return {
+    minX,
+    minY,
+    maxX,
+    maxY,
+  };
 }
 
 
@@ -2267,7 +2728,9 @@ function snapToGrid(
           step
         ) *
         step
-      ).toFixed(3)
+      ).toFixed(
+        3
+      )
     ),
 
     y: Number(
@@ -2277,7 +2740,9 @@ function snapToGrid(
           step
         ) *
         step
-      ).toFixed(3)
+      ).toFixed(
+        3
+      )
     ),
   };
 }
@@ -2296,7 +2761,9 @@ function clamp(
 ) {
   return Math.min(
     Math.max(
-      Number(value),
+      Number(
+        value
+      ),
       min
     ),
     max
@@ -2362,6 +2829,7 @@ function isEdgeInRobotPath(
     const from =
       path[index];
 
+
     const to =
       path[
         index + 1
@@ -2370,12 +2838,16 @@ function isEdgeInRobotPath(
 
     if (
       (
-        edge.from === from &&
-        edge.to === to
+        edge.from ===
+          from &&
+        edge.to ===
+          to
       ) ||
       (
-        edge.from === to &&
-        edge.to === from
+        edge.from ===
+          to &&
+        edge.to ===
+          from
       )
     ) {
       return true;

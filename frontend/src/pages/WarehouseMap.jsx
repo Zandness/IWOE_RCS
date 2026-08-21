@@ -171,6 +171,25 @@ export default function WarehouseMap() {
     1
   );
 
+
+  /*
+   * V10
+   *
+   * ทุกครั้งที่กด Fit
+   * ค่า fitRequest จะเพิ่มขึ้น
+   *
+   * MapCanvas จะใช้ค่านี้เป็น trigger
+   * สำหรับคำนวณ Zoom + Pan ใหม่
+   */
+
+  const [
+    fitRequest,
+    setFitRequest,
+  ] = useState(
+    0
+  );
+
+
   const [
     expanded,
     setExpanded,
@@ -205,6 +224,7 @@ export default function WarehouseMap() {
   ] = useState(
     []
   );
+
 
   const [
     redoStack,
@@ -274,10 +294,12 @@ export default function WarehouseMap() {
             current
           );
 
+
         const workingCopy =
           structuredClone(
             current
           );
+
 
         const next =
           typeof updater ===
@@ -289,11 +311,6 @@ export default function WarehouseMap() {
                 updater
               );
 
-
-        /*
-         * ถ้า updater คืนค่าเดิม
-         * เราก็ยัง return ได้
-         */
 
         if (!next) {
           return current;
@@ -566,7 +583,9 @@ export default function WarehouseMap() {
           Math.min(
             current * 1.1,
             4
-          ).toFixed(3)
+          ).toFixed(
+            3
+          )
         )
     );
   }
@@ -579,15 +598,33 @@ export default function WarehouseMap() {
           Math.max(
             current * 0.9,
             0.25
-          ).toFixed(3)
+          ).toFixed(
+            3
+          )
         )
     );
   }
 
 
+  /*
+   * =====================================================
+   * V10 - FIT MAP
+   * =====================================================
+   *
+   * เดิม:
+   *
+   * setZoom(1)
+   *
+   * ใหม่:
+   *
+   * ส่ง trigger ไป MapCanvas
+   * เพื่อให้ Canvas คำนวณทั้ง Zoom และ Pan
+   */
+
   function fitMap() {
-    setZoom(
-      1
+    setFitRequest(
+      (current) =>
+        current + 1
     );
   }
 
@@ -1318,7 +1355,6 @@ export default function WarehouseMap() {
    * =====================================================
    * EDGE PROPERTY CHANGE
    *
-   * V9
    * รองรับ From / To endpoint editing
    * =====================================================
    */
@@ -1421,8 +1457,6 @@ export default function WarehouseMap() {
           /*
            * -----------------------------------------------
            * PREVENT DUPLICATE PATH
-           *
-           * Treat reverse direction as same physical path
            * -----------------------------------------------
            */
 
@@ -1430,7 +1464,7 @@ export default function WarehouseMap() {
             previous.edges.some(
               (edge) => {
                 /*
-                 * Ignore current selected edge.
+                 * Ignore selected edge
                  */
 
                 if (
@@ -1502,9 +1536,7 @@ export default function WarehouseMap() {
 
 
                   /*
-                   * ---------------------------------------
-                   * RECALCULATE DISTANCE
-                   * ---------------------------------------
+                   * Auto Distance
                    */
 
                   if (
@@ -1895,8 +1927,14 @@ export default function WarehouseMap() {
     );
 
 
-    setZoom(
-      1
+    /*
+     * Reset เสร็จแล้ว
+     * เรียก Fit ใหม่ด้วย
+     */
+
+    setFitRequest(
+      (current) =>
+        current + 1
     );
   }
 
@@ -2358,6 +2396,13 @@ export default function WarehouseMap() {
               setZoom
             }
 
+            /*
+             * V10
+             */
+            fitRequest={
+              fitRequest
+            }
+
             onCanvasClick={
               handleCanvasClick
             }
@@ -2490,7 +2535,9 @@ function calculateDistance(
     Math.sqrt(
       dx * dx +
       dy * dy
-    ).toFixed(3)
+    ).toFixed(
+      3
+    )
   );
 }
 
@@ -2598,7 +2645,9 @@ function snapPosition(
           step
         ) *
         step
-      ).toFixed(3)
+      ).toFixed(
+        3
+      )
     ),
 
     y: Number(
@@ -2608,7 +2657,9 @@ function snapPosition(
           step
         ) *
         step
-      ).toFixed(3)
+      ).toFixed(
+        3
+      )
     ),
   };
 }
