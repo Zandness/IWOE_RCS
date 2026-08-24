@@ -21,26 +21,10 @@ function App() {
           <main className="main-content">
             <Routes>
               <Route path="/" element={<Dashboard />} />
-
-              <Route
-                path="/warehouse"
-                element={<WarehouseMap />}
-              />
-
-              <Route
-                path="/locations"
-                element={<StorageLocations />}
-              />
-
-              <Route
-                path="/fleet"
-                element={<FleetControl />}
-              />
-
-              <Route
-                path="/settings"
-                element={<Settings />}
-              />
+              <Route path="/warehouse" element={<WarehouseMap />} />
+              <Route path="/locations" element={<StorageLocations />} />
+              <Route path="/fleet" element={<FleetControl />} />
+              <Route path="/settings" element={<Settings />} />
             </Routes>
           </main>
         </div>
