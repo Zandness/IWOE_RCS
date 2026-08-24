@@ -9,24 +9,17 @@ import Navbar from "./components/Navbar";
 import Sidebar from "./components/Sidebar";
 
 import Dashboard from "./pages/Dashboard";
-
 import WarehouseMap from "./pages/WarehouseMap";
-
 import StorageLocations from "./pages/StorageLocations";
-
 import Inventory from "./pages/Inventory";
-
 import WarehouseOperations from "./pages/WarehouseOperations";
-
 import TaskManagement from "./pages/TaskManagement";
-
+import RobotTaskDispatcher from "./pages/RobotTaskDispatcher";
 import FleetControl from "./pages/FleetControl";
-
 import Settings from "./pages/Settings";
 
 
 function App() {
-
   return (
     <BrowserRouter>
 
@@ -92,7 +85,13 @@ function App() {
               />
 
 
-              {/* OLD URLs */}
+              <Route
+                path="/dispatcher"
+                element={
+                  <RobotTaskDispatcher />
+                }
+              />
+
 
               <Route
                 path="/inbound"

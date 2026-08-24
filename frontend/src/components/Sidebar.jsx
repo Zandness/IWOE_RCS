@@ -6,6 +6,7 @@ import {
   LayoutDashboard,
   Map,
   MapPin,
+  Send,
   Settings,
   Warehouse,
 } from "lucide-react";
@@ -16,9 +17,7 @@ import {
 
 
 export default function Sidebar() {
-
   const menu = [
-
     {
       name:
         "Dashboard",
@@ -33,7 +32,6 @@ export default function Sidebar() {
         true,
     },
 
-
     {
       name:
         "Warehouse Map",
@@ -44,7 +42,6 @@ export default function Sidebar() {
       icon:
         Map,
     },
-
 
     {
       name:
@@ -57,7 +54,6 @@ export default function Sidebar() {
         MapPin,
     },
 
-
     {
       name:
         "Inventory / SKU",
@@ -68,7 +64,6 @@ export default function Sidebar() {
       icon:
         Boxes,
     },
-
 
     {
       name:
@@ -81,7 +76,6 @@ export default function Sidebar() {
         ClipboardList,
     },
 
-
     {
       name:
         "Task Management",
@@ -93,6 +87,16 @@ export default function Sidebar() {
         CheckCircle2,
     },
 
+    {
+      name:
+        "Task Dispatcher",
+
+      path:
+        "/dispatcher",
+
+      icon:
+        Send,
+    },
 
     {
       name:
@@ -105,7 +109,6 @@ export default function Sidebar() {
         Bot,
     },
 
-
     {
       name:
         "Settings",
@@ -116,7 +119,6 @@ export default function Sidebar() {
       icon:
         Settings,
     },
-
   ];
 
 
@@ -129,7 +131,6 @@ export default function Sidebar() {
           size={20}
         />
 
-
         <span>
           WMS
         </span>
@@ -141,7 +142,6 @@ export default function Sidebar() {
 
         {menu.map(
           (item) => {
-
             const Icon =
               item.icon;
 
@@ -184,7 +184,6 @@ export default function Sidebar() {
 
               </NavLink>
             );
-
           }
         )}
 
