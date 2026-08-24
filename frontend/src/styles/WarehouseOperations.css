@@ -1,0 +1,109 @@
+.warehouse-operations-page {
+  min-height: 100%;
+  padding: 28px;
+}
+
+.warehouse-operations-header {
+  margin-bottom: 18px;
+}
+
+.warehouse-operations-label {
+  display: block;
+  margin-bottom: 6px;
+  color: #22d3ee;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+
+.warehouse-operations-header h2 {
+  margin: 0 0 7px;
+  color: #f8fafc;
+  font-size: 27px;
+}
+
+.warehouse-operations-header p {
+  margin: 0;
+  color: #94a3b8;
+}
+
+.warehouse-operations-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 18px;
+  padding: 6px;
+  border: 1px solid #1e293b;
+  border-radius: 10px;
+  background: #0b1220;
+}
+
+.warehouse-operations-tabs button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+
+  min-width: 220px;
+
+  padding: 10px 14px;
+
+  border: 1px solid transparent;
+  border-radius: 8px;
+
+  background: transparent;
+
+  color: #64748b;
+
+  text-align: left;
+
+  cursor: pointer;
+}
+
+.warehouse-operations-tabs button:hover {
+  background: #111827;
+  color: #cbd5e1;
+}
+
+.warehouse-operations-tabs button.active {
+  border-color: #155e75;
+  background: #083344;
+  color: #67e8f9;
+}
+
+.warehouse-operations-tabs button > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.warehouse-operations-tabs strong {
+  color: inherit;
+  font-size: 12px;
+}
+
+.warehouse-operations-tabs span {
+  color: #64748b;
+  font-size: 9px;
+}
+
+.warehouse-operations-tabs button.active span {
+  color: #94a3b8;
+}
+
+.warehouse-operations-content {
+  min-width: 0;
+}
+
+@media (max-width: 700px) {
+  .warehouse-operations-page {
+    padding: 18px;
+  }
+
+  .warehouse-operations-tabs {
+    flex-direction: column;
+  }
+
+  .warehouse-operations-tabs button {
+    width: 100%;
+    min-width: 0;
+  }
+}

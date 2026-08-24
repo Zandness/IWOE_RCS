@@ -1,23 +1,20 @@
 import {
-  LayoutDashboard,
   Bot,
+  Boxes,
+  ClipboardList,
+  LayoutDashboard,
   Map,
   MapPin,
-  Boxes,
   Settings,
   Warehouse,
 } from "lucide-react";
-
 
 import {
   NavLink,
 } from "react-router-dom";
 
-
 export default function Sidebar() {
-
   const menu = [
-
     {
       name:
         "Dashboard",
@@ -32,7 +29,6 @@ export default function Sidebar() {
         true,
     },
 
-
     {
       name:
         "Warehouse Map",
@@ -43,7 +39,6 @@ export default function Sidebar() {
       icon:
         Map,
     },
-
 
     {
       name:
@@ -56,7 +51,6 @@ export default function Sidebar() {
         MapPin,
     },
 
-
     {
       name:
         "Inventory / SKU",
@@ -68,6 +62,16 @@ export default function Sidebar() {
         Boxes,
     },
 
+    {
+      name:
+        "Warehouse Operations",
+
+      path:
+        "/operations",
+
+      icon:
+        ClipboardList,
+    },
 
     {
       name:
@@ -80,7 +84,6 @@ export default function Sidebar() {
         Bot,
     },
 
-
     {
       name:
         "Settings",
@@ -91,50 +94,37 @@ export default function Sidebar() {
       icon:
         Settings,
     },
-
   ];
-
 
   return (
     <aside className="sidebar">
-
       <div className="sidebar-title">
-
         <Warehouse
           size={20}
         />
 
-
         <span>
           WMS
         </span>
-
       </div>
 
-
       <nav>
-
         {menu.map(
           (item) => {
-
             const Icon =
               item.icon;
-
 
             return (
               <NavLink
                 key={
                   item.path
                 }
-
                 to={
                   item.path
                 }
-
                 end={
                   item.end
                 }
-
                 className={({
                   isActive,
                 }) =>
@@ -145,47 +135,34 @@ export default function Sidebar() {
                   }`
                 }
               >
-
                 <Icon
                   size={19}
                 />
-
 
                 <span>
                   {
                     item.name
                   }
                 </span>
-
               </NavLink>
             );
-
           }
         )}
-
       </nav>
 
-
       <div className="sidebar-footer">
-
         <div className="status-dot" />
 
-
         <div>
-
           <strong>
             System Ready
           </strong>
 
-
           <span>
             WMS Core
           </span>
-
         </div>
-
       </div>
-
     </aside>
   );
 }
