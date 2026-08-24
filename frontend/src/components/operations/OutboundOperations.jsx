@@ -20,16 +20,15 @@ import {
   useState,
 } from "react";
 
+import {
+  INVENTORY_STORAGE_KEY,
+  LOCATION_STORAGE_KEY,
+  OUTBOUND_STORAGE_KEY,
+  notifyWmsDataChanged,
+} from "../../utils/taskOperationSync";
+
 import "../../styles/Outbound.css";
 
-const OUTBOUND_STORAGE_KEY =
-  "wms-outbound-orders-v1";
-
-const INVENTORY_STORAGE_KEY =
-  "wms-inventory-items-v1";
-
-const LOCATION_STORAGE_KEY =
-  "wms-storage-locations-v1";
 
 const ACTIVE_RESERVATION_STATUSES =
   new Set([
@@ -37,7 +36,10 @@ const ACTIVE_RESERVATION_STATUSES =
     "PICKING",
   ]);
 
-const INITIAL_OUTBOUND = [];
+
+const INITIAL_OUTBOUND =
+  [];
+
 
 export default function OutboundOperations({
   embedded = false,
@@ -49,12 +51,14 @@ export default function OutboundOperations({
     loadOutboundOrders
   );
 
+
   const [
     inventory,
     setInventory,
   ] = useState(
     loadInventory
   );
+
 
   const [
     locations,
@@ -63,53 +67,75 @@ export default function OutboundOperations({
     loadLocations
   );
 
+
   const [
     search,
     setSearch,
   ] = useState("");
 
+
   const [
     statusFilter,
     setStatusFilter,
-  ] = useState("ALL");
+  ] = useState(
+    "ALL"
+  );
+
 
   const [
     showOrderForm,
     setShowOrderForm,
-  ] = useState(false);
+  ] = useState(
+    false
+  );
+
 
   const [
     showAllocation,
     setShowAllocation,
-  ] = useState(false);
+  ] = useState(
+    false
+  );
+
 
   const [
     selectedOrder,
     setSelectedOrder,
-  ] = useState(null);
+  ] = useState(
+    null
+  );
+
 
   const [
     allocationPreview,
     setAllocationPreview,
-  ] = useState(null);
+  ] = useState(
+    null
+  );
+
 
   const [
     saveMessage,
     setSaveMessage,
   ] = useState("");
 
+
   /*
+   * =====================================================
    * SAVE OUTBOUND
+   * =====================================================
    */
 
   useEffect(() => {
     try {
       localStorage.setItem(
         OUTBOUND_STORAGE_KEY,
+
         JSON.stringify(
           orders
         )
       );
+
 
       setSaveMessage(
         "Saved locally"
@@ -120,18 +146,26 @@ export default function OutboundOperations({
         error
       );
 
+
       setSaveMessage(
         "Local save failed"
       );
     }
   }, [orders]);
 
+
   /*
-   * REFRESH RELATED DATA
+   * =====================================================
+   * RECEIVE TASK MANAGEMENT UPDATE
+   * =====================================================
    */
 
   useEffect(() => {
-    function refreshRelatedData() {
+    function refreshAll() {
+      setOrders(
+        loadOutboundOrders()
+      );
+
       setInventory(
         loadInventory()
       );
@@ -141,9 +175,24 @@ export default function OutboundOperations({
       );
     }
 
+
+    /*
+     * Other browser tab
+     */
+
     function handleStorage(
       event
     ) {
+      if (
+        event.key ===
+        OUTBOUND_STORAGE_KEY
+      ) {
+        setOrders(
+          loadOutboundOrders()
+        );
+      }
+
+
       if (
         event.key ===
         INVENTORY_STORAGE_KEY
@@ -153,6 +202,7 @@ export default function OutboundOperations({
         );
       }
 
+
       if (
         event.key ===
         LOCATION_STORAGE_KEY
@@ -161,43 +211,101 @@ export default function OutboundOperations({
           loadLocations()
         );
       }
+    }
+
+
+    /*
+     * Same browser tab
+     *
+     * Task Management
+     * -> Outbound
+     */
+
+    function handleWmsDataChanged(
+      event
+    ) {
+      const keys =
+        event.detail?.keys ||
+        [];
+
 
       if (
-        event.key ===
-          OUTBOUND_STORAGE_KEY &&
-        event.newValue
+        keys.includes(
+          OUTBOUND_STORAGE_KEY
+        )
       ) {
         setOrders(
           loadOutboundOrders()
         );
       }
+
+
+      if (
+        keys.includes(
+          INVENTORY_STORAGE_KEY
+        )
+      ) {
+        setInventory(
+          loadInventory()
+        );
+      }
+
+
+      if (
+        keys.includes(
+          LOCATION_STORAGE_KEY
+        )
+      ) {
+        setLocations(
+          loadLocations()
+        );
+      }
     }
+
 
     window.addEventListener(
       "focus",
-      refreshRelatedData
+      refreshAll
     );
+
 
     window.addEventListener(
       "storage",
       handleStorage
     );
 
+
+    window.addEventListener(
+      "wms-data-changed",
+      handleWmsDataChanged
+    );
+
+
     return () => {
       window.removeEventListener(
         "focus",
-        refreshRelatedData
+        refreshAll
       );
+
 
       window.removeEventListener(
         "storage",
         handleStorage
       );
+
+
+      window.removeEventListener(
+        "wms-data-changed",
+        handleWmsDataChanged
+      );
     };
   }, []);
 
+
   /*
+   * =====================================================
    * LOCATION MAP
+   * =====================================================
    */
 
   const locationMap =
@@ -211,17 +319,22 @@ export default function OutboundOperations({
             ]
           )
         ),
+
       [locations]
     );
 
+
   /*
+   * =====================================================
    * SKU MASTER
+   * =====================================================
    */
 
   const skuMasters =
     useMemo(() => {
       const map =
         new Map();
+
 
       inventory.forEach(
         (item) => {
@@ -234,8 +347,10 @@ export default function OutboundOperations({
             return;
           }
 
+
           map.set(
             item.sku,
+
             {
               sku:
                 item.sku,
@@ -253,6 +368,7 @@ export default function OutboundOperations({
         }
       );
 
+
       return Array.from(
         map.values()
       ).sort(
@@ -263,73 +379,34 @@ export default function OutboundOperations({
       );
     }, [inventory]);
 
+
   /*
+   * =====================================================
    * FREE STOCK
+   * =====================================================
    */
 
   const freeStockBySku =
-    useMemo(() => {
-      const reserved =
-        getReservedInventoryMap(
-          orders
-        );
+    useMemo(
+      () =>
+        getAvailableStockBySku({
+          inventory,
+          locations,
+          orders,
+        }),
 
-      const result =
-        new Map();
+      [
+        inventory,
+        locations,
+        orders,
+      ]
+    );
 
-      inventory.forEach(
-        (item) => {
-          const location =
-            locationMap.get(
-              item.locationId
-            );
-
-          if (
-            !location ||
-            [
-              "BLOCKED",
-              "MAINTENANCE",
-            ].includes(
-              location.status
-            )
-          ) {
-            return;
-          }
-
-          const freeQty =
-            Math.max(
-              Number(
-                item.quantity ||
-                  0
-              ) -
-                Number(
-                  reserved.get(
-                    item.id
-                  ) || 0
-                ),
-              0
-            );
-
-          result.set(
-            item.sku,
-            Number(
-              result.get(
-                item.sku
-              ) || 0
-            ) + freeQty
-          );
-        }
-      );
-
-      return result;
-    }, [
-      inventory,
-      locationMap,
-      orders,
-    ]);
 
   /*
-   * SEARCH
+   * =====================================================
+   * SEARCH + LATEST FIRST
+   * =====================================================
    */
 
   const filteredOrders =
@@ -339,64 +416,74 @@ export default function OutboundOperations({
           .trim()
           .toLowerCase();
 
-      return orders.filter(
-        (order) => {
-          const matchesStatus =
-            statusFilter ===
-              "ALL" ||
-            order.status ===
-              statusFilter;
 
-          const searchable = [
-            order.id,
-            order.orderNo,
-            order.customer,
-            order.reference,
-            order.status,
+      return orders
+        .filter(
+          (order) => {
+            const matchesStatus =
+              statusFilter ===
+                "ALL" ||
+              order.status ===
+                statusFilter;
 
-            ...(
-              order.lines ||
-              []
-            ).flatMap(
-              (line) => [
-                line.sku,
-                line.itemName,
 
-                ...(
-                  line.allocations ||
-                  []
-                ).map(
-                  (
-                    allocation
-                  ) =>
-                    allocation.locationId
-                ),
-              ]
-            ),
-          ]
-            .filter(Boolean)
-            .join(" ")
-            .toLowerCase();
+            const searchable = [
+              order.id,
+              order.orderNo,
+              order.customer,
+              order.reference,
+              order.status,
 
-          return (
-            matchesStatus &&
-            (
-              !query ||
-              searchable.includes(
-                query
+              ...(
+                order.lines ||
+                []
+              ).flatMap(
+                (line) => [
+                  line.sku,
+                  line.itemName,
+
+                  ...(
+                    line.allocations ||
+                    []
+                  ).map(
+                    (
+                      allocation
+                    ) =>
+                      allocation.locationId
+                  ),
+                ]
+              ),
+            ]
+              .filter(Boolean)
+              .join(" ")
+              .toLowerCase();
+
+
+            return (
+              matchesStatus &&
+              (
+                !query ||
+                searchable.includes(
+                  query
+                )
               )
-            )
-          );
-        }
-      );
+            );
+          }
+        )
+        .sort(
+          compareNewestFirst
+        );
     }, [
       orders,
       search,
       statusFilter,
     ]);
 
+
   /*
+   * =====================================================
    * SUMMARY
+   * =====================================================
    */
 
   const summary =
@@ -412,6 +499,7 @@ export default function OutboundOperations({
             )
         ).length;
 
+
       const allocated =
         orders.filter(
           (order) =>
@@ -423,6 +511,7 @@ export default function OutboundOperations({
             )
         ).length;
 
+
       const ready =
         orders.filter(
           (order) =>
@@ -430,12 +519,14 @@ export default function OutboundOperations({
             "READY"
         ).length;
 
+
       const completed =
         orders.filter(
           (order) =>
             order.status ===
             "COMPLETED"
         ).length;
+
 
       const requestedQty =
         orders
@@ -453,8 +544,10 @@ export default function OutboundOperations({
               getOrderRequestedQty(
                 order
               ),
+
             0
           );
+
 
       return {
         openOrders,
@@ -465,8 +558,11 @@ export default function OutboundOperations({
       };
     }, [orders]);
 
+
   /*
-   * ADD
+   * =====================================================
+   * NEW
+   * =====================================================
    */
 
   function handleAddOrder() {
@@ -474,13 +570,17 @@ export default function OutboundOperations({
       null
     );
 
+
     setShowOrderForm(
       true
     );
   }
 
+
   /*
+   * =====================================================
    * EDIT
+   * =====================================================
    */
 
   function handleEditOrder(
@@ -493,17 +593,22 @@ export default function OutboundOperations({
       return;
     }
 
+
     setSelectedOrder(
       order
     );
+
 
     setShowOrderForm(
       true
     );
   }
 
+
   /*
+   * =====================================================
    * DELETE
+   * =====================================================
    */
 
   function handleDeleteOrder(
@@ -517,17 +622,21 @@ export default function OutboundOperations({
         "Only Draft outbound orders can be deleted."
       );
 
+
       return;
     }
+
 
     const confirmed =
       window.confirm(
         `Delete outbound order ${order.orderNo}?`
       );
 
+
     if (!confirmed) {
       return;
     }
+
 
     setOrders(
       (current) =>
@@ -539,8 +648,11 @@ export default function OutboundOperations({
     );
   }
 
+
   /*
+   * =====================================================
    * SAVE ORDER
+   * =====================================================
    */
 
   function handleSaveOrder(
@@ -549,25 +661,21 @@ export default function OutboundOperations({
     const validation =
       validateOutboundOrder({
         formData,
-
-        editingId:
-          selectedOrder?.id ||
-          null,
-
         inventory,
-
         locations,
-
         orders,
-
         skuMasters,
       });
 
-    if (
-      !validation.ok
-    ) {
+
+    if (!validation.ok) {
       return validation;
     }
+
+
+    /*
+     * EDIT
+     */
 
     if (selectedOrder) {
       setOrders(
@@ -578,15 +686,19 @@ export default function OutboundOperations({
               selectedOrder.id
                 ? {
                     ...order,
-
                     ...validation.order,
                   }
                 : order
           )
       );
     } else {
+      /*
+       * NEW
+       */
+
       const now =
         new Date().toISOString();
+
 
       setOrders(
         (current) => [
@@ -624,27 +736,52 @@ export default function OutboundOperations({
             completedAt:
               "",
 
+            /*
+             * Picking Task Progress
+             */
+
+            pickingTaskTotal:
+              0,
+
+            pickingTaskCompleted:
+              0,
+
+            pickingTaskInProgress:
+              0,
+
+            pickingTaskBlocked:
+              0,
+
+            pickingTaskPending:
+              0,
+
             ...validation.order,
           },
         ]
       );
     }
 
+
     setShowOrderForm(
       false
     );
 
+
     setSelectedOrder(
       null
     );
+
 
     return {
       ok: true,
     };
   }
 
+
   /*
-   * ALLOCATION
+   * =====================================================
+   * OPEN ALLOCATION
+   * =====================================================
    */
 
   function handleOpenAllocation(
@@ -658,26 +795,38 @@ export default function OutboundOperations({
         orders,
       });
 
+
     if (!result.ok) {
       window.alert(
         result.message
       );
 
+
       return;
     }
+
 
     setSelectedOrder(
       order
     );
 
+
     setAllocationPreview(
       result.lines
     );
+
 
     setShowAllocation(
       true
     );
   }
+
+
+  /*
+   * =====================================================
+   * CONFIRM ALLOCATION
+   * =====================================================
+   */
 
   function handleConfirmAllocation() {
     if (
@@ -687,8 +836,10 @@ export default function OutboundOperations({
       return;
     }
 
+
     const now =
       new Date().toISOString();
+
 
     setOrders(
       (current) =>
@@ -707,26 +858,47 @@ export default function OutboundOperations({
 
                   lines:
                     allocationPreview,
+
+                  pickingTaskTotal:
+                    0,
+
+                  pickingTaskCompleted:
+                    0,
+
+                  pickingTaskInProgress:
+                    0,
+
+                  pickingTaskBlocked:
+                    0,
+
+                  pickingTaskPending:
+                    0,
                 }
               : order
         )
     );
 
+
     setShowAllocation(
       false
     );
 
+
     setSelectedOrder(
       null
     );
+
 
     setAllocationPreview(
       null
     );
   }
 
+
   /*
-   * START PICKING
+   * =====================================================
+   * START PICKING FROM OUTBOUND PAGE
+   * =====================================================
    */
 
   function handleStartPicking(
@@ -738,6 +910,7 @@ export default function OutboundOperations({
     ) {
       return;
     }
+
 
     setOrders(
       (current) =>
@@ -752,6 +925,7 @@ export default function OutboundOperations({
                     "PICKING",
 
                   pickingAt:
+                    item.pickingAt ||
                     new Date().toISOString(),
                 }
               : item
@@ -759,8 +933,18 @@ export default function OutboundOperations({
     );
   }
 
+
   /*
-   * CONFIRM PICK
+   * =====================================================
+   * CONFIRM PICK FROM OUTBOUND PAGE
+   * =====================================================
+   *
+   * ยังคงอนุญาตให้ Operator
+   * Confirm Pick จากหน้า Outbound โดยตรงได้
+   *
+   * ถ้าใช้ Task Management
+   * Inventory จะถูกลดตอน Task ครบเอง
+   * =====================================================
    */
 
   function handleConfirmPick(
@@ -773,8 +957,10 @@ export default function OutboundOperations({
       return;
     }
 
+
     const currentInventory =
       loadInventory();
+
 
     const deduction =
       deductPickedInventory(
@@ -782,19 +968,21 @@ export default function OutboundOperations({
         order
       );
 
-    if (
-      !deduction.ok
-    ) {
+
+    if (!deduction.ok) {
       window.alert(
         deduction.message
       );
+
 
       setInventory(
         currentInventory
       );
 
+
       return;
     }
+
 
     try {
       localStorage.setItem(
@@ -810,16 +998,20 @@ export default function OutboundOperations({
         error
       );
 
+
       window.alert(
         "Inventory update failed. Pick was not confirmed."
       );
 
+
       return;
     }
+
 
     setInventory(
       deduction.inventory
     );
+
 
     setOrders(
       (current) =>
@@ -835,14 +1027,37 @@ export default function OutboundOperations({
 
                   pickedAt:
                     new Date().toISOString(),
+
+                  pickingTaskCompleted:
+                    Number(
+                      item.pickingTaskTotal ||
+                      0
+                    ),
+
+                  pickingTaskInProgress:
+                    0,
+
+                  pickingTaskBlocked:
+                    0,
+
+                  pickingTaskPending:
+                    0,
                 }
               : item
         )
     );
+
+
+    notifyWmsDataChanged([
+      INVENTORY_STORAGE_KEY,
+    ]);
   }
 
+
   /*
-   * READY
+   * =====================================================
+   * MARK READY
+   * =====================================================
    */
 
   function handleMarkReady(
@@ -854,6 +1069,7 @@ export default function OutboundOperations({
     ) {
       return;
     }
+
 
     setOrders(
       (current) =>
@@ -875,8 +1091,11 @@ export default function OutboundOperations({
     );
   }
 
+
   /*
+   * =====================================================
    * DISPATCH
+   * =====================================================
    */
 
   function handleDispatch(
@@ -889,14 +1108,17 @@ export default function OutboundOperations({
       return;
     }
 
+
     const confirmed =
       window.confirm(
         `Dispatch ${order.orderNo}?`
       );
 
+
     if (!confirmed) {
       return;
     }
+
 
     setOrders(
       (current) =>
@@ -918,6 +1140,13 @@ export default function OutboundOperations({
     );
   }
 
+
+  /*
+   * =====================================================
+   * UI
+   * =====================================================
+   */
+
   return (
     <div
       className={`outbound-page ${
@@ -926,26 +1155,32 @@ export default function OutboundOperations({
           : ""
       }`}
     >
+
       {/* HEADER */}
 
       <div className="outbound-header">
+
         <div>
           <span className="outbound-label">
             OUTBOUND OPERATIONS
           </span>
 
+
           <h2>
             Outbound / Picking
           </h2>
 
+
           <p>
             Allocate available inventory,
             perform picking and prepare
-            orders for dispatch.
+            dispatch.
           </p>
         </div>
 
+
         <div className="outbound-header-actions">
+
           {saveMessage && (
             <span
               className={`outbound-save-state ${
@@ -960,6 +1195,7 @@ export default function OutboundOperations({
             </span>
           )}
 
+
           <button
             className="outbound-add-button"
             onClick={
@@ -972,12 +1208,16 @@ export default function OutboundOperations({
 
             New Outbound
           </button>
+
         </div>
+
       </div>
+
 
       {/* SUMMARY */}
 
       <div className="outbound-summary-grid">
+
         <SummaryCard
           icon={
             <ClipboardList
@@ -989,6 +1229,7 @@ export default function OutboundOperations({
             summary.openOrders
           }
         />
+
 
         <SummaryCard
           icon={
@@ -1003,6 +1244,7 @@ export default function OutboundOperations({
           tone="warning"
         />
 
+
         <SummaryCard
           icon={
             <PackageCheck
@@ -1016,6 +1258,7 @@ export default function OutboundOperations({
           tone="success"
         />
 
+
         <SummaryCard
           icon={
             <Truck
@@ -1028,6 +1271,7 @@ export default function OutboundOperations({
           }
         />
 
+
         <SummaryCard
           icon={
             <Package
@@ -1039,33 +1283,44 @@ export default function OutboundOperations({
             summary.requestedQty
           }
         />
+
       </div>
+
 
       {/* TABLE */}
 
       <section className="outbound-panel">
+
         <div className="outbound-panel-header">
+
           <div>
             <h3>
               Outbound Orders
             </h3>
 
+
             <p>
-              Stock is reserved during
-              allocation and deducted
-              only when picking is
-              confirmed.
+              Newest orders are shown
+              first. Picking progress is
+              synchronized from Task
+              Management.
             </p>
           </div>
 
+
           <div className="outbound-toolbar">
+
             <div className="outbound-search">
+
               <Search
                 size={17}
               />
 
+
               <input
-                value={search}
+                value={
+                  search
+                }
                 placeholder="Search order, customer or SKU..."
                 onChange={(
                   event
@@ -1076,7 +1331,9 @@ export default function OutboundOperations({
                   )
                 }
               />
+
             </div>
+
 
             <select
               className="outbound-filter"
@@ -1092,6 +1349,7 @@ export default function OutboundOperations({
                 )
               }
             >
+
               <option value="ALL">
                 All status
               </option>
@@ -1119,14 +1377,21 @@ export default function OutboundOperations({
               <option value="COMPLETED">
                 Completed
               </option>
+
             </select>
+
           </div>
+
         </div>
 
+
         <div className="outbound-table-wrapper">
+
           <table className="outbound-table">
+
             <thead>
               <tr>
+
                 <th>
                   Outbound
                 </th>
@@ -1160,10 +1425,13 @@ export default function OutboundOperations({
                 </th>
 
                 <th></th>
+
               </tr>
             </thead>
 
+
             <tbody>
+
               {filteredOrders.map(
                 (order) => (
                   <tr
@@ -1171,15 +1439,19 @@ export default function OutboundOperations({
                       order.id
                     }
                   >
+
                     <td>
                       <div className="outbound-code-cell">
+
                         <div className="outbound-code-icon">
                           <Package
                             size={17}
                           />
                         </div>
 
+
                         <div>
+
                           <strong>
                             {
                               order.orderNo
@@ -1191,15 +1463,19 @@ export default function OutboundOperations({
                               order.id
                             }
                           </span>
+
                         </div>
+
                       </div>
                     </td>
+
 
                     <td>
                       {
                         order.customer
                       }
                     </td>
+
 
                     <td>
                       <span className="outbound-reference">
@@ -1210,6 +1486,7 @@ export default function OutboundOperations({
                       </span>
                     </td>
 
+
                     <td>
                       {
                         order.lines
@@ -1218,34 +1495,52 @@ export default function OutboundOperations({
                       }
                     </td>
 
-                    <td>
-                      {getOrderRequestedQty(
-                        order
-                      )}
-                    </td>
 
                     <td>
-                      {getOrderAllocatedQty(
-                        order
-                      )}
+                      {
+                        getOrderRequestedQty(
+                          order
+                        )
+                      }
                     </td>
+
+
+                    <td>
+                      {
+                        getOrderAllocatedQty(
+                          order
+                        )
+                      }
+                    </td>
+
 
                     <td>
                       <StatusBadge
                         status={
                           order.status
                         }
+                        order={
+                          order
+                        }
                       />
                     </td>
 
-                    <td>
-                      {formatDateTime(
-                        order.createdAt
-                      )}
-                    </td>
 
                     <td>
+                      {
+                        formatDateTime(
+                          order.createdAt
+                        )
+                      }
+                    </td>
+
+
+                    <td>
+
                       <div className="outbound-actions">
+
+                        {/* DRAFT */}
+
                         {order.status ===
                           "DRAFT" && (
                           <>
@@ -1259,11 +1554,10 @@ export default function OutboundOperations({
                               }
                             >
                               <Pencil
-                                size={
-                                  15
-                                }
+                                size={15}
                               />
                             </button>
+
 
                             <button
                               type="button"
@@ -1275,13 +1569,12 @@ export default function OutboundOperations({
                               }
                             >
                               <Boxes
-                                size={
-                                  15
-                                }
+                                size={15}
                               />
 
                               Allocate
                             </button>
+
 
                             <button
                               type="button"
@@ -1293,13 +1586,14 @@ export default function OutboundOperations({
                               }
                             >
                               <Trash2
-                                size={
-                                  15
-                                }
+                                size={15}
                               />
                             </button>
                           </>
                         )}
+
+
+                        {/* ALLOCATED */}
 
                         {order.status ===
                           "ALLOCATED" && (
@@ -1313,14 +1607,15 @@ export default function OutboundOperations({
                             }
                           >
                             <Play
-                              size={
-                                15
-                              }
+                              size={15}
                             />
 
                             Start Picking
                           </button>
                         )}
+
+
+                        {/* PICKING */}
 
                         {order.status ===
                           "PICKING" && (
@@ -1334,14 +1629,15 @@ export default function OutboundOperations({
                             }
                           >
                             <CheckCircle2
-                              size={
-                                15
-                              }
+                              size={15}
                             />
 
                             Confirm Pick
                           </button>
                         )}
+
+
+                        {/* PICKED */}
 
                         {order.status ===
                           "PICKED" && (
@@ -1355,14 +1651,15 @@ export default function OutboundOperations({
                             }
                           >
                             <PackageCheck
-                              size={
-                                15
-                              }
+                              size={15}
                             />
 
                             Mark Ready
                           </button>
                         )}
+
+
+                        {/* READY */}
 
                         {order.status ===
                           "READY" && (
@@ -1376,14 +1673,15 @@ export default function OutboundOperations({
                             }
                           >
                             <Truck
-                              size={
-                                15
-                              }
+                              size={15}
                             />
 
                             Dispatch
                           </button>
                         )}
+
+
+                        {/* COMPLETED */}
 
                         {order.status ===
                           "COMPLETED" && (
@@ -1391,25 +1689,33 @@ export default function OutboundOperations({
                             Dispatched
                           </span>
                         )}
+
                       </div>
+
                     </td>
+
                   </tr>
                 )
               )}
+
             </tbody>
+
           </table>
+
 
           {filteredOrders.length ===
             0 && (
             <div className="outbound-empty">
-              No outbound orders
-              found.
+              No outbound orders found.
             </div>
           )}
+
         </div>
+
       </section>
 
-      {/* ORDER FORM */}
+
+      {/* CREATE / EDIT MODAL */}
 
       {showOrderForm && (
         <OutboundOrderForm
@@ -1437,7 +1743,8 @@ export default function OutboundOperations({
         />
       )}
 
-      {/* ALLOCATION */}
+
+      {/* ALLOCATION MODAL */}
 
       {showAllocation &&
         selectedOrder &&
@@ -1470,13 +1777,15 @@ export default function OutboundOperations({
             }}
           />
         )}
+
     </div>
   );
 }
 
-/*
- * SUMMARY CARD
- */
+
+/* =========================================================
+   SUMMARY CARD
+========================================================= */
 
 function SummaryCard({
   icon,
@@ -1488,11 +1797,14 @@ function SummaryCard({
     <div
       className={`outbound-summary-card tone-${tone}`}
     >
+
       <div className="outbound-summary-icon">
         {icon}
       </div>
 
+
       <div>
+
         <span>
           {title}
         </span>
@@ -1500,17 +1812,21 @@ function SummaryCard({
         <strong>
           {value}
         </strong>
+
       </div>
+
     </div>
   );
 }
 
-/*
- * STATUS
- */
+
+/* =========================================================
+   STATUS BADGE
+========================================================= */
 
 function StatusBadge({
   status,
+  order,
 }) {
   const labels = {
     DRAFT:
@@ -1532,22 +1848,62 @@ function StatusBadge({
       "Completed",
   };
 
+
+  let label =
+    labels[
+      status
+    ] ||
+    status;
+
+
+  /*
+   * Picking Progress
+   *
+   * Picking 0/3
+   * Picking 1/3
+   * Picking 2/3
+   */
+
+  if (
+    status ===
+      "PICKING" &&
+    Number(
+      order?.pickingTaskTotal ||
+      0
+    ) > 0
+  ) {
+    const completed =
+      Number(
+        order?.pickingTaskCompleted ||
+        0
+      );
+
+
+    const total =
+      Number(
+        order?.pickingTaskTotal ||
+        0
+      );
+
+
+    label =
+      `Picking ${completed}/${total}`;
+  }
+
+
   return (
     <span
       className={`outbound-status status-${status.toLowerCase()}`}
     >
-      {
-        labels[
-          status
-        ] || status
-      }
+      {label}
     </span>
   );
 }
 
-/*
- * ORDER FORM
- */
+
+/* =========================================================
+   OUTBOUND ORDER FORM
+========================================================= */
 
 function OutboundOrderForm({
   order,
@@ -1581,10 +1937,12 @@ function OutboundOrderForm({
       ],
   });
 
+
   const [
     error,
     setError,
   ] = useState("");
+
 
   function updateField(
     field,
@@ -1599,8 +1957,10 @@ function OutboundOrderForm({
       })
     );
 
+
     setError("");
   }
+
 
   function updateLine(
     index,
@@ -1613,6 +1973,7 @@ function OutboundOrderForm({
           ...current.lines,
         ];
 
+
         const next = {
           ...lines[
             index
@@ -1621,6 +1982,7 @@ function OutboundOrderForm({
           [field]:
             value,
         };
+
 
         if (
           field ===
@@ -1633,24 +1995,29 @@ function OutboundOrderForm({
                 value
             );
 
+
           next.itemName =
             master?.name ||
             "";
         }
 
-        lines[index] =
-          next;
+
+        lines[
+          index
+        ] = next;
+
 
         return {
           ...current,
-
           lines,
         };
       }
     );
 
+
     setError("");
   }
+
 
   function addLine() {
     setForm(
@@ -1666,6 +2033,7 @@ function OutboundOrderForm({
     );
   }
 
+
   function removeLine(
     index
   ) {
@@ -1675,6 +2043,7 @@ function OutboundOrderForm({
     ) {
       return;
     }
+
 
     setForm(
       (current) => ({
@@ -1693,21 +2062,27 @@ function OutboundOrderForm({
     );
   }
 
+
   function handleSubmit(
     event
   ) {
     event.preventDefault();
 
+
     const result =
-      onSave(form);
+      onSave(
+        form
+      );
+
 
     if (!result?.ok) {
       setError(
         result?.message ||
-          "Could not save outbound order."
+        "Could not save outbound order."
       );
     }
   }
+
 
   return (
     <div
@@ -1723,24 +2098,31 @@ function OutboundOrderForm({
         }
       }}
     >
+
       <form
         className="outbound-modal"
         onSubmit={
           handleSubmit
         }
       >
+
         <div className="outbound-modal-header">
+
           <div>
+
             <span>
               OUTBOUND MANAGEMENT
             </span>
+
 
             <h3>
               {order
                 ? "Edit Outbound Order"
                 : "New Outbound Order"}
             </h3>
+
           </div>
+
 
           <button
             type="button"
@@ -1751,10 +2133,14 @@ function OutboundOrderForm({
           >
             ×
           </button>
+
         </div>
 
+
         <div className="outbound-form-body">
+
           <div className="outbound-form-grid">
+
             <FormField
               label="Customer / Destination"
               value={
@@ -1771,6 +2157,7 @@ function OutboundOrderForm({
               }
             />
 
+
             <FormField
               label="Reference / SO"
               value={
@@ -1786,20 +2173,25 @@ function OutboundOrderForm({
                 )
               }
             />
+
           </div>
 
+
           <div className="outbound-lines-header">
+
             <div>
+
               <strong>
                 Outbound Items
               </strong>
 
               <span>
                 Requested quantity must
-                be within currently
-                available stock.
+                be within free stock.
               </span>
+
             </div>
+
 
             <button
               type="button"
@@ -1813,9 +2205,12 @@ function OutboundOrderForm({
 
               Add Line
             </button>
+
           </div>
 
+
           <div className="outbound-lines">
+
             {form.lines.map(
               (
                 line,
@@ -1825,8 +2220,10 @@ function OutboundOrderForm({
                   Number(
                     freeStockBySku.get(
                       line.sku
-                    ) || 0
+                    ) ||
+                    0
                   );
+
 
                 return (
                   <div
@@ -1835,6 +2232,7 @@ function OutboundOrderForm({
                       line.lineId
                     }
                   >
+
                     <div className="outbound-line-number">
                       {
                         index +
@@ -1842,10 +2240,15 @@ function OutboundOrderForm({
                       }
                     </div>
 
+
+                    {/* SKU */}
+
                     <label className="outbound-field">
+
                       <span>
                         SKU
                       </span>
+
 
                       <select
                         value={
@@ -1863,9 +2266,11 @@ function OutboundOrderForm({
                           )
                         }
                       >
+
                         <option value="">
                           Select SKU
                         </option>
+
 
                         {skuMasters.map(
                           (
@@ -1889,13 +2294,20 @@ function OutboundOrderForm({
                             </option>
                           )
                         )}
+
                       </select>
+
                     </label>
 
+
+                    {/* ITEM */}
+
                     <label className="outbound-field">
+
                       <span>
                         Item
                       </span>
+
 
                       <input
                         value={
@@ -1904,12 +2316,18 @@ function OutboundOrderForm({
                         readOnly
                         placeholder="Select SKU"
                       />
+
                     </label>
 
+
+                    {/* QTY */}
+
                     <label className="outbound-field outbound-qty-field">
+
                       <span>
                         Requested Qty
                       </span>
+
 
                       <input
                         type="number"
@@ -1930,6 +2348,7 @@ function OutboundOrderForm({
                         }
                       />
 
+
                       <small>
                         Free stock:
                         {" "}
@@ -1937,7 +2356,11 @@ function OutboundOrderForm({
                           available
                         }
                       </small>
+
                     </label>
+
+
+                    {/* DELETE LINE */}
 
                     <button
                       type="button"
@@ -1957,32 +2380,37 @@ function OutboundOrderForm({
                         size={15}
                       />
                     </button>
+
                   </div>
                 );
               }
             )}
+
           </div>
+
 
           {skuMasters.length ===
             0 && (
             <div className="outbound-form-warning">
+
               <AlertTriangle
                 size={16}
               />
 
+
               <span>
                 No inventory SKU is
                 available. Create
-                Inventory / SKU
-                records before
-                creating an outbound
-                order.
+                Inventory / SKU first.
               </span>
+
             </div>
           )}
 
+
           {error && (
             <div className="outbound-form-error">
+
               <AlertTriangle
                 size={16}
               />
@@ -1990,11 +2418,15 @@ function OutboundOrderForm({
               <span>
                 {error}
               </span>
+
             </div>
           )}
+
         </div>
 
+
         <div className="outbound-modal-actions">
+
           <button
             type="button"
             className="outbound-cancel"
@@ -2005,6 +2437,7 @@ function OutboundOrderForm({
             Cancel
           </button>
 
+
           <button
             type="submit"
             className="outbound-save"
@@ -2013,15 +2446,19 @@ function OutboundOrderForm({
               ? "Save Changes"
               : "Create Outbound"}
           </button>
+
         </div>
+
       </form>
+
     </div>
   );
 }
 
-/*
- * ALLOCATION MODAL
- */
+
+/* =========================================================
+   ALLOCATION MODAL
+========================================================= */
 
 function AllocationModal({
   order,
@@ -2044,12 +2481,17 @@ function AllocationModal({
         }
       }}
     >
+
       <div className="outbound-modal allocation-modal">
+
         <div className="outbound-modal-header">
+
           <div>
+
             <span>
               STOCK ALLOCATION
             </span>
+
 
             <h3>
               Allocate
@@ -2058,7 +2500,9 @@ function AllocationModal({
                 order.orderNo
               }
             </h3>
+
           </div>
+
 
           <button
             type="button"
@@ -2069,21 +2513,29 @@ function AllocationModal({
           >
             ×
           </button>
+
         </div>
 
+
         <div className="outbound-form-body">
+
           <div className="allocation-info">
-            Stock is reserved now but
-            Inventory quantity is not
-            deducted until
+
+            Stock is reserved now
+            but Inventory is deducted
+            only after
+            {" "}
+
             <strong>
-              {" "}
               Confirm Pick
             </strong>
             .
+
           </div>
 
+
           <div className="allocation-lines">
+
             {lines.map(
               (line) => (
                 <div
@@ -2092,27 +2544,36 @@ function AllocationModal({
                     line.lineId
                   }
                 >
+
                   <div className="allocation-product">
+
                     <Package
                       size={17}
                     />
 
+
                     <div>
+
                       <strong>
                         {
                           line.sku
                         }
                       </strong>
 
+
                       <span>
                         {
                           line.itemName
                         }
                       </span>
+
                     </div>
+
                   </div>
 
+
                   <div className="allocation-requested">
+
                     <span>
                       Requested
                     </span>
@@ -2122,9 +2583,12 @@ function AllocationModal({
                         line.requestedQty
                       }
                     </strong>
+
                   </div>
 
+
                   <div className="allocation-sources">
+
                     {(
                       line.allocations ||
                       []
@@ -2137,6 +2601,7 @@ function AllocationModal({
                             allocation.locationId
                           );
 
+
                         return (
                           <div
                             className="allocation-source"
@@ -2144,34 +2609,44 @@ function AllocationModal({
                               allocation.inventoryId
                             }
                           >
+
                             <MapPin
-                              size={
-                                13
-                              }
+                              size={13}
                             />
 
+
                             <span>
-                              {location?.code ||
-                                allocation.locationId}
+                              {
+                                location?.code ||
+                                allocation.locationId
+                              }
                             </span>
+
 
                             <strong>
                               {
                                 allocation.qty
                               }
                             </strong>
+
                           </div>
                         );
                       }
                     )}
+
                   </div>
+
                 </div>
               )
             )}
+
           </div>
+
         </div>
 
+
         <div className="outbound-modal-actions">
+
           <button
             type="button"
             className="outbound-cancel"
@@ -2182,6 +2657,7 @@ function AllocationModal({
             Cancel
           </button>
 
+
           <button
             type="button"
             className="outbound-save"
@@ -2191,15 +2667,19 @@ function AllocationModal({
           >
             Confirm Allocation
           </button>
+
         </div>
+
       </div>
+
     </div>
   );
 }
 
-/*
- * FIELD
- */
+
+/* =========================================================
+   FORM FIELD
+========================================================= */
 
 function FormField({
   label,
@@ -2209,9 +2689,11 @@ function FormField({
 }) {
   return (
     <label className="outbound-field">
+
       <span>
         {label}
       </span>
+
 
       <input
         value={
@@ -2229,17 +2711,18 @@ function FormField({
           )
         }
       />
+
     </label>
   );
 }
 
-/*
- * VALIDATE ORDER
- */
+
+/* =========================================================
+   VALIDATE OUTBOUND ORDER
+========================================================= */
 
 function validateOutboundOrder({
   formData,
-  editingId,
   inventory,
   locations,
   orders,
@@ -2248,14 +2731,16 @@ function validateOutboundOrder({
   const customer =
     String(
       formData.customer ||
-        ""
+      ""
     ).trim();
+
 
   const reference =
     String(
       formData.reference ||
-        ""
+      ""
     ).trim();
+
 
   if (!customer) {
     return {
@@ -2265,6 +2750,7 @@ function validateOutboundOrder({
         "Please enter Customer / Destination.",
     };
   }
+
 
   if (
     !Array.isArray(
@@ -2281,6 +2767,7 @@ function validateOutboundOrder({
     };
   }
 
+
   const masterMap =
     new Map(
       skuMasters.map(
@@ -2291,21 +2778,22 @@ function validateOutboundOrder({
       )
     );
 
+
   const availableBySku =
     getAvailableStockBySku({
       inventory,
       locations,
       orders,
-
-      excludeOrderId:
-        editingId,
     });
+
 
   const usedSku =
     new Set();
 
+
   const normalizedLines =
     [];
+
 
   for (
     let index = 0;
@@ -2318,18 +2806,21 @@ function validateOutboundOrder({
         index
       ];
 
+
     const sku =
       String(
         line.sku ||
-          ""
+        ""
       )
         .trim()
         .toUpperCase();
+
 
     const requestedQty =
       Number(
         line.requestedQty
       );
+
 
     if (!sku) {
       return {
@@ -2340,10 +2831,12 @@ function validateOutboundOrder({
       };
     }
 
+
     const master =
       masterMap.get(
         sku
       );
+
 
     if (!master) {
       return {
@@ -2353,6 +2846,7 @@ function validateOutboundOrder({
           `Line ${index + 1}: SKU ${sku} does not exist in Inventory.`,
       };
     }
+
 
     if (
       usedSku.has(
@@ -2367,15 +2861,13 @@ function validateOutboundOrder({
       };
     }
 
-    usedSku.add(
-      sku
-    );
 
     if (
       !Number.isFinite(
         requestedQty
       ) ||
-      requestedQty <= 0
+      requestedQty <=
+      0
     ) {
       return {
         ok: false,
@@ -2385,12 +2877,15 @@ function validateOutboundOrder({
       };
     }
 
+
     const availableQty =
       Number(
         availableBySku.get(
           sku
-        ) || 0
+        ) ||
+        0
       );
+
 
     if (
       requestedQty >
@@ -2403,6 +2898,12 @@ function validateOutboundOrder({
           `${sku}: Requested ${requestedQty}, but only ${availableQty} is available after reservations.`,
       };
     }
+
+
+    usedSku.add(
+      sku
+    );
+
 
     normalizedLines.push({
       lineId:
@@ -2421,21 +2922,24 @@ function validateOutboundOrder({
     });
   }
 
+
   return {
     ok: true,
 
     order: {
       customer,
       reference,
+
       lines:
         normalizedLines,
     },
   };
 }
 
-/*
- * BUILD ALLOCATION
- */
+
+/* =========================================================
+   BUILD ALLOCATION
+========================================================= */
 
 function buildOrderAllocations({
   order,
@@ -2453,24 +2957,34 @@ function buildOrderAllocations({
       )
     );
 
+
+  /*
+   * ไม่รวม Reservation ของ Order
+   * ตัวเองตอนคำนวณ
+   */
+
   const reserved =
     getReservedInventoryMap(
       orders,
       order.id
     );
 
+
   const resultLines =
     [];
 
+
   for (
     const line
-    of order.lines || []
+    of order.lines ||
+    []
   ) {
     let remaining =
       Number(
         line.requestedQty ||
-          0
+        0
       );
+
 
     const balances =
       inventory
@@ -2483,10 +2997,19 @@ function buildOrderAllocations({
               return false;
             }
 
+
             const location =
               locationMap.get(
                 item.locationId
               );
+
+
+            /*
+             * FULL ยังหยิบออกได้
+             *
+             * BLOCKED / MAINTENANCE
+             * หยิบไม่ได้
+             */
 
             return (
               location &&
@@ -2507,13 +3030,15 @@ function buildOrderAllocations({
               Math.max(
                 Number(
                   item.quantity ||
-                    0
+                  0
                 ) -
-                  Number(
-                    reserved.get(
-                      item.id
-                    ) || 0
-                  ),
+                Number(
+                  reserved.get(
+                    item.id
+                  ) ||
+                  0
+                ),
+
                 0
               ),
 
@@ -2531,41 +3056,52 @@ function buildOrderAllocations({
         )
         .sort(
           (a, b) => {
-            const byQty =
+            const qtyCompare =
               b.freeQty -
               a.freeQty;
 
-            return byQty !==
+
+            if (
+              qtyCompare !==
               0
-              ? byQty
-              : String(
-                  a.locationCode
-                ).localeCompare(
-                  String(
-                    b.locationCode
-                  )
-                );
+            ) {
+              return qtyCompare;
+            }
+
+
+            return String(
+              a.locationCode
+            ).localeCompare(
+              String(
+                b.locationCode
+              )
+            );
           }
         );
 
+
     const allocations =
       [];
+
 
     for (
       const balance
       of balances
     ) {
       if (
-        remaining <= 0
+        remaining <=
+        0
       ) {
         break;
       }
+
 
       const qty =
         Math.min(
           remaining,
           balance.freeQty
         );
+
 
       allocations.push({
         inventoryId:
@@ -2577,12 +3113,15 @@ function buildOrderAllocations({
         qty,
       });
 
+
       remaining -=
         qty;
     }
 
+
     if (
-      remaining > 0
+      remaining >
+      0
     ) {
       return {
         ok: false,
@@ -2592,12 +3131,14 @@ function buildOrderAllocations({
       };
     }
 
+
     resultLines.push({
       ...line,
 
       allocations,
     });
   }
+
 
   return {
     ok: true,
@@ -2607,9 +3148,10 @@ function buildOrderAllocations({
   };
 }
 
-/*
- * DEDUCT INVENTORY
- */
+
+/* =========================================================
+   INVENTORY - FROM OUTBOUND PAGE
+========================================================= */
 
 function deductPickedInventory(
   inventory,
@@ -2622,9 +3164,11 @@ function deductPickedInventory(
       })
     );
 
+
   for (
     const line
-    of order.lines || []
+    of order.lines ||
+    []
   ) {
     for (
       const allocation
@@ -2638,6 +3182,7 @@ function deductPickedInventory(
             allocation.inventoryId
         );
 
+
       if (
         index < 0
       ) {
@@ -2649,18 +3194,22 @@ function deductPickedInventory(
         };
       }
 
+
       const currentQty =
         Number(
-          result[index]
-            .quantity ||
-            0
+          result[
+            index
+          ].quantity ||
+          0
         );
+
 
       const pickQty =
         Number(
           allocation.qty ||
-            0
+          0
         );
+
 
       if (
         currentQty <
@@ -2674,8 +3223,13 @@ function deductPickedInventory(
         };
       }
 
-      result[index] = {
-        ...result[index],
+
+      result[
+        index
+      ] = {
+        ...result[
+          index
+        ],
 
         quantity:
           currentQty -
@@ -2683,6 +3237,7 @@ function deductPickedInventory(
       };
     }
   }
+
 
   return {
     ok: true,
@@ -2692,9 +3247,10 @@ function deductPickedInventory(
   };
 }
 
-/*
- * RESERVED INVENTORY
- */
+
+/* =========================================================
+   RESERVED INVENTORY
+========================================================= */
 
 function getReservedInventoryMap(
   orders,
@@ -2702,6 +3258,7 @@ function getReservedInventoryMap(
 ) {
   const reserved =
     new Map();
+
 
   orders.forEach(
     (order) => {
@@ -2714,6 +3271,7 @@ function getReservedInventoryMap(
       ) {
         return;
       }
+
 
       (
         order.lines ||
@@ -2733,12 +3291,13 @@ function getReservedInventoryMap(
                 Number(
                   reserved.get(
                     allocation.inventoryId
-                  ) || 0
+                  ) ||
+                  0
                 ) +
-                  Number(
-                    allocation.qty ||
-                      0
-                  )
+                Number(
+                  allocation.qty ||
+                  0
+                )
               );
             }
           );
@@ -2747,18 +3306,19 @@ function getReservedInventoryMap(
     }
   );
 
+
   return reserved;
 }
 
-/*
- * AVAILABLE STOCK
- */
+
+/* =========================================================
+   AVAILABLE STOCK
+========================================================= */
 
 function getAvailableStockBySku({
   inventory,
   locations,
   orders,
-  excludeOrderId = null,
 }) {
   const locationMap =
     new Map(
@@ -2770,14 +3330,16 @@ function getAvailableStockBySku({
       )
     );
 
+
   const reserved =
     getReservedInventoryMap(
-      orders,
-      excludeOrderId
+      orders
     );
+
 
   const result =
     new Map();
+
 
   inventory.forEach(
     (item) => {
@@ -2785,6 +3347,7 @@ function getAvailableStockBySku({
         locationMap.get(
           item.locationId
         );
+
 
       if (
         !location ||
@@ -2798,19 +3361,23 @@ function getAvailableStockBySku({
         return;
       }
 
+
       const freeQty =
         Math.max(
           Number(
             item.quantity ||
-              0
+            0
           ) -
-            Number(
-              reserved.get(
-                item.id
-              ) || 0
-            ),
+          Number(
+            reserved.get(
+              item.id
+            ) ||
+            0
+          ),
+
           0
         );
+
 
       result.set(
         item.sku,
@@ -2818,15 +3385,22 @@ function getAvailableStockBySku({
         Number(
           result.get(
             item.sku
-          ) || 0
+          ) ||
+          0
         ) +
-          freeQty
+        freeQty
       );
     }
   );
 
+
   return result;
 }
+
+
+/* =========================================================
+   TOTAL REQUESTED
+========================================================= */
 
 function getOrderRequestedQty(
   order
@@ -2842,12 +3416,17 @@ function getOrderRequestedQty(
       sum +
       Number(
         line.requestedQty ||
-          0
+        0
       ),
 
     0
   );
 }
+
+
+/* =========================================================
+   TOTAL ALLOCATED
+========================================================= */
 
 function getOrderAllocatedQty(
   order
@@ -2872,7 +3451,7 @@ function getOrderAllocatedQty(
           lineSum +
           Number(
             allocation.qty ||
-              0
+            0
           ),
 
         0
@@ -2882,14 +3461,76 @@ function getOrderAllocatedQty(
   );
 }
 
-/*
- * IDs
- */
+
+/* =========================================================
+   LATEST ORDER FIRST
+========================================================= */
+
+function compareNewestFirst(
+  a,
+  b
+) {
+  const timeDifference =
+    getOrderTime(
+      b
+    ) -
+    getOrderTime(
+      a
+    );
+
+
+  if (
+    timeDifference !==
+    0
+  ) {
+    return timeDifference;
+  }
+
+
+  return String(
+    b.id ||
+    ""
+  ).localeCompare(
+    String(
+      a.id ||
+      ""
+    ),
+    undefined,
+    {
+      numeric: true,
+    }
+  );
+}
+
+
+function getOrderTime(
+  order
+) {
+  const time =
+    new Date(
+      order.createdAt ||
+      ""
+    ).getTime();
+
+
+  return Number.isFinite(
+    time
+  )
+    ? time
+    : 0;
+}
+
+
+/* =========================================================
+   OUTBOUND ID
+========================================================= */
 
 function getNextOutboundId(
   orders
 ) {
-  let highest = 0;
+  let highest =
+    0;
+
 
   orders.forEach(
     (order) => {
@@ -2897,9 +3538,10 @@ function getNextOutboundId(
         /^OUT-(\d+)$/i.exec(
           String(
             order.id ||
-              ""
+            ""
           )
         );
+
 
       if (match) {
         highest =
@@ -2914,6 +3556,7 @@ function getNextOutboundId(
     }
   );
 
+
   return `OUT-${String(
     highest + 1
   ).padStart(
@@ -2922,18 +3565,24 @@ function getNextOutboundId(
   )}`;
 }
 
+
+/* =========================================================
+   OUTBOUND NUMBER
+========================================================= */
+
 function generateOutboundNo(
   orders
 ) {
   const date =
     new Date();
 
+
   const datePart = [
     date.getFullYear(),
 
     String(
       date.getMonth() +
-        1
+      1
     ).padStart(
       2,
       "0"
@@ -2947,7 +3596,10 @@ function generateOutboundNo(
     ),
   ].join("");
 
-  let counter = 1;
+
+  let counter =
+    1;
+
 
   while (true) {
     const orderNo =
@@ -2958,6 +3610,7 @@ function generateOutboundNo(
         "0"
       )}`;
 
+
     const exists =
       orders.some(
         (order) =>
@@ -2965,19 +3618,28 @@ function generateOutboundNo(
           orderNo
       );
 
+
     if (!exists) {
       return orderNo;
     }
 
-    counter += 1;
+
+    counter +=
+      1;
   }
 }
+
+
+/* =========================================================
+   LINE ID
+========================================================= */
 
 function createLineId() {
   return `OLINE-${Date.now()}-${Math.random()
     .toString(36)
     .slice(2, 7)}`;
 }
+
 
 function createEmptyLine() {
   return {
@@ -2998,9 +3660,10 @@ function createEmptyLine() {
   };
 }
 
-/*
- * DATE
- */
+
+/* =========================================================
+   DATE
+========================================================= */
 
 function formatDateTime(
   value
@@ -3009,10 +3672,12 @@ function formatDateTime(
     return "-";
   }
 
+
   const date =
     new Date(
       value
     );
+
 
   return Number.isNaN(
     date.getTime()
@@ -3021,9 +3686,10 @@ function formatDateTime(
     : date.toLocaleString();
 }
 
-/*
- * LOAD DATA
- */
+
+/* =========================================================
+   LOAD OUTBOUND
+========================================================= */
 
 function loadOutboundOrders() {
   try {
@@ -3032,11 +3698,13 @@ function loadOutboundOrders() {
         OUTBOUND_STORAGE_KEY
       );
 
+
     if (saved) {
       const parsed =
         JSON.parse(
           saved
         );
+
 
       if (
         Array.isArray(
@@ -3053,8 +3721,14 @@ function loadOutboundOrders() {
     );
   }
 
+
   return INITIAL_OUTBOUND;
 }
+
+
+/* =========================================================
+   LOAD INVENTORY
+========================================================= */
 
 function loadInventory() {
   try {
@@ -3063,11 +3737,13 @@ function loadInventory() {
         INVENTORY_STORAGE_KEY
       );
 
+
     if (saved) {
       const parsed =
         JSON.parse(
           saved
         );
+
 
       if (
         Array.isArray(
@@ -3084,8 +3760,14 @@ function loadInventory() {
     );
   }
 
+
   return [];
 }
+
+
+/* =========================================================
+   LOAD LOCATIONS
+========================================================= */
 
 function loadLocations() {
   try {
@@ -3094,11 +3776,13 @@ function loadLocations() {
         LOCATION_STORAGE_KEY
       );
 
+
     if (saved) {
       const parsed =
         JSON.parse(
           saved
         );
+
 
       if (
         Array.isArray(
@@ -3114,6 +3798,7 @@ function loadLocations() {
       error
     );
   }
+
 
   return [];
 }

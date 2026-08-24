@@ -3,7 +3,6 @@ import {
   ArrowDownToLine,
   CheckCircle2,
   ClipboardList,
-  MapPin,
   Package,
   Pencil,
   Plus,
@@ -12,36 +11,100 @@ import {
   Truck,
 } from "lucide-react";
 
-import { useEffect, useMemo, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+
+import {
+  INBOUND_STORAGE_KEY,
+  INVENTORY_STORAGE_KEY,
+  LOCATION_STORAGE_KEY,
+  notifyWmsDataChanged,
+} from "../../utils/taskOperationSync";
 
 import "../../styles/Inbound.css";
 
-const INBOUND_STORAGE_KEY = "wms-inbound-orders-v1";
-const INVENTORY_STORAGE_KEY = "wms-inventory-items-v1";
-const LOCATION_STORAGE_KEY = "wms-storage-locations-v1";
 
-const INITIAL_INBOUND = [];
+const INITIAL_INBOUND =
+  [];
+
 
 export default function InboundOperations({
   embedded = false,
 }) {
-  const [orders, setOrders] = useState(loadInboundOrders);
-  const [inventory, setInventory] = useState(loadInventory);
-  const [locations, setLocations] = useState(loadLocations);
+  const [
+    orders,
+    setOrders,
+  ] = useState(
+    loadInboundOrders
+  );
 
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("ALL");
 
-  const [showOrderForm, setShowOrderForm] = useState(false);
-  const [showReceiveForm, setShowReceiveForm] = useState(false);
+  const [
+    inventory,
+    setInventory,
+  ] = useState(
+    loadInventory
+  );
 
-  const [selectedOrder, setSelectedOrder] = useState(null);
 
-  const [saveMessage, setSaveMessage] = useState("");
+  const [
+    locations,
+    setLocations,
+  ] = useState(
+    loadLocations
+  );
+
+
+  const [
+    search,
+    setSearch,
+  ] = useState("");
+
+
+  const [
+    statusFilter,
+    setStatusFilter,
+  ] = useState(
+    "ALL"
+  );
+
+
+  const [
+    showOrderForm,
+    setShowOrderForm,
+  ] = useState(
+    false
+  );
+
+
+  const [
+    showReceiveForm,
+    setShowReceiveForm,
+  ] = useState(
+    false
+  );
+
+
+  const [
+    selectedOrder,
+    setSelectedOrder,
+  ] = useState(
+    null
+  );
+
+
+  const [
+    saveMessage,
+    setSaveMessage,
+  ] = useState("");
+
 
   /*
    * =====================================================
-   * SAVE INBOUND ORDERS
+   * SAVE INBOUND
    * =====================================================
    */
 
@@ -49,54 +112,172 @@ export default function InboundOperations({
     try {
       localStorage.setItem(
         INBOUND_STORAGE_KEY,
-        JSON.stringify(orders)
+
+        JSON.stringify(
+          orders
+        )
       );
 
-      setSaveMessage("Saved locally");
-    } catch (error) {
-      console.error("Could not save inbound orders.", error);
 
-      setSaveMessage("Local save failed");
+      setSaveMessage(
+        "Saved locally"
+      );
+    } catch (error) {
+      console.error(
+        "Could not save inbound orders.",
+        error
+      );
+
+
+      setSaveMessage(
+        "Local save failed"
+      );
     }
   }, [orders]);
 
+
   /*
    * =====================================================
-   * REFRESH RELATED DATA
+   * SYNC FROM TASK / STORAGE
    * =====================================================
    */
 
   useEffect(() => {
     function refreshRelatedData() {
-      setInventory(loadInventory());
-      setLocations(loadLocations());
+      setOrders(
+        loadInboundOrders()
+      );
+
+      setInventory(
+        loadInventory()
+      );
+
+      setLocations(
+        loadLocations()
+      );
     }
 
-    function handleStorage(event) {
-      if (event.key === INVENTORY_STORAGE_KEY) {
-        setInventory(loadInventory());
-      }
 
-      if (event.key === LOCATION_STORAGE_KEY) {
-        setLocations(loadLocations());
-      }
-
+    function handleStorage(
+      event
+    ) {
       if (
-        event.key === INBOUND_STORAGE_KEY &&
+        event.key ===
+          INBOUND_STORAGE_KEY &&
         event.newValue
       ) {
-        setOrders(loadInboundOrders());
+        setOrders(
+          loadInboundOrders()
+        );
+      }
+
+
+      if (
+        event.key ===
+        INVENTORY_STORAGE_KEY
+      ) {
+        setInventory(
+          loadInventory()
+        );
+      }
+
+
+      if (
+        event.key ===
+        LOCATION_STORAGE_KEY
+      ) {
+        setLocations(
+          loadLocations()
+        );
       }
     }
 
-    window.addEventListener("focus", refreshRelatedData);
-    window.addEventListener("storage", handleStorage);
+
+    /*
+     * Same browser tab
+     * Task Management -> Inbound
+     */
+
+    function handleWmsDataChanged(
+      event
+    ) {
+      const keys =
+        event.detail?.keys ||
+        [];
+
+
+      if (
+        keys.includes(
+          INBOUND_STORAGE_KEY
+        )
+      ) {
+        setOrders(
+          loadInboundOrders()
+        );
+      }
+
+
+      if (
+        keys.includes(
+          INVENTORY_STORAGE_KEY
+        )
+      ) {
+        setInventory(
+          loadInventory()
+        );
+      }
+
+
+      if (
+        keys.includes(
+          LOCATION_STORAGE_KEY
+        )
+      ) {
+        setLocations(
+          loadLocations()
+        );
+      }
+    }
+
+
+    window.addEventListener(
+      "focus",
+      refreshRelatedData
+    );
+
+
+    window.addEventListener(
+      "storage",
+      handleStorage
+    );
+
+
+    window.addEventListener(
+      "wms-data-changed",
+      handleWmsDataChanged
+    );
+
 
     return () => {
-      window.removeEventListener("focus", refreshRelatedData);
-      window.removeEventListener("storage", handleStorage);
+      window.removeEventListener(
+        "focus",
+        refreshRelatedData
+      );
+
+
+      window.removeEventListener(
+        "storage",
+        handleStorage
+      );
+
+
+      window.removeEventListener(
+        "wms-data-changed",
+        handleWmsDataChanged
+      );
     };
   }, []);
+
 
   /*
    * =====================================================
@@ -104,67 +285,134 @@ export default function InboundOperations({
    * =====================================================
    */
 
-  const skuMasters = useMemo(() => {
-    const result = new Map();
+  const skuMasters =
+    useMemo(() => {
+      const result =
+        new Map();
 
-    inventory.forEach((item) => {
-      if (!item.sku) {
-        return;
-      }
 
-      if (!result.has(item.sku)) {
-        result.set(item.sku, {
-          sku: item.sku,
-          name: item.name,
-          category: item.category,
-          unit: item.unit,
-          minStock: item.minStock,
-          maxStock: item.maxStock,
-        });
-      }
-    });
+      inventory.forEach(
+        (item) => {
+          if (
+            !item.sku ||
+            result.has(
+              item.sku
+            )
+          ) {
+            return;
+          }
 
-    return Array.from(result.values()).sort((a, b) =>
-      a.sku.localeCompare(b.sku)
-    );
-  }, [inventory]);
+
+          result.set(
+            item.sku,
+
+            {
+              sku:
+                item.sku,
+
+              name:
+                item.name,
+
+              category:
+                item.category,
+
+              unit:
+                item.unit,
+
+              minStock:
+                item.minStock,
+
+              maxStock:
+                item.maxStock,
+            }
+          );
+        }
+      );
+
+
+      return Array.from(
+        result.values()
+      ).sort(
+        (a, b) =>
+          a.sku.localeCompare(
+            b.sku
+          )
+      );
+    }, [inventory]);
+
 
   /*
    * =====================================================
-   * SEARCH + FILTER
+   * SEARCH + NEWEST FIRST
    * =====================================================
    */
 
-  const filteredOrders = useMemo(() => {
-    const query = search.trim().toLowerCase();
+  const filteredOrders =
+    useMemo(() => {
+      const query =
+        search
+          .trim()
+          .toLowerCase();
 
-    return orders.filter((order) => {
-      const matchesStatus =
-        statusFilter === "ALL" ||
-        order.status === statusFilter;
 
-      const searchable = [
-        order.id,
-        order.receiptNo,
-        order.supplier,
-        order.reference,
-        order.status,
-        ...(order.lines || []).flatMap((line) => [
-          line.sku,
-          line.itemName,
-          line.locationId,
-        ]),
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
+      return orders
+        .filter(
+          (order) => {
+            const matchesStatus =
+              statusFilter ===
+                "ALL" ||
+              order.status ===
+                statusFilter;
 
-      const matchesSearch =
-        !query || searchable.includes(query);
 
-      return matchesStatus && matchesSearch;
-    });
-  }, [orders, search, statusFilter]);
+            const searchable = [
+              order.id,
+              order.receiptNo,
+              order.supplier,
+              order.reference,
+              order.status,
+
+              ...(
+                order.lines ||
+                []
+              ).flatMap(
+                (line) => [
+                  line.sku,
+                  line.itemName,
+                  line.locationId,
+                ]
+              ),
+            ]
+              .filter(Boolean)
+              .join(" ")
+              .toLowerCase();
+
+
+            return (
+              matchesStatus &&
+              (
+                !query ||
+                searchable.includes(
+                  query
+                )
+              )
+            );
+          }
+        )
+
+        /*
+         * LATEST ORDER FIRST
+         */
+
+        .sort(
+          compareNewestFirst
+        );
+    }, [
+      orders,
+      search,
+      statusFilter,
+    ]);
+
 
   /*
    * =====================================================
@@ -172,74 +420,132 @@ export default function InboundOperations({
    * =====================================================
    */
 
-  const summary = useMemo(() => {
-    const draft = orders.filter(
-      (order) => order.status === "DRAFT"
-    ).length;
+  const summary =
+    useMemo(() => {
+      const draft =
+        orders.filter(
+          (order) =>
+            order.status ===
+            "DRAFT"
+        ).length;
 
-    const received = orders.filter(
-      (order) => order.status === "RECEIVED"
-    ).length;
 
-    const completed = orders.filter(
-      (order) => order.status === "COMPLETED"
-    ).length;
+      const received =
+        orders.filter(
+          (order) =>
+            order.status ===
+            "RECEIVED"
+        ).length;
 
-    const incomingQty = orders
-      .filter((order) => order.status !== "COMPLETED")
-      .reduce(
-        (sum, order) =>
-          sum +
-          (order.lines || []).reduce(
-            (lineSum, line) =>
-              lineSum + Number(line.expectedQty || 0),
+
+      const completed =
+        orders.filter(
+          (order) =>
+            order.status ===
+            "COMPLETED"
+        ).length;
+
+
+      const incomingQty =
+        orders
+          .filter(
+            (order) =>
+              order.status !==
+              "COMPLETED"
+          )
+          .reduce(
+            (
+              sum,
+              order
+            ) =>
+              sum +
+              (
+                order.lines ||
+                []
+              ).reduce(
+                (
+                  lineSum,
+                  line
+                ) =>
+                  lineSum +
+                  Number(
+                    line.expectedQty ||
+                    0
+                  ),
+
+                0
+              ),
+
             0
-          ),
-        0
-      );
+          );
 
-    return {
-      draft,
-      received,
-      completed,
-      incomingQty,
-    };
-  }, [orders]);
+
+      return {
+        draft,
+        received,
+        completed,
+        incomingQty,
+      };
+    }, [orders]);
+
 
   /*
    * =====================================================
-   * ADD ORDER
+   * ADD
    * =====================================================
    */
 
   function handleAddOrder() {
-    setSelectedOrder(null);
-    setShowOrderForm(true);
+    setSelectedOrder(
+      null
+    );
+
+    setShowOrderForm(
+      true
+    );
   }
+
 
   /*
    * =====================================================
-   * EDIT ORDER
+   * EDIT
    * =====================================================
    */
 
-  function handleEditOrder(order) {
-    if (order.status !== "DRAFT") {
+  function handleEditOrder(
+    order
+  ) {
+    if (
+      order.status !==
+      "DRAFT"
+    ) {
       return;
     }
 
-    setSelectedOrder(order);
-    setShowOrderForm(true);
+
+    setSelectedOrder(
+      order
+    );
+
+    setShowOrderForm(
+      true
+    );
   }
+
 
   /*
    * =====================================================
-   * DELETE ORDER
+   * DELETE
    * =====================================================
    */
 
-  function handleDeleteOrder(order) {
-    if (order.status !== "DRAFT") {
+  function handleDeleteOrder(
+    order
+  ) {
+    if (
+      order.status !==
+      "DRAFT"
+    ) {
       window.alert(
         "Only Draft inbound orders can be deleted."
       );
@@ -247,72 +553,119 @@ export default function InboundOperations({
       return;
     }
 
-    const confirmed = window.confirm(
-      `Delete inbound order ${order.receiptNo}?`
-    );
+
+    const confirmed =
+      window.confirm(
+        `Delete inbound order ${order.receiptNo}?`
+      );
+
 
     if (!confirmed) {
       return;
     }
 
-    setOrders((current) =>
-      current.filter((item) => item.id !== order.id)
+
+    setOrders(
+      (current) =>
+        current.filter(
+          (item) =>
+            item.id !==
+            order.id
+        )
     );
   }
 
+
   /*
    * =====================================================
-   * SAVE ORDER FORM
+   * SAVE ORDER
    * =====================================================
    */
 
-  function handleSaveOrder(formData) {
-    const validation = validateInboundOrder({
-      formData,
-      editingId: selectedOrder?.id || null,
-      orders,
-      skuMasters,
-    });
+  function handleSaveOrder(
+    formData
+  ) {
+    const validation =
+      validateInboundOrder({
+        formData,
+        skuMasters,
+      });
+
 
     if (!validation.ok) {
       return validation;
     }
 
+
     if (selectedOrder) {
-      setOrders((current) =>
-        current.map((order) =>
-          order.id === selectedOrder.id
-            ? {
-                ...order,
-                ...validation.order,
-              }
-            : order
-        )
+      setOrders(
+        (current) =>
+          current.map(
+            (order) =>
+              order.id ===
+              selectedOrder.id
+                ? {
+                    ...order,
+
+                    ...validation.order,
+                  }
+                : order
+          )
       );
     } else {
-      const now = new Date().toISOString();
+      const now =
+        new Date().toISOString();
 
-      setOrders((current) => [
-        ...current,
-        {
-          id: getNextInboundId(current),
-          receiptNo: generateReceiptNo(current),
-          status: "DRAFT",
-          createdAt: now,
-          receivedAt: "",
-          completedAt: "",
-          ...validation.order,
-        },
-      ]);
+
+      setOrders(
+        (current) => [
+          ...current,
+
+          {
+            id:
+              getNextInboundId(
+                current
+              ),
+
+            receiptNo:
+              generateReceiptNo(
+                current
+              ),
+
+            status:
+              "DRAFT",
+
+            createdAt:
+              now,
+
+            receivedAt:
+              "",
+
+            completedAt:
+              "",
+
+            ...validation.order,
+          },
+        ]
+      );
     }
 
-    setSelectedOrder(null);
-    setShowOrderForm(false);
+
+    setSelectedOrder(
+      null
+    );
+
+
+    setShowOrderForm(
+      false
+    );
+
 
     return {
       ok: true,
     };
   }
+
 
   /*
    * =====================================================
@@ -320,118 +673,215 @@ export default function InboundOperations({
    * =====================================================
    */
 
-  function handleOpenReceive(order) {
-    if (order.status !== "DRAFT") {
+  function handleOpenReceive(
+    order
+  ) {
+    if (
+      order.status !==
+      "DRAFT"
+    ) {
       return;
     }
 
-    if (!order.lines?.length) {
-      window.alert("This inbound order has no items.");
+
+    if (
+      !order.lines?.length
+    ) {
+      window.alert(
+        "This inbound order has no items."
+      );
+
       return;
     }
 
-    setSelectedOrder(order);
-    setShowReceiveForm(true);
+
+    setSelectedOrder(
+      order
+    );
+
+
+    setShowReceiveForm(
+      true
+    );
   }
 
-  function handleReceive(receiveLines) {
+
+  function handleReceive(
+    receiveLines
+  ) {
     if (!selectedOrder) {
       return {
         ok: false,
-        message: "Inbound order not found.",
+
+        message:
+          "Inbound order not found.",
       };
     }
 
-    const validation = validateReceiveLines({
-      order: selectedOrder,
-      receiveLines,
-      locations,
-    });
+
+    const validation =
+      validateReceiveLines({
+        order:
+          selectedOrder,
+
+        receiveLines,
+
+        locations,
+      });
+
 
     if (!validation.ok) {
       return validation;
     }
 
-    const now = new Date().toISOString();
 
-    setOrders((current) =>
-      current.map((order) =>
-        order.id === selectedOrder.id
-          ? {
-              ...order,
-              status: "RECEIVED",
-              receivedAt: now,
-              lines: validation.lines,
-            }
-          : order
-      )
+    const now =
+      new Date().toISOString();
+
+
+    setOrders(
+      (current) =>
+        current.map(
+          (order) =>
+            order.id ===
+            selectedOrder.id
+              ? {
+                  ...order,
+
+                  status:
+                    "RECEIVED",
+
+                  receivedAt:
+                    now,
+
+                  lines:
+                    validation.lines,
+                }
+              : order
+        )
     );
 
-    setShowReceiveForm(false);
-    setSelectedOrder(null);
+
+    setShowReceiveForm(
+      false
+    );
+
+
+    setSelectedOrder(
+      null
+    );
+
 
     return {
       ok: true,
     };
   }
 
+
   /*
    * =====================================================
-   * COMPLETE PUTAWAY
+   * PUTAWAY FROM OPERATIONS PAGE
    * =====================================================
    */
 
-  function handleCompletePutaway(order) {
-    if (order.status !== "RECEIVED") {
+  function handleCompletePutaway(
+    order
+  ) {
+    if (
+      order.status !==
+      "RECEIVED"
+    ) {
       return;
     }
 
-    const confirmed = window.confirm(
-      `Complete putaway for ${order.receiptNo}?\n\nReceived quantities will be added to Inventory.`
-    );
+
+    const confirmed =
+      window.confirm(
+        `Complete putaway for ${order.receiptNo}?\n\nReceived quantities will be added to Inventory.`
+      );
+
 
     if (!confirmed) {
       return;
     }
 
-    const currentInventory = loadInventory();
 
-    const updatedInventory = applyPutawayToInventory({
-      inventory: currentInventory,
-      order,
-    });
+    const currentInventory =
+      loadInventory();
 
-    try {
-      localStorage.setItem(
-        INVENTORY_STORAGE_KEY,
-        JSON.stringify(updatedInventory)
-      );
-    } catch (error) {
-      console.error("Could not update inventory.", error);
 
+    const result =
+      applyPutawayToInventory({
+        inventory:
+          currentInventory,
+
+        order,
+      });
+
+
+    if (!result.ok) {
       window.alert(
-        "Inventory update failed. Putaway was not completed."
+        result.message
       );
 
       return;
     }
 
-    setInventory(updatedInventory);
 
-    const now = new Date().toISOString();
+    try {
+      localStorage.setItem(
+        INVENTORY_STORAGE_KEY,
 
-    setOrders((current) =>
-      current.map((item) =>
-        item.id === order.id
-          ? {
-              ...item,
-              status: "COMPLETED",
-              completedAt: now,
-            }
-          : item
-      )
+        JSON.stringify(
+          result.inventory
+        )
+      );
+    } catch (error) {
+      console.error(
+        "Could not update inventory.",
+        error
+      );
+
+
+      window.alert(
+        "Inventory update failed. Putaway was not completed."
+      );
+
+
+      return;
+    }
+
+
+    setInventory(
+      result.inventory
     );
+
+
+    setOrders(
+      (current) =>
+        current.map(
+          (item) =>
+            item.id ===
+            order.id
+              ? {
+                  ...item,
+
+                  status:
+                    "COMPLETED",
+
+                  completedAt:
+                    new Date().toISOString(),
+                }
+              : item
+        )
+    );
+
+
+    notifyWmsDataChanged([
+      INVENTORY_STORAGE_KEY,
+    ]);
   }
+
 
   /*
    * =====================================================
@@ -441,33 +891,40 @@ export default function InboundOperations({
 
   return (
     <div
-  className={`inbound-page ${
-    embedded
-      ? "inbound-embedded"
-      : ""
-  }`}
->
+      className={`inbound-page ${
+        embedded
+          ? "inbound-embedded"
+          : ""
+      }`}
+    >
+
       {/* HEADER */}
 
       <div className="inbound-header">
         <div>
           <span className="inbound-label">
-            WAREHOUSE MANAGEMENT
+            INBOUND OPERATIONS
           </span>
 
-          <h2>Inbound / Receiving</h2>
+          <h2>
+            Inbound / Receiving
+          </h2>
 
           <p>
-            Create inbound orders, receive incoming goods
-            and complete warehouse putaway.
+            Create inbound orders,
+            receive incoming goods
+            and complete putaway.
           </p>
         </div>
+
 
         <div className="inbound-header-actions">
           {saveMessage && (
             <span
               className={`inbound-save-state ${
-                saveMessage.includes("failed")
+                saveMessage.includes(
+                  "failed"
+                )
                   ? "error"
                   : ""
               }`}
@@ -476,85 +933,146 @@ export default function InboundOperations({
             </span>
           )}
 
+
           <button
             className="inbound-add-button"
-            onClick={handleAddOrder}
+            onClick={
+              handleAddOrder
+            }
           >
-            <Plus size={18} />
+            <Plus
+              size={18}
+            />
+
             New Inbound
           </button>
         </div>
       </div>
 
+
       {/* SUMMARY */}
 
       <div className="inbound-summary-grid">
         <SummaryCard
-          icon={<ClipboardList size={21} />}
+          icon={
+            <ClipboardList
+              size={21}
+            />
+          }
           title="Draft"
-          value={summary.draft}
+          value={
+            summary.draft
+          }
         />
 
+
         <SummaryCard
-          icon={<ArrowDownToLine size={21} />}
+          icon={
+            <ArrowDownToLine
+              size={21}
+            />
+          }
           title="Waiting Putaway"
-          value={summary.received}
+          value={
+            summary.received
+          }
           tone="warning"
         />
 
+
         <SummaryCard
-          icon={<CheckCircle2 size={21} />}
+          icon={
+            <CheckCircle2
+              size={21}
+            />
+          }
           title="Completed"
-          value={summary.completed}
+          value={
+            summary.completed
+          }
           tone="success"
         />
 
+
         <SummaryCard
-          icon={<Package size={21} />}
+          icon={
+            <Package
+              size={21}
+            />
+          }
           title="Incoming Qty"
-          value={summary.incomingQty}
+          value={
+            summary.incomingQty
+          }
         />
       </div>
 
-      {/* PANEL */}
+
+      {/* TABLE */}
 
       <section className="inbound-panel">
         <div className="inbound-panel-header">
           <div>
-            <h3>Inbound Orders</h3>
+            <h3>
+              Inbound Orders
+            </h3>
 
             <p>
-              Receive products and assign destination
-              storage locations before putaway.
+              Newest orders are
+              shown first.
             </p>
           </div>
 
+
           <div className="inbound-toolbar">
             <div className="inbound-search">
-              <Search size={17} />
+              <Search
+                size={17}
+              />
 
               <input
-                type="text"
+                value={
+                  search
+                }
                 placeholder="Search inbound, supplier or SKU..."
-                value={search}
-                onChange={(event) =>
-                  setSearch(event.target.value)
+                onChange={(
+                  event
+                ) =>
+                  setSearch(
+                    event.target
+                      .value
+                  )
                 }
               />
             </div>
 
+
             <select
               className="inbound-filter"
-              value={statusFilter}
-              onChange={(event) =>
-                setStatusFilter(event.target.value)
+              value={
+                statusFilter
+              }
+              onChange={(
+                event
+              ) =>
+                setStatusFilter(
+                  event.target
+                    .value
+                )
               }
             >
-              <option value="ALL">All status</option>
-              <option value="DRAFT">Draft</option>
+              <option value="ALL">
+                All status
+              </option>
+
+              <option value="DRAFT">
+                Draft
+              </option>
+
               <option value="RECEIVED">
                 Waiting Putaway
               </option>
+
               <option value="COMPLETED">
                 Completed
               </option>
@@ -562,120 +1080,221 @@ export default function InboundOperations({
           </div>
         </div>
 
+
         <div className="inbound-table-wrapper">
           <table className="inbound-table">
             <thead>
               <tr>
-                <th>Inbound</th>
-                <th>Supplier</th>
-                <th>Reference</th>
-                <th>Items</th>
-                <th>Expected</th>
-                <th>Received</th>
-                <th>Status</th>
-                <th>Created</th>
+                <th>
+                  Inbound
+                </th>
+
+                <th>
+                  Supplier
+                </th>
+
+                <th>
+                  Reference
+                </th>
+
+                <th>
+                  Items
+                </th>
+
+                <th>
+                  Expected
+                </th>
+
+                <th>
+                  Received
+                </th>
+
+                <th>
+                  Status
+                </th>
+
+                <th>
+                  Created
+                </th>
+
                 <th></th>
               </tr>
             </thead>
 
-            <tbody>
-              {filteredOrders.map((order) => {
-                const expectedQty = getOrderExpectedQty(order);
-                const receivedQty = getOrderReceivedQty(order);
 
-                return (
-                  <tr key={order.id}>
+            <tbody>
+              {filteredOrders.map(
+                (order) => (
+                  <tr
+                    key={
+                      order.id
+                    }
+                  >
                     <td>
                       <div className="inbound-code-cell">
                         <div className="inbound-code-icon">
-                          <Truck size={17} />
+                          <Truck
+                            size={17}
+                          />
                         </div>
 
                         <div>
-                          <strong>{order.receiptNo}</strong>
-                          <span>{order.id}</span>
+                          <strong>
+                            {
+                              order.receiptNo
+                            }
+                          </strong>
+
+                          <span>
+                            {
+                              order.id
+                            }
+                          </span>
                         </div>
                       </div>
                     </td>
 
-                    <td>{order.supplier}</td>
+
+                    <td>
+                      {
+                        order.supplier
+                      }
+                    </td>
+
 
                     <td>
                       <span className="inbound-reference">
-                        {order.reference || "-"}
+                        {
+                          order.reference ||
+                          "-"
+                        }
                       </span>
                     </td>
 
-                    <td>{order.lines?.length || 0}</td>
-
-                    <td>{expectedQty}</td>
 
                     <td>
-                      {order.status === "DRAFT"
+                      {
+                        order.lines
+                          ?.length ||
+                        0
+                      }
+                    </td>
+
+
+                    <td>
+                      {
+                        getOrderExpectedQty(
+                          order
+                        )
+                      }
+                    </td>
+
+
+                    <td>
+                      {order.status ===
+                      "DRAFT"
                         ? "-"
-                        : receivedQty}
+                        : getOrderReceivedQty(
+                            order
+                          )}
                     </td>
 
-                    <td>
-                      <StatusBadge status={order.status} />
-                    </td>
 
                     <td>
-                      {formatDateTime(order.createdAt)}
+                      <StatusBadge
+                        status={
+                          order.status
+                        }
+                      />
                     </td>
+
+
+                    <td>
+                      {
+                        formatDateTime(
+                          order.createdAt
+                        )
+                      }
+                    </td>
+
 
                     <td>
                       <div className="inbound-actions">
-                        {order.status === "DRAFT" && (
+
+                        {order.status ===
+                          "DRAFT" && (
                           <>
                             <button
                               type="button"
                               title="Edit"
                               onClick={() =>
-                                handleEditOrder(order)
+                                handleEditOrder(
+                                  order
+                                )
                               }
                             >
-                              <Pencil size={15} />
+                              <Pencil
+                                size={15}
+                              />
                             </button>
+
 
                             <button
                               type="button"
                               title="Receive"
                               className="receive"
                               onClick={() =>
-                                handleOpenReceive(order)
+                                handleOpenReceive(
+                                  order
+                                )
                               }
                             >
-                              <ArrowDownToLine size={15} />
+                              <ArrowDownToLine
+                                size={15}
+                              />
                             </button>
+
 
                             <button
                               type="button"
                               title="Delete"
                               className="danger"
                               onClick={() =>
-                                handleDeleteOrder(order)
+                                handleDeleteOrder(
+                                  order
+                                )
                               }
                             >
-                              <Trash2 size={15} />
+                              <Trash2
+                                size={15}
+                              />
                             </button>
                           </>
                         )}
 
-                        {order.status === "RECEIVED" && (
+
+                        {order.status ===
+                          "RECEIVED" && (
                           <button
                             type="button"
                             className="putaway"
                             onClick={() =>
-                              handleCompletePutaway(order)
+                              handleCompletePutaway(
+                                order
+                              )
                             }
                           >
-                            <CheckCircle2 size={15} />
+                            <CheckCircle2
+                              size={15}
+                            />
+
                             Putaway
                           </button>
                         )}
 
-                        {order.status === "COMPLETED" && (
+
+                        {order.status ===
+                          "COMPLETED" && (
                           <span className="inbound-done">
                             Completed
                           </span>
@@ -683,12 +1302,14 @@ export default function InboundOperations({
                       </div>
                     </td>
                   </tr>
-                );
-              })}
+                )
+              )}
             </tbody>
           </table>
 
-          {filteredOrders.length === 0 && (
+
+          {filteredOrders.length ===
+            0 && (
             <div className="inbound-empty">
               No inbound orders found.
             </div>
@@ -696,40 +1317,66 @@ export default function InboundOperations({
         </div>
       </section>
 
-      {/* ORDER FORM */}
+
+      {/* CREATE / EDIT */}
 
       {showOrderForm && (
         <InboundOrderForm
-          order={selectedOrder}
-          skuMasters={skuMasters}
-          onSave={handleSaveOrder}
+          order={
+            selectedOrder
+          }
+          skuMasters={
+            skuMasters
+          }
+          onSave={
+            handleSaveOrder
+          }
           onCancel={() => {
-            setShowOrderForm(false);
-            setSelectedOrder(null);
+            setShowOrderForm(
+              false
+            );
+
+            setSelectedOrder(
+              null
+            );
           }}
         />
       )}
 
-      {/* RECEIVE FORM */}
 
-      {showReceiveForm && selectedOrder && (
-        <ReceiveForm
-          order={selectedOrder}
-          locations={locations}
-          onSave={handleReceive}
-          onCancel={() => {
-            setShowReceiveForm(false);
-            setSelectedOrder(null);
-          }}
-        />
-      )}
+      {/* RECEIVE */}
+
+      {showReceiveForm &&
+        selectedOrder && (
+          <ReceiveForm
+            order={
+              selectedOrder
+            }
+            locations={
+              locations
+            }
+            onSave={
+              handleReceive
+            }
+            onCancel={() => {
+              setShowReceiveForm(
+                false
+              );
+
+              setSelectedOrder(
+                null
+              );
+            }}
+          />
+        )}
     </div>
   );
 }
 
+
 /*
  * =====================================================
- * SUMMARY CARD
+ * SUMMARY
  * =====================================================
  */
 
@@ -748,12 +1395,18 @@ function SummaryCard({
       </div>
 
       <div>
-        <span>{title}</span>
-        <strong>{value}</strong>
+        <span>
+          {title}
+        </span>
+
+        <strong>
+          {value}
+        </strong>
       </div>
     </div>
   );
 }
+
 
 /*
  * =====================================================
@@ -761,23 +1414,32 @@ function SummaryCard({
  * =====================================================
  */
 
-function StatusBadge({ status }) {
+function StatusBadge({
+  status,
+}) {
+  const label =
+    status ===
+    "RECEIVED"
+      ? "Waiting Putaway"
+      : status ===
+        "COMPLETED"
+        ? "Completed"
+        : "Draft";
+
+
   return (
     <span
       className={`inbound-status status-${status.toLowerCase()}`}
     >
-      {status === "RECEIVED"
-        ? "Waiting Putaway"
-        : status === "COMPLETED"
-          ? "Completed"
-          : "Draft"}
+      {label}
     </span>
   );
 }
 
+
 /*
  * =====================================================
- * CREATE / EDIT INBOUND
+ * ORDER FORM
  * =====================================================
  */
 
@@ -787,101 +1449,153 @@ function InboundOrderForm({
   onSave,
   onCancel,
 }) {
-  const [form, setForm] = useState({
-    supplier: order?.supplier || "",
-    reference: order?.reference || "",
+  const [
+    form,
+    setForm,
+  ] = useState({
+    supplier:
+      order?.supplier ||
+      "",
+
+    reference:
+      order?.reference ||
+      "",
+
     lines:
-      order?.lines?.map((line) => ({
-        ...line,
-      })) || [createEmptyLine()],
+      order?.lines?.map(
+        (line) => ({
+          ...line,
+        })
+      ) || [
+        createEmptyLine(),
+      ],
   });
 
-  const [error, setError] = useState("");
 
-  function updateField(field, value) {
-    setForm((current) => ({
-      ...current,
-      [field]: value,
-    }));
+  const [
+    error,
+    setError,
+  ] = useState("");
 
-    setError("");
-  }
 
-  function updateLine(index, field, value) {
-    setForm((current) => {
-      const lines = [...current.lines];
-
-      lines[index] = {
-        ...lines[index],
-        [field]: value,
-      };
-
-      if (field === "sku") {
-        const master = skuMasters.find(
-          (item) => item.sku === value
-        );
-
-        lines[index].itemName = master?.name || "";
-      }
-
-      return {
+  function updateField(
+    field,
+    value
+  ) {
+    setForm(
+      (current) => ({
         ...current,
-        lines,
-      };
-    });
+        [field]:
+          value,
+      })
+    );
 
     setError("");
   }
 
-  function addLine() {
-    setForm((current) => ({
-      ...current,
-      lines: [...current.lines, createEmptyLine()],
-    }));
+
+  function updateLine(
+    index,
+    field,
+    value
+  ) {
+    setForm(
+      (current) => {
+        const lines = [
+          ...current.lines,
+        ];
+
+
+        lines[
+          index
+        ] = {
+          ...lines[
+            index
+          ],
+
+          [field]:
+            value,
+        };
+
+
+        if (
+          field ===
+          "sku"
+        ) {
+          const master =
+            skuMasters.find(
+              (item) =>
+                item.sku ===
+                value
+            );
+
+
+          lines[
+            index
+          ].itemName =
+            master?.name ||
+            "";
+        }
+
+
+        return {
+          ...current,
+          lines,
+        };
+      }
+    );
+
+
+    setError("");
   }
 
-  function removeLine(index) {
-    if (form.lines.length <= 1) {
-      return;
-    }
 
-    setForm((current) => ({
-      ...current,
-      lines: current.lines.filter(
-        (_, lineIndex) => lineIndex !== index
-      ),
-    }));
-  }
-
-  function handleSubmit(event) {
+  function handleSubmit(
+    event
+  ) {
     event.preventDefault();
 
-    const result = onSave(form);
+
+    const result =
+      onSave(
+        form
+      );
+
 
     if (!result?.ok) {
       setError(
         result?.message ||
-          "Could not save inbound order."
+        "Could not save inbound order."
       );
     }
   }
 
+
   return (
     <div
       className="inbound-modal-backdrop"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) {
+      onMouseDown={(
+        event
+      ) => {
+        if (
+          event.target ===
+          event.currentTarget
+        ) {
           onCancel();
         }
       }}
     >
       <form
         className="inbound-modal inbound-order-modal"
-        onSubmit={handleSubmit}
+        onSubmit={
+          handleSubmit
+        }
       >
         <div className="inbound-modal-header">
           <div>
-            <span>INBOUND MANAGEMENT</span>
+            <span>
+              INBOUND MANAGEMENT
+            </span>
 
             <h3>
               {order
@@ -893,167 +1607,294 @@ function InboundOrderForm({
           <button
             type="button"
             className="inbound-close"
-            onClick={onCancel}
+            onClick={
+              onCancel
+            }
           >
             ×
           </button>
         </div>
 
+
         <div className="inbound-form-body">
           <div className="inbound-form-grid">
             <FormField
               label="Supplier"
-              value={form.supplier}
+              value={
+                form.supplier
+              }
               placeholder="Supplier name"
-              onChange={(value) =>
-                updateField("supplier", value)
+              onChange={(
+                value
+              ) =>
+                updateField(
+                  "supplier",
+                  value
+                )
               }
             />
 
+
             <FormField
               label="Reference / PO"
-              value={form.reference}
+              value={
+                form.reference
+              }
               placeholder="PO-2026-001"
-              onChange={(value) =>
-                updateField("reference", value)
+              onChange={(
+                value
+              ) =>
+                updateField(
+                  "reference",
+                  value
+                )
               }
             />
           </div>
 
+
           <div className="inbound-lines-header">
             <div>
-              <strong>Inbound Items</strong>
+              <strong>
+                Inbound Items
+              </strong>
 
               <span>
-                Select SKU and expected receiving quantity.
+                Select SKU and
+                expected quantity.
               </span>
             </div>
 
+
             <button
               type="button"
-              onClick={addLine}
+              onClick={() =>
+                setForm(
+                  (current) => ({
+                    ...current,
+
+                    lines: [
+                      ...current.lines,
+
+                      createEmptyLine(),
+                    ],
+                  })
+                )
+              }
             >
-              <Plus size={15} />
+              <Plus
+                size={15}
+              />
+
               Add Line
             </button>
           </div>
 
+
           <div className="inbound-lines">
-            {form.lines.map((line, index) => (
-              <div
-                className="inbound-line"
-                key={line.lineId}
-              >
-                <div className="inbound-line-number">
-                  {index + 1}
-                </div>
+            {form.lines.map(
+              (
+                line,
+                index
+              ) => (
+                <div
+                  className="inbound-line"
+                  key={
+                    line.lineId
+                  }
+                >
+                  <div className="inbound-line-number">
+                    {
+                      index +
+                      1
+                    }
+                  </div>
 
-                <label className="inbound-field">
-                  <span>SKU</span>
 
-                  <select
-                    value={line.sku}
-                    onChange={(event) =>
-                      updateLine(
-                        index,
-                        "sku",
-                        event.target.value
+                  <label className="inbound-field">
+                    <span>
+                      SKU
+                    </span>
+
+                    <select
+                      value={
+                        line.sku
+                      }
+                      onChange={(
+                        event
+                      ) =>
+                        updateLine(
+                          index,
+                          "sku",
+                          event
+                            .target
+                            .value
+                        )
+                      }
+                    >
+                      <option value="">
+                        Select SKU
+                      </option>
+
+                      {skuMasters.map(
+                        (
+                          item
+                        ) => (
+                          <option
+                            key={
+                              item.sku
+                            }
+                            value={
+                              item.sku
+                            }
+                          >
+                            {
+                              item.sku
+                            }
+                            {" - "}
+                            {
+                              item.name
+                            }
+                          </option>
+                        )
+                      )}
+                    </select>
+                  </label>
+
+
+                  <label className="inbound-field">
+                    <span>
+                      Item
+                    </span>
+
+                    <input
+                      value={
+                        line.itemName
+                      }
+                      readOnly
+                      placeholder="Select SKU"
+                    />
+                  </label>
+
+
+                  <label className="inbound-field inbound-qty-field">
+                    <span>
+                      Expected Qty
+                    </span>
+
+                    <input
+                      type="number"
+                      min="1"
+                      value={
+                        line.expectedQty
+                      }
+                      onChange={(
+                        event
+                      ) =>
+                        updateLine(
+                          index,
+                          "expectedQty",
+                          event
+                            .target
+                            .value
+                        )
+                      }
+                    />
+                  </label>
+
+
+                  <button
+                    type="button"
+                    className="inbound-remove-line"
+                    disabled={
+                      form.lines
+                        .length <=
+                      1
+                    }
+                    onClick={() =>
+                      setForm(
+                        (current) => ({
+                          ...current,
+
+                          lines:
+                            current.lines.filter(
+                              (
+                                _,
+                                i
+                              ) =>
+                                i !==
+                                index
+                            ),
+                        })
                       )
                     }
                   >
-                    <option value="">
-                      Select SKU
-                    </option>
-
-                    {skuMasters.map((item) => (
-                      <option
-                        key={item.sku}
-                        value={item.sku}
-                      >
-                        {item.sku} - {item.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="inbound-field">
-                  <span>Item</span>
-
-                  <input
-                    value={line.itemName}
-                    readOnly
-                    placeholder="Select SKU"
-                  />
-                </label>
-
-                <label className="inbound-field inbound-qty-field">
-                  <span>Expected Qty</span>
-
-                  <input
-                    type="number"
-                    min="1"
-                    value={line.expectedQty}
-                    onChange={(event) =>
-                      updateLine(
-                        index,
-                        "expectedQty",
-                        event.target.value
-                      )
-                    }
-                  />
-                </label>
-
-                <button
-                  type="button"
-                  className="inbound-remove-line"
-                  disabled={form.lines.length <= 1}
-                  onClick={() => removeLine(index)}
-                >
-                  <Trash2 size={15} />
-                </button>
-              </div>
-            ))}
+                    <Trash2
+                      size={15}
+                    />
+                  </button>
+                </div>
+              )
+            )}
           </div>
 
-          {skuMasters.length === 0 && (
+
+          {skuMasters.length ===
+            0 && (
             <div className="inbound-form-warning">
-              <AlertTriangle size={16} />
+              <AlertTriangle
+                size={16}
+              />
 
               <span>
-                No SKU master is available. Create Inventory /
-                SKU records before creating an inbound order.
+                No SKU is available.
+                Create Inventory /
+                SKU first.
               </span>
             </div>
           )}
 
+
           {error && (
             <div className="inbound-form-error">
-              <AlertTriangle size={16} />
-              <span>{error}</span>
+              <AlertTriangle
+                size={16}
+              />
+
+              <span>
+                {error}
+              </span>
             </div>
           )}
         </div>
+
 
         <div className="inbound-modal-actions">
           <button
             type="button"
             className="inbound-cancel"
-            onClick={onCancel}
+            onClick={
+              onCancel
+            }
           >
             Cancel
           </button>
+
 
           <button
             type="submit"
             className="inbound-save"
           >
-            {order ? "Save Changes" : "Create Inbound"}
+            {order
+              ? "Save Changes"
+              : "Create Inbound"}
           </button>
         </div>
       </form>
     </div>
   );
 }
+
 
 /*
  * =====================================================
@@ -1067,217 +1908,384 @@ function ReceiveForm({
   onSave,
   onCancel,
 }) {
-  const [lines, setLines] = useState(
-    order.lines.map((line) => ({
-      lineId: line.lineId,
-      sku: line.sku,
-      itemName: line.itemName,
-      expectedQty: Number(line.expectedQty || 0),
+  const [
+    lines,
+    setLines,
+  ] = useState(
+    order.lines.map(
+      (line) => ({
+        lineId:
+          line.lineId,
 
-      receivedQty:
-        line.receivedQty ||
-        line.expectedQty ||
-        0,
+        sku:
+          line.sku,
 
-      locationId:
-        line.locationId || "",
-    }))
+        itemName:
+          line.itemName,
+
+        expectedQty:
+          Number(
+            line.expectedQty ||
+            0
+          ),
+
+        receivedQty:
+          line.receivedQty ||
+          line.expectedQty ||
+          0,
+
+        locationId:
+          line.locationId ||
+          "",
+      })
+    )
   );
 
-  const [error, setError] = useState("");
 
-  const availableLocations = useMemo(() => {
-    return locations
-      .filter(
-        (location) =>
-          ![
-            "FULL",
-            "BLOCKED",
-            "MAINTENANCE",
-          ].includes(location.status)
-      )
-      .sort((a, b) =>
-        String(a.code).localeCompare(
-          String(b.code)
-        )
-      );
-  }, [locations]);
+  const [
+    error,
+    setError,
+  ] = useState("");
 
-  function updateLine(index, field, value) {
-    setLines((current) => {
-      const next = [...current];
 
-      next[index] = {
-        ...next[index],
-        [field]: value,
-      };
+  const availableLocations =
+    useMemo(
+      () =>
+        locations
+          .filter(
+            (location) =>
+              ![
+                "FULL",
+                "BLOCKED",
+                "MAINTENANCE",
+              ].includes(
+                location.status
+              )
+          )
+          .sort(
+            (a, b) =>
+              String(
+                a.code
+              ).localeCompare(
+                String(
+                  b.code
+                )
+              )
+          ),
 
-      return next;
-    });
+      [locations]
+    );
+
+
+  function updateLine(
+    index,
+    field,
+    value
+  ) {
+    setLines(
+      (current) => {
+        const next = [
+          ...current,
+        ];
+
+
+        next[
+          index
+        ] = {
+          ...next[
+            index
+          ],
+
+          [field]:
+            value,
+        };
+
+
+        return next;
+      }
+    );
+
 
     setError("");
   }
 
-  function handleSubmit(event) {
+
+  function handleSubmit(
+    event
+  ) {
     event.preventDefault();
 
-    const result = onSave(lines);
+
+    const result =
+      onSave(
+        lines
+      );
+
 
     if (!result?.ok) {
       setError(
         result?.message ||
-          "Could not receive inbound order."
+        "Could not receive inbound order."
       );
     }
   }
 
+
   return (
     <div
       className="inbound-modal-backdrop"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) {
+      onMouseDown={(
+        event
+      ) => {
+        if (
+          event.target ===
+          event.currentTarget
+        ) {
           onCancel();
         }
       }}
     >
       <form
         className="inbound-modal receive-modal"
-        onSubmit={handleSubmit}
+        onSubmit={
+          handleSubmit
+        }
       >
         <div className="inbound-modal-header">
           <div>
-            <span>RECEIVING</span>
+            <span>
+              RECEIVING
+            </span>
 
             <h3>
-              Receive {order.receiptNo}
+              Receive
+              {" "}
+              {
+                order.receiptNo
+              }
             </h3>
           </div>
+
 
           <button
             type="button"
             className="inbound-close"
-            onClick={onCancel}
+            onClick={
+              onCancel
+            }
           >
             ×
           </button>
         </div>
 
+
         <div className="inbound-form-body">
           <div className="receive-info">
             <div>
-              <span>Supplier</span>
-              <strong>{order.supplier}</strong>
+              <span>
+                Supplier
+              </span>
+
+              <strong>
+                {
+                  order.supplier
+                }
+              </strong>
             </div>
+
 
             <div>
-              <span>Reference</span>
-              <strong>{order.reference || "-"}</strong>
+              <span>
+                Reference
+              </span>
+
+              <strong>
+                {
+                  order.reference ||
+                  "-"
+                }
+              </strong>
             </div>
           </div>
 
+
           <div className="receive-lines">
-            {lines.map((line, index) => (
-              <div
-                className="receive-line"
-                key={line.lineId}
-              >
-                <div className="receive-product">
-                  <div className="receive-product-icon">
-                    <Package size={17} />
+            {lines.map(
+              (
+                line,
+                index
+              ) => (
+                <div
+                  className="receive-line"
+                  key={
+                    line.lineId
+                  }
+                >
+                  <div className="receive-product">
+                    <div className="receive-product-icon">
+                      <Package
+                        size={17}
+                      />
+                    </div>
+
+                    <div>
+                      <strong>
+                        {
+                          line.sku
+                        }
+                      </strong>
+
+                      <span>
+                        {
+                          line.itemName
+                        }
+                      </span>
+                    </div>
                   </div>
 
-                  <div>
-                    <strong>{line.sku}</strong>
-                    <span>{line.itemName}</span>
+
+                  <div className="receive-expected">
+                    <span>
+                      Expected
+                    </span>
+
+                    <strong>
+                      {
+                        line.expectedQty
+                      }
+                    </strong>
                   </div>
+
+
+                  <label className="inbound-field">
+                    <span>
+                      Received Qty
+                    </span>
+
+                    <input
+                      type="number"
+                      min="1"
+                      max={
+                        line.expectedQty
+                      }
+                      value={
+                        line.receivedQty
+                      }
+                      onChange={(
+                        event
+                      ) =>
+                        updateLine(
+                          index,
+                          "receivedQty",
+                          event
+                            .target
+                            .value
+                        )
+                      }
+                    />
+                  </label>
+
+
+                  <label className="inbound-field">
+                    <span>
+                      Putaway Location
+                    </span>
+
+                    <select
+                      value={
+                        line.locationId
+                      }
+                      onChange={(
+                        event
+                      ) =>
+                        updateLine(
+                          index,
+                          "locationId",
+                          event
+                            .target
+                            .value
+                        )
+                      }
+                    >
+                      <option value="">
+                        Select location
+                      </option>
+
+                      {availableLocations.map(
+                        (
+                          location
+                        ) => (
+                          <option
+                            key={
+                              location.id
+                            }
+                            value={
+                              location.id
+                            }
+                          >
+                            {
+                              location.code
+                            }
+                            {" - "}
+                            {
+                              location.zone
+                            }
+                            {" / "}
+                            {
+                              location.rack
+                            }
+                            {" / L"}
+                            {
+                              location.level
+                            }
+                          </option>
+                        )
+                      )}
+                    </select>
+                  </label>
                 </div>
-
-                <div className="receive-expected">
-                  <span>Expected</span>
-                  <strong>{line.expectedQty}</strong>
-                </div>
-
-                <label className="inbound-field">
-                  <span>Received Qty</span>
-
-                  <input
-                    type="number"
-                    min="1"
-                    max={line.expectedQty}
-                    value={line.receivedQty}
-                    onChange={(event) =>
-                      updateLine(
-                        index,
-                        "receivedQty",
-                        event.target.value
-                      )
-                    }
-                  />
-                </label>
-
-                <label className="inbound-field">
-                  <span>Putaway Location</span>
-
-                  <select
-                    value={line.locationId}
-                    onChange={(event) =>
-                      updateLine(
-                        index,
-                        "locationId",
-                        event.target.value
-                      )
-                    }
-                  >
-                    <option value="">
-                      Select location
-                    </option>
-
-                    {availableLocations.map(
-                      (location) => (
-                        <option
-                          key={location.id}
-                          value={location.id}
-                        >
-                          {location.code}
-                          {" - "}
-                          {location.zone}
-                          {" / "}
-                          {location.rack}
-                          {" / L"}
-                          {location.level}
-                        </option>
-                      )
-                    )}
-                  </select>
-                </label>
-              </div>
-            ))}
+              )
+            )}
           </div>
 
-          {availableLocations.length === 0 && (
+
+          {availableLocations.length ===
+            0 && (
             <div className="inbound-form-warning">
-              <AlertTriangle size={16} />
+              <AlertTriangle
+                size={16}
+              />
 
               <span>
-                No available Storage Location exists for
+                No available Storage
+                Location exists for
                 putaway.
               </span>
             </div>
           )}
 
+
           {error && (
             <div className="inbound-form-error">
-              <AlertTriangle size={16} />
-              <span>{error}</span>
+              <AlertTriangle
+                size={16}
+              />
+
+              <span>
+                {error}
+              </span>
             </div>
           )}
         </div>
+
 
         <div className="inbound-modal-actions">
           <button
             type="button"
             className="inbound-cancel"
-            onClick={onCancel}
+            onClick={
+              onCancel
+            }
           >
             Cancel
           </button>
@@ -1294,6 +2302,7 @@ function ReceiveForm({
   );
 }
 
+
 /*
  * =====================================================
  * FIELD
@@ -1308,114 +2317,184 @@ function FormField({
 }) {
   return (
     <label className="inbound-field">
-      <span>{label}</span>
+      <span>
+        {label}
+      </span>
 
       <input
-        value={value}
-        placeholder={placeholder}
-        onChange={(event) =>
-          onChange(event.target.value)
+        value={
+          value
+        }
+        placeholder={
+          placeholder
+        }
+        onChange={(
+          event
+        ) =>
+          onChange(
+            event.target
+              .value
+          )
         }
       />
     </label>
   );
 }
 
+
 /*
  * =====================================================
- * VALIDATE ORDER
+ * VALIDATE INBOUND
  * =====================================================
  */
 
 function validateInboundOrder({
   formData,
-  editingId,
   skuMasters,
 }) {
-  const supplier = String(
-    formData.supplier || ""
-  ).trim();
+  const supplier =
+    String(
+      formData.supplier ||
+      ""
+    ).trim();
 
-  const reference = String(
-    formData.reference || ""
-  ).trim();
+
+  const reference =
+    String(
+      formData.reference ||
+      ""
+    ).trim();
+
 
   if (!supplier) {
     return {
       ok: false,
-      message: "Please enter Supplier.",
+      message:
+        "Please enter Supplier.",
     };
   }
 
+
   if (
-    !Array.isArray(formData.lines) ||
-    formData.lines.length === 0
+    !Array.isArray(
+      formData.lines
+    ) ||
+    formData.lines
+      .length === 0
   ) {
     return {
       ok: false,
-      message: "Add at least one inbound item.",
+      message:
+        "Add at least one inbound item.",
     };
   }
 
-  const masterMap = new Map(
-    skuMasters.map((item) => [
-      item.sku,
-      item,
-    ])
-  );
 
-  const usedSku = new Set();
-  const normalizedLines = [];
+  const masterMap =
+    new Map(
+      skuMasters.map(
+        (item) => [
+          item.sku,
+          item,
+        ]
+      )
+    );
+
+
+  const usedSku =
+    new Set();
+
+
+  const normalizedLines =
+    [];
+
 
   for (
     let index = 0;
-    index < formData.lines.length;
+    index <
+    formData.lines.length;
     index += 1
   ) {
-    const line = formData.lines[index];
+    const line =
+      formData.lines[
+        index
+      ];
 
-    const sku = String(line.sku || "")
-      .trim()
-      .toUpperCase();
 
-    const expectedQty = Number(
-      line.expectedQty
-    );
+    const sku =
+      String(
+        line.sku ||
+        ""
+      )
+        .trim()
+        .toUpperCase();
+
+
+    const expectedQty =
+      Number(
+        line.expectedQty
+      );
+
 
     if (!sku) {
       return {
         ok: false,
-        message: `Line ${index + 1}: Please select SKU.`,
+
+        message:
+          `Line ${index + 1}: Please select SKU.`,
       };
     }
 
-    const master = masterMap.get(sku);
+
+    const master =
+      masterMap.get(
+        sku
+      );
+
 
     if (!master) {
       return {
         ok: false,
-        message: `Line ${index + 1}: SKU ${sku} does not exist in Inventory.`,
+
+        message:
+          `Line ${index + 1}: SKU ${sku} does not exist in Inventory.`,
       };
     }
 
-    if (usedSku.has(sku)) {
-      return {
-        ok: false,
-        message: `${sku} appears more than once in this inbound order.`,
-      };
-    }
-
-    usedSku.add(sku);
 
     if (
-      !Number.isFinite(expectedQty) ||
+      usedSku.has(
+        sku
+      )
+    ) {
+      return {
+        ok: false,
+
+        message:
+          `${sku} appears more than once in this inbound order.`,
+      };
+    }
+
+
+    if (
+      !Number.isFinite(
+        expectedQty
+      ) ||
       expectedQty <= 0
     ) {
       return {
         ok: false,
-        message: `Line ${index + 1}: Expected Quantity must be greater than 0.`,
+
+        message:
+          `Line ${index + 1}: Expected Quantity must be greater than 0.`,
       };
     }
+
+
+    usedSku.add(
+      sku
+    );
+
 
     normalizedLines.push({
       lineId:
@@ -1424,15 +2503,19 @@ function validateInboundOrder({
 
       sku,
 
-      itemName: master.name,
+      itemName:
+        master.name,
 
       expectedQty,
 
-      receivedQty: 0,
+      receivedQty:
+        0,
 
-      locationId: "",
+      locationId:
+        "",
     });
   }
+
 
   return {
     ok: true,
@@ -1440,14 +2523,17 @@ function validateInboundOrder({
     order: {
       supplier,
       reference,
-      lines: normalizedLines,
+
+      lines:
+        normalizedLines,
     },
   };
 }
 
+
 /*
  * =====================================================
- * VALIDATE RECEIVING
+ * VALIDATE RECEIVE
  * =====================================================
  */
 
@@ -1456,21 +2542,32 @@ function validateReceiveLines({
   receiveLines,
   locations,
 }) {
-  const locationMap = new Map(
-    locations.map((location) => [
-      location.id,
-      location,
-    ])
-  );
+  const locationMap =
+    new Map(
+      locations.map(
+        (location) => [
+          location.id,
+          location,
+        ]
+      )
+    );
 
-  const result = [];
+
+  const result =
+    [];
+
 
   for (
     let index = 0;
-    index < order.lines.length;
+    index <
+    order.lines.length;
     index += 1
   ) {
-    const sourceLine = order.lines[index];
+    const sourceLine =
+      order.lines[
+        index
+      ];
+
 
     const inputLine =
       receiveLines.find(
@@ -1479,20 +2576,30 @@ function validateReceiveLines({
           sourceLine.lineId
       ) || {};
 
-    const receivedQty = Number(
-      inputLine.receivedQty
-    );
 
-    const expectedQty = Number(
-      sourceLine.expectedQty
-    );
+    const receivedQty =
+      Number(
+        inputLine.receivedQty
+      );
 
-    const locationId = String(
-      inputLine.locationId || ""
-    ).trim();
+
+    const expectedQty =
+      Number(
+        sourceLine.expectedQty
+      );
+
+
+    const locationId =
+      String(
+        inputLine.locationId ||
+        ""
+      ).trim();
+
 
     if (
-      !Number.isFinite(receivedQty) ||
+      !Number.isFinite(
+        receivedQty
+      ) ||
       receivedQty <= 0
     ) {
       return {
@@ -1503,7 +2610,11 @@ function validateReceiveLines({
       };
     }
 
-    if (receivedQty > expectedQty) {
+
+    if (
+      receivedQty >
+      expectedQty
+    ) {
       return {
         ok: false,
 
@@ -1511,6 +2622,7 @@ function validateReceiveLines({
           `${sourceLine.sku}: Received Quantity cannot be greater than Expected Quantity in V1.`,
       };
     }
+
 
     if (!locationId) {
       return {
@@ -1521,8 +2633,12 @@ function validateReceiveLines({
       };
     }
 
+
     const location =
-      locationMap.get(locationId);
+      locationMap.get(
+        locationId
+      );
+
 
     if (!location) {
       return {
@@ -1533,12 +2649,15 @@ function validateReceiveLines({
       };
     }
 
+
     if (
       [
         "FULL",
         "BLOCKED",
         "MAINTENANCE",
-      ].includes(location.status)
+      ].includes(
+        location.status
+      )
     ) {
       return {
         ok: false,
@@ -1547,6 +2666,7 @@ function validateReceiveLines({
           `${location.code} cannot be used for putaway because its status is ${location.status}.`,
       };
     }
+
 
     result.push({
       ...sourceLine,
@@ -1557,15 +2677,19 @@ function validateReceiveLines({
     });
   }
 
+
   return {
     ok: true,
-    lines: result,
+
+    lines:
+      result,
   };
 }
 
+
 /*
  * =====================================================
- * APPLY PUTAWAY
+ * INVENTORY +
  * =====================================================
  */
 
@@ -1573,187 +2697,384 @@ function applyPutawayToInventory({
   inventory,
   order,
 }) {
-  const result = inventory.map((item) => ({
-    ...item,
-  }));
-
-  for (const line of order.lines || []) {
-    const qty = Number(
-      line.receivedQty || 0
+  const result =
+    inventory.map(
+      (item) => ({
+        ...item,
+      })
     );
 
-    if (qty <= 0) {
+
+  for (
+    const line
+    of order.lines ||
+    []
+  ) {
+    const qty =
+      Number(
+        line.receivedQty ||
+        0
+      );
+
+
+    if (
+      qty <= 0
+    ) {
       continue;
     }
+
 
     const existingIndex =
       result.findIndex(
         (item) =>
-          item.sku === line.sku &&
-          item.locationId === line.locationId
+          item.sku ===
+            line.sku &&
+          item.locationId ===
+            line.locationId
       );
 
-    /*
-     * SAME SKU + LOCATION
-     * Increase quantity.
-     */
 
-    if (existingIndex >= 0) {
-      result[existingIndex] = {
-        ...result[existingIndex],
+    if (
+      existingIndex >=
+      0
+    ) {
+      result[
+        existingIndex
+      ] = {
+        ...result[
+          existingIndex
+        ],
 
         quantity:
           Number(
-            result[existingIndex].quantity || 0
+            result[
+              existingIndex
+            ].quantity ||
+            0
           ) + qty,
       };
 
+
       continue;
     }
 
-    /*
-     * SKU EXISTS IN ANOTHER LOCATION.
-     * Copy master data and create new balance.
-     */
 
-    const master = result.find(
-      (item) => item.sku === line.sku
-    );
+    const master =
+      result.find(
+        (item) =>
+          item.sku ===
+          line.sku
+      );
+
 
     if (!master) {
-      continue;
+      return {
+        ok: false,
+
+        message:
+          `${line.sku}: Inventory SKU master does not exist.`,
+      };
     }
 
+
     result.push({
-      id: getNextInventoryId(result),
+      id:
+        getNextInventoryId(
+          result
+        ),
 
-      sku: master.sku,
+      sku:
+        master.sku,
 
-      name: master.name,
+      name:
+        master.name,
 
-      category: master.category,
+      category:
+        master.category,
 
-      unit: master.unit,
+      unit:
+        master.unit,
 
-      quantity: qty,
+      quantity:
+        qty,
 
-      minStock: master.minStock,
+      minStock:
+        master.minStock,
 
-      maxStock: master.maxStock,
+      maxStock:
+        master.maxStock,
 
-      locationId: line.locationId,
+      locationId:
+        line.locationId,
     });
   }
 
-  return result;
+
+  return {
+    ok: true,
+
+    inventory:
+      result,
+  };
 }
+
 
 /*
  * =====================================================
- * TOTALS
+ * ORDER TOTAL
  * =====================================================
  */
 
-function getOrderExpectedQty(order) {
-  return (order.lines || []).reduce(
-    (sum, line) =>
+function getOrderExpectedQty(
+  order
+) {
+  return (
+    order.lines ||
+    []
+  ).reduce(
+    (
+      sum,
+      line
+    ) =>
       sum +
-      Number(line.expectedQty || 0),
+      Number(
+        line.expectedQty ||
+        0
+      ),
+
     0
   );
 }
 
-function getOrderReceivedQty(order) {
-  return (order.lines || []).reduce(
-    (sum, line) =>
+
+function getOrderReceivedQty(
+  order
+) {
+  return (
+    order.lines ||
+    []
+  ).reduce(
+    (
+      sum,
+      line
+    ) =>
       sum +
-      Number(line.receivedQty || 0),
+      Number(
+        line.receivedQty ||
+        0
+      ),
+
     0
   );
 }
 
+
 /*
  * =====================================================
- * ID GENERATORS
+ * NEWEST FIRST
  * =====================================================
  */
 
-function getNextInboundId(orders) {
-  let highest = 0;
-
-  orders.forEach((order) => {
-    const match = /^INB-(\d+)$/i.exec(
-      String(order.id || "")
+function compareNewestFirst(
+  a,
+  b
+) {
+  const timeDifference =
+    getOrderTime(
+      b
+    ) -
+    getOrderTime(
+      a
     );
 
-    if (match) {
-      highest = Math.max(
-        highest,
-        Number(match[1])
-      );
+
+  if (
+    timeDifference !==
+    0
+  ) {
+    return timeDifference;
+  }
+
+
+  return String(
+    b.id ||
+    ""
+  ).localeCompare(
+    String(
+      a.id ||
+      ""
+    ),
+    undefined,
+    {
+      numeric: true,
     }
-  });
+  );
+}
+
+
+function getOrderTime(
+  order
+) {
+  const time =
+    new Date(
+      order.createdAt ||
+      ""
+    ).getTime();
+
+
+  return Number.isFinite(
+    time
+  )
+    ? time
+    : 0;
+}
+
+
+/*
+ * =====================================================
+ * ID
+ * =====================================================
+ */
+
+function getNextInboundId(
+  orders
+) {
+  let highest =
+    0;
+
+
+  orders.forEach(
+    (order) => {
+      const match =
+        /^INB-(\d+)$/i.exec(
+          String(
+            order.id ||
+            ""
+          )
+        );
+
+
+      if (match) {
+        highest =
+          Math.max(
+            highest,
+
+            Number(
+              match[1]
+            )
+          );
+      }
+    }
+  );
+
 
   return `INB-${String(
     highest + 1
-  ).padStart(3, "0")}`;
+  ).padStart(
+    3,
+    "0"
+  )}`;
 }
 
-function getNextInventoryId(items) {
-  let highest = 0;
 
-  items.forEach((item) => {
-    const match = /^INV-(\d+)$/i.exec(
-      String(item.id || "")
-    );
+function getNextInventoryId(
+  items
+) {
+  let highest =
+    0;
 
-    if (match) {
-      highest = Math.max(
-        highest,
-        Number(match[1])
-      );
+
+  items.forEach(
+    (item) => {
+      const match =
+        /^INV-(\d+)$/i.exec(
+          String(
+            item.id ||
+            ""
+          )
+        );
+
+
+      if (match) {
+        highest =
+          Math.max(
+            highest,
+
+            Number(
+              match[1]
+            )
+          );
+      }
     }
-  });
+  );
+
 
   return `INV-${String(
     highest + 1
-  ).padStart(3, "0")}`;
+  ).padStart(
+    3,
+    "0"
+  )}`;
 }
 
-function generateReceiptNo(orders) {
-  const date = new Date();
+
+function generateReceiptNo(
+  orders
+) {
+  const date =
+    new Date();
+
 
   const datePart = [
     date.getFullYear(),
+
     String(
-      date.getMonth() + 1
-    ).padStart(2, "0"),
+      date.getMonth() +
+      1
+    ).padStart(
+      2,
+      "0"
+    ),
+
     String(
       date.getDate()
-    ).padStart(2, "0"),
+    ).padStart(
+      2,
+      "0"
+    ),
   ].join("");
 
-  let counter = 1;
+
+  let counter =
+    1;
+
 
   while (true) {
     const receiptNo =
       `RCV-${datePart}-${String(
         counter
-      ).padStart(3, "0")}`;
+      ).padStart(
+        3,
+        "0"
+      )}`;
 
-    const exists = orders.some(
-      (order) =>
-        order.receiptNo ===
-        receiptNo
-    );
 
-    if (!exists) {
+    if (
+      !orders.some(
+        (order) =>
+          order.receiptNo ===
+          receiptNo
+      )
+    ) {
       return receiptNo;
     }
 
-    counter += 1;
+
+    counter +=
+      1;
   }
 }
+
 
 function createLineId() {
   return `LINE-${Date.now()}-${Math.random()
@@ -1761,44 +3082,61 @@ function createLineId() {
     .slice(2, 7)}`;
 }
 
+
 function createEmptyLine() {
   return {
-    lineId: createLineId(),
-    sku: "",
-    itemName: "",
-    expectedQty: 1,
-    receivedQty: 0,
-    locationId: "",
+    lineId:
+      createLineId(),
+
+    sku:
+      "",
+
+    itemName:
+      "",
+
+    expectedQty:
+      1,
+
+    receivedQty:
+      0,
+
+    locationId:
+      "",
   };
 }
 
+
 /*
  * =====================================================
- * DATE
+ * FORMAT
  * =====================================================
  */
 
-function formatDateTime(value) {
+function formatDateTime(
+  value
+) {
   if (!value) {
     return "-";
   }
 
-  const date = new Date(value);
 
-  if (
-    Number.isNaN(
-      date.getTime()
-    )
-  ) {
-    return "-";
-  }
+  const date =
+    new Date(
+      value
+    );
 
-  return date.toLocaleString();
+
+  return Number.isNaN(
+    date.getTime()
+  )
+    ? "-"
+    : date.toLocaleString();
 }
+
 
 /*
  * =====================================================
- * LOAD INBOUND
+ * LOAD
  * =====================================================
  */
 
@@ -1809,11 +3147,19 @@ function loadInboundOrders() {
         INBOUND_STORAGE_KEY
       );
 
+
     if (saved) {
       const parsed =
-        JSON.parse(saved);
+        JSON.parse(
+          saved
+        );
 
-      if (Array.isArray(parsed)) {
+
+      if (
+        Array.isArray(
+          parsed
+        )
+      ) {
         return parsed;
       }
     }
@@ -1824,14 +3170,10 @@ function loadInboundOrders() {
     );
   }
 
+
   return INITIAL_INBOUND;
 }
 
-/*
- * =====================================================
- * LOAD INVENTORY
- * =====================================================
- */
 
 function loadInventory() {
   try {
@@ -1840,11 +3182,19 @@ function loadInventory() {
         INVENTORY_STORAGE_KEY
       );
 
+
     if (saved) {
       const parsed =
-        JSON.parse(saved);
+        JSON.parse(
+          saved
+        );
 
-      if (Array.isArray(parsed)) {
+
+      if (
+        Array.isArray(
+          parsed
+        )
+      ) {
         return parsed;
       }
     }
@@ -1855,14 +3205,10 @@ function loadInventory() {
     );
   }
 
+
   return [];
 }
 
-/*
- * =====================================================
- * LOAD LOCATIONS
- * =====================================================
- */
 
 function loadLocations() {
   try {
@@ -1871,11 +3217,19 @@ function loadLocations() {
         LOCATION_STORAGE_KEY
       );
 
+
     if (saved) {
       const parsed =
-        JSON.parse(saved);
+        JSON.parse(
+          saved
+        );
 
-      if (Array.isArray(parsed)) {
+
+      if (
+        Array.isArray(
+          parsed
+        )
+      ) {
         return parsed;
       }
     }
@@ -1885,6 +3239,7 @@ function loadLocations() {
       error
     );
   }
+
 
   return [];
 }
