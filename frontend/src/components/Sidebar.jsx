@@ -2,6 +2,7 @@ import {
   LayoutDashboard,
   Bot,
   Map,
+  MapPin,
   Settings,
   Warehouse,
 } from "lucide-react";
@@ -14,17 +15,27 @@ export default function Sidebar() {
       name: "Dashboard",
       path: "/",
       icon: LayoutDashboard,
+      end: true,
     },
-    {
-      name: "Fleet Control",
-      path: "/fleet",
-      icon: Bot,
-    },
+
     {
       name: "Warehouse Map",
       path: "/warehouse",
       icon: Map,
     },
+
+    {
+      name: "Storage Locations",
+      path: "/locations",
+      icon: MapPin,
+    },
+
+    {
+      name: "Fleet Control",
+      path: "/fleet",
+      icon: Bot,
+    },
+
     {
       name: "Settings",
       path: "/settings",
@@ -36,7 +47,10 @@ export default function Sidebar() {
     <aside className="sidebar">
       <div className="sidebar-title">
         <Warehouse size={20} />
-        <span>WMS</span>
+
+        <span>
+          WMS
+        </span>
       </div>
 
       <nav>
@@ -47,12 +61,18 @@ export default function Sidebar() {
             <NavLink
               key={item.path}
               to={item.path}
+              end={item.end}
               className={({ isActive }) =>
-                `sidebar-link ${isActive ? "active" : ""}`
+                `sidebar-link ${
+                  isActive ? "active" : ""
+                }`
               }
             >
               <Icon size={19} />
-              <span>{item.name}</span>
+
+              <span>
+                {item.name}
+              </span>
             </NavLink>
           );
         })}
@@ -62,8 +82,13 @@ export default function Sidebar() {
         <div className="status-dot" />
 
         <div>
-          <strong>System Ready</strong>
-          <span>WMS Core</span>
+          <strong>
+            System Ready
+          </strong>
+
+          <span>
+            WMS Core
+          </span>
         </div>
       </div>
     </aside>

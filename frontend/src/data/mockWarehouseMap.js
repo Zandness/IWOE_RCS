@@ -5,10 +5,16 @@ export const INITIAL_MAP = {
 
   unit: "meter",
 
+  originX: 0,
+  originY: 0,
+
   width: 30,
   height: 20,
 
   gridSpacing: 1,
+
+  showBoundary: true,
+  snapBoundaryToGrid: true,
 
   nodes: [
     {

@@ -2,17 +2,17 @@ import {
   MousePointer2,
   MapPin,
   Link2,
-  Trash2,
-  Download,
-  RotateCcw,
-  Save,
   Undo2,
   Redo2,
-  ZoomIn,
   ZoomOut,
+  ZoomIn,
   Maximize2,
   Minimize2,
-  Scan,
+  Save,
+  Upload,
+  Download,
+  Trash2,
+  RotateCcw,
   Pencil,
   Radio,
 } from "lucide-react";
@@ -25,9 +25,11 @@ export default function MapToolbar({
   setTool,
 
   onDelete,
+
+  onSave,
+  onImport,
   onExport,
   onReset,
-  onSave,
 
   onUndo,
   onRedo,
@@ -39,198 +41,183 @@ export default function MapToolbar({
 
   onZoomIn,
   onZoomOut,
+
   onFit,
 
   expanded,
   onToggleExpand,
 }) {
-  const editing =
-    mode === "edit";
-
   return (
     <div className="map-toolbar">
+      {/* MODE */}
+      <div className="map-toolbar-group">
+        <ToolbarButton
+          active={mode === "edit"}
+          icon={<Pencil size={14} />}
+          label="Edit Map"
+          onClick={() => setMode("edit")}
+        />
 
-      <ToolbarButton
-        icon={Pencil}
-        label="Edit Map"
-        active={mode === "edit"}
-        onClick={() =>
-          setMode("edit")
-        }
-      />
+        <ToolbarButton
+          active={mode === "monitor"}
+          icon={<Radio size={14} />}
+          label="Monitor"
+          onClick={() => setMode("monitor")}
+        />
+      </div>
 
-      <ToolbarButton
-        icon={Radio}
-        label="Monitor"
-        active={mode === "monitor"}
-        onClick={() =>
-          setMode("monitor")
-        }
-      />
-
-      <div className="toolbar-divider" />
-
-      {editing && (
+      {/* EDIT TOOLS */}
+      {mode === "edit" && (
         <>
-          <ToolbarButton
-            active={tool === "select"}
-            icon={MousePointer2}
-            label="Select"
-            onClick={() =>
-              setTool("select")
-            }
-          />
+          <div className="map-toolbar-divider" />
 
-          <ToolbarButton
-            active={tool === "node"}
-            icon={MapPin}
-            label="Node"
-            onClick={() =>
-              setTool("node")
-            }
-          />
+          <div className="map-toolbar-group">
+            <ToolbarButton
+              active={tool === "select"}
+              icon={<MousePointer2 size={14} />}
+              label="Select"
+              onClick={() => setTool("select")}
+            />
 
-          <ToolbarButton
-            active={tool === "connect"}
-            icon={Link2}
-            label="Path"
-            onClick={() =>
-              setTool("connect")
-            }
-          />
+            <ToolbarButton
+              active={tool === "node"}
+              icon={<MapPin size={14} />}
+              label="Node"
+              onClick={() => setTool("node")}
+            />
 
-          <div className="toolbar-divider" />
+            <ToolbarButton
+              active={tool === "connect"}
+              icon={<Link2 size={14} />}
+              label="Path"
+              onClick={() => setTool("connect")}
+            />
+          </div>
 
-          <ToolbarButton
-            icon={Undo2}
-            label="Undo"
-            disabled={!canUndo}
-            onClick={onUndo}
-          />
+          <div className="map-toolbar-divider" />
 
-          <ToolbarButton
-            icon={Redo2}
-            label="Redo"
-            disabled={!canRedo}
-            onClick={onRedo}
-          />
+          {/* HISTORY */}
+          <div className="map-toolbar-group">
+            <ToolbarButton
+              icon={<Undo2 size={14} />}
+              label="Undo"
+              disabled={!canUndo}
+              onClick={onUndo}
+            />
+
+            <ToolbarButton
+              icon={<Redo2 size={14} />}
+              label="Redo"
+              disabled={!canRedo}
+              onClick={onRedo}
+            />
+          </div>
         </>
       )}
 
-      <div className="toolbar-divider" />
+      <div className="map-toolbar-divider" />
 
-      <ToolbarButton
-        icon={ZoomOut}
-        label="-"
-        onClick={onZoomOut}
-      />
+      {/* VIEW */}
+      <div className="map-toolbar-group">
+        <ToolbarButton
+          icon={<ZoomOut size={14} />}
+          title="Zoom Out"
+          onClick={onZoomOut}
+        />
 
-      <div className="zoom-display">
-        {Math.round(zoom * 100)}%
+        <div className="map-toolbar-zoom">
+          {Math.round(Number(zoom) * 100)}%
+        </div>
+
+        <ToolbarButton
+          icon={<ZoomIn size={14} />}
+          title="Zoom In"
+          onClick={onZoomIn}
+        />
+
+        <ToolbarButton
+          icon={<Maximize2 size={14} />}
+          label="Fit"
+          onClick={onFit}
+        />
+
+        <ToolbarButton
+          icon={
+            expanded ? (
+              <Minimize2 size={14} />
+            ) : (
+              <Maximize2 size={14} />
+            )
+          }
+          label={expanded ? "Collapse" : "Expand"}
+          onClick={onToggleExpand}
+        />
       </div>
 
-      <ToolbarButton
-        icon={ZoomIn}
-        label="+"
-        onClick={onZoomIn}
-      />
-
-      <ToolbarButton
-        icon={Scan}
-        label="Fit"
-        onClick={onFit}
-      />
-
-      <ToolbarButton
-        icon={
-          expanded
-            ? Minimize2
-            : Maximize2
-        }
-        label={
-          expanded
-            ? "Collapse"
-            : "Expand"
-        }
-        onClick={onToggleExpand}
-      />
-
-      <div className="toolbar-spacer" />
-
-      {editing && (
-        <>
+      {/* ACTIONS */}
+      {mode === "edit" && (
+        <div className="map-toolbar-actions">
           <ToolbarButton
             primary
-            icon={Save}
+            icon={<Save size={14} />}
             label="Save"
             onClick={onSave}
           />
 
           <ToolbarButton
-            icon={Download}
+            icon={<Upload size={14} />}
+            label="Import"
+            onClick={onImport}
+          />
+
+          <ToolbarButton
+            icon={<Download size={14} />}
             label="Export"
             onClick={onExport}
           />
 
           <ToolbarButton
-            danger
-            icon={Trash2}
+            icon={<Trash2 size={14} />}
             label="Delete"
             onClick={onDelete}
           />
 
           <ToolbarButton
-            icon={RotateCcw}
+            icon={<RotateCcw size={14} />}
             label="Reset"
             onClick={onReset}
           />
-        </>
+        </div>
       )}
     </div>
   );
 }
 
-
 function ToolbarButton({
-  icon: Icon,
+  icon,
   label,
-
   active = false,
-  danger = false,
   primary = false,
   disabled = false,
-
+  title,
   onClick,
 }) {
   return (
     <button
       type="button"
-
+      title={title || label}
       disabled={disabled}
-
       className={[
-        "map-tool-button",
-
-        active
-          ? "active"
-          : "",
-
-        danger
-          ? "danger"
-          : "",
-
-        primary
-          ? "primary"
-          : "",
-      ].join(" ")}
-
+        "map-toolbar-button",
+        active ? "active" : "",
+        primary ? "primary" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
       onClick={onClick}
     >
-      <Icon size={16} />
-
-      <span>
-        {label}
-      </span>
+      {icon}
+      {label && <span>{label}</span>}
     </button>
   );
 }

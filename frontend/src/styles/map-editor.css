@@ -134,124 +134,150 @@
 
 .map-toolbar {
   display: flex;
-
   align-items: center;
+  flex-wrap: nowrap;
+  gap: 8px;
 
-  flex-wrap: wrap;
-
-  gap: 6px;
+  width: 100%;
+  min-width: 0;
 
   margin-bottom: 14px;
-
-  padding: 9px;
+  padding: 9px 10px;
 
   position: relative;
-
   z-index: 10;
 
+  overflow-x: auto;
+  overflow-y: hidden;
+
   background: #0b1728;
-
   border: 1px solid #1b2a3d;
-
   border-radius: 10px;
 }
 
 
-.map-tool-button {
+/* Groups: Mode / Tools / History / View */
+
+.map-toolbar-group {
   display: flex;
-
   align-items: center;
+  flex: 0 0 auto;
+  gap: 6px;
+}
 
+
+/* Right-side actions: Save / Import / Export / Delete / Reset */
+
+.map-toolbar-actions {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 6px;
+
+  margin-left: auto;
+  padding-left: 4px;
+}
+
+
+/* Visual separator between groups */
+
+.map-toolbar-divider {
+  width: 1px;
+  height: 28px;
+
+  flex: 0 0 1px;
+
+  margin: 0 2px;
+
+  background: #263b53;
+}
+
+
+/* =========================================================
+   TOOLBAR BUTTON
+========================================================= */
+
+.map-toolbar-button {
+  display: inline-flex;
+  align-items: center;
   justify-content: center;
-
   gap: 6px;
 
   min-height: 34px;
+  min-width: 34px;
 
   padding: 8px 10px;
 
   border: 1px solid #263b53;
-
   border-radius: 7px;
 
   background: #102135;
-
   color: #94a3b8;
 
   font-size: 10px;
-
   font-weight: 700;
+  line-height: 1;
+
+  white-space: nowrap;
 
   cursor: pointer;
 
   transition:
     background 0.15s,
     border-color 0.15s,
-    color 0.15s;
+    color 0.15s,
+    transform 0.1s;
 }
 
 
-.map-tool-button:hover {
+.map-toolbar-button svg {
+  flex: 0 0 auto;
+}
+
+
+.map-toolbar-button span {
+  display: inline-block;
+  line-height: 1;
+}
+
+
+.map-toolbar-button:hover:not(:disabled) {
   background: #16304a;
-
   border-color: #3b5876;
-
   color: #e2e8f0;
 }
 
 
-.map-tool-button.active {
-  background: #0c3c48;
-
-  border-color: #22d3ee;
-
-  color: #67e8f9;
+.map-toolbar-button:active:not(:disabled) {
+  transform: translateY(1px);
 }
 
 
-.map-tool-button.primary {
-  background: #0e7490;
-
+.map-toolbar-button.active {
+  background: #0c3c48;
   border-color: #22d3ee;
+  color: #67e8f9;
+  box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.08);
+}
 
+
+.map-toolbar-button.primary {
+  background: #0e7490;
+  border-color: #22d3ee;
   color: #ecfeff;
 }
 
 
-.map-tool-button.primary:hover {
+.map-toolbar-button.primary:hover:not(:disabled) {
   background: #0891b2;
+  border-color: #67e8f9;
+  color: #ffffff;
 }
 
 
-.map-tool-button.danger:hover {
-  background: #45151c;
-
-  border-color: #fb7185;
-
-  color: #fb7185;
-}
-
-
-.map-tool-button:disabled {
+.map-toolbar-button:disabled {
   opacity: 0.35;
-
   cursor: not-allowed;
-}
-
-
-.toolbar-divider {
-  width: 1px;
-
-  height: 28px;
-
-  margin: 0 3px;
-
-  background: #263b53;
-}
-
-
-.toolbar-spacer {
-  flex: 1;
 }
 
 
@@ -259,24 +285,65 @@
    ZOOM DISPLAY
 ========================================================= */
 
-.zoom-display {
-  min-width: 50px;
+.map-toolbar-zoom {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 
-  padding: 7px 6px;
+  min-width: 52px;
+  height: 34px;
 
-  text-align: center;
+  padding: 0 8px;
 
   border: 1px solid #263b53;
-
   border-radius: 6px;
 
   background: #07111f;
-
   color: #67e8f9;
 
   font-size: 10px;
-
   font-weight: 800;
+
+  white-space: nowrap;
+}
+
+
+/* Toolbar scrollbar only appears if the window becomes narrow. */
+
+.map-toolbar::-webkit-scrollbar {
+  height: 5px;
+}
+
+
+.map-toolbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+
+.map-toolbar::-webkit-scrollbar-thumb {
+  background: #263b53;
+  border-radius: 999px;
+}
+
+
+
+/* =========================================================
+   TOOLBAR RESPONSIVE
+========================================================= */
+
+@media (max-width: 1300px) {
+
+  .map-toolbar {
+    flex-wrap: wrap;
+    overflow-x: visible;
+  }
+
+
+  .map-toolbar-actions {
+    width: 100%;
+    margin-left: 0;
+    padding-left: 0;
+  }
 }
 
 
@@ -1665,8 +1732,16 @@ Only Node and Robot receive pointer events.
   }
 
 
-  .toolbar-spacer {
-    display: none;
+  .map-toolbar {
+    flex-wrap: wrap;
+    overflow-x: visible;
+  }
+
+
+  .map-toolbar-actions {
+    width: 100%;
+    margin-left: 0;
+    padding-left: 0;
   }
 }
 
@@ -1703,16 +1778,24 @@ Only Node and Robot receive pointer events.
 
   .map-toolbar {
     align-items: stretch;
+    flex-wrap: wrap;
+    overflow-x: visible;
   }
 
 
-  .map-tool-button {
-    flex:
-      1 1 100px;
+  .map-toolbar-group,
+  .map-toolbar-actions {
+    width: 100%;
+    flex-wrap: wrap;
   }
 
 
-  .toolbar-divider {
+  .map-toolbar-button {
+    flex: 1 1 100px;
+  }
+
+
+  .map-toolbar-divider {
     display: none;
   }
 
