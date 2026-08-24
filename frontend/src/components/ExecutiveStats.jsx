@@ -41,7 +41,7 @@ export default function ExecutiveStats() {
         return (
           <div className="status-card" key={stat.title}>
             <div className="status-card-icon">
-              <Icon size={22} />
+              <Icon size={21} />
             </div>
 
             <div>
