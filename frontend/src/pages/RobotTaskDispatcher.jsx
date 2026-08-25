@@ -1,12 +1,10 @@
 import {
   AlertTriangle,
-  Bot,
   CheckCircle2,
   Clipboard,
   Copy,
   ExternalLink,
   MapPin,
-  Package,
   RefreshCw,
   Route,
   Send,
@@ -28,7 +26,13 @@ const WAREHOUSE_TASK_KEY =
 const LOCATION_STORAGE_KEY =
   "wms-storage-locations-v1";
 
-const ROBOT_TASK_KEY =
+
+/*
+ * ยังใช้ key เดิมจาก V6
+ *
+ * เพื่อไม่ให้ข้อมูลเก่าที่เคยสร้างไว้หาย
+ */
+const RCS_QUEUE_KEY =
   "wms-robot-tasks-v1";
 
 
@@ -37,6 +41,21 @@ const PRIORITY_ORDER = {
   HIGH: 1,
   NORMAL: 2,
   LOW: 3,
+};
+
+
+/*
+ * WMS Priority
+ * ↓
+ * HIK RCS Priority
+ *
+ * HIK รองรับช่วง 1 - 120
+ */
+const RCS_PRIORITY = {
+  LOW: 30,
+  NORMAL: 60,
+  HIGH: 90,
+  URGENT: 120,
 };
 
 
@@ -58,18 +77,28 @@ export default function RobotTaskDispatcher() {
 
 
   const [
-    robotTasks,
-    setRobotTasks,
+    dispatchQueue,
+    setDispatchQueue,
   ] = useState(
-    loadRobotTasks
+    loadDispatchQueue
   );
 
 
   /*
-   * Gateway last octet
+   * เก็บเวลาที่ user กำลังเลือก
+   * ก่อน Add Queue
+   */
+
+  const [
+    scheduleDrafts,
+    setScheduleDrafts,
+  ] = useState({});
+
+
+  /*
+   * เลขท้าย gateway
    *
-   * ตั้งใจไม่ save ลง localStorage
-   * เพราะต้องตรวจ/กรอกใหม่ทุกครั้ง
+   * 192.168.50.xxx
    */
 
   const [
@@ -85,45 +114,95 @@ export default function RobotTaskDispatcher() {
 
 
   /*
-   * =====================================================
-   * SAVE ROBOT TASKS
-   * =====================================================
+   * เวลา realtime
+   *
+   * ใช้ตรวจว่า Scheduled Task
+   * ถึงเวลาหรือยัง
    */
+
+  const [
+    now,
+    setNow,
+  ] = useState(
+    () => Date.now()
+  );
+
+
+  /* =====================================================
+     LIVE CLOCK
+  ===================================================== */
+
+  useEffect(() => {
+    const timer =
+      window.setInterval(
+        () =>
+          setNow(
+            Date.now()
+          ),
+        1000
+      );
+
+
+    return () =>
+      window.clearInterval(
+        timer
+      );
+  }, []);
+
+
+  /* =====================================================
+     SAVE RCS QUEUE
+  ===================================================== */
 
   useEffect(() => {
     try {
       localStorage.setItem(
-        ROBOT_TASK_KEY,
+        RCS_QUEUE_KEY,
+
         JSON.stringify(
-          robotTasks
+          dispatchQueue
+        )
+      );
+
+
+      window.dispatchEvent(
+        new CustomEvent(
+          "wms-data-changed",
+          {
+            detail: {
+              keys: [
+                RCS_QUEUE_KEY,
+              ],
+            },
+          }
         )
       );
     } catch (error) {
       console.error(
-        "Could not save Robot Tasks.",
+        "Could not save RCS dispatch queue.",
         error
       );
     }
-  }, [robotTasks]);
+  }, [dispatchQueue]);
 
 
-  /*
-   * =====================================================
-   * REFRESH DATA
-   * =====================================================
-   */
+  /* =====================================================
+     REFRESH
+  ===================================================== */
 
   function refreshData() {
     setWarehouseTasks(
       loadWarehouseTasks()
     );
 
+
     setLocations(
       loadLocations()
     );
 
-    setRobotTasks(
-      loadRobotTasks()
+
+    setDispatchQueue(
+      loadDispatchQueue()
     );
   }
 
@@ -136,7 +215,7 @@ export default function RobotTaskDispatcher() {
         [
           WAREHOUSE_TASK_KEY,
           LOCATION_STORAGE_KEY,
-          ROBOT_TASK_KEY,
+          RCS_QUEUE_KEY,
         ].includes(
           event.key
         )
@@ -160,13 +239,19 @@ export default function RobotTaskDispatcher() {
             [
               WAREHOUSE_TASK_KEY,
               LOCATION_STORAGE_KEY,
-              ROBOT_TASK_KEY,
             ].includes(
               key
             )
         )
       ) {
-        refreshData();
+        setWarehouseTasks(
+          loadWarehouseTasks()
+        );
+
+
+        setLocations(
+          loadLocations()
+        );
       }
     }
 
@@ -176,10 +261,12 @@ export default function RobotTaskDispatcher() {
       refreshData
     );
 
+
     window.addEventListener(
       "storage",
       handleStorage
     );
+
 
     window.addEventListener(
       "wms-data-changed",
@@ -193,10 +280,12 @@ export default function RobotTaskDispatcher() {
         refreshData
       );
 
+
       window.removeEventListener(
         "storage",
         handleStorage
       );
+
 
       window.removeEventListener(
         "wms-data-changed",
@@ -206,10 +295,30 @@ export default function RobotTaskDispatcher() {
   }, []);
 
 
+  /* =====================================================
+     LOCATION LOOKUP
+  ===================================================== */
+
+  const locationMap =
+    useMemo(
+      () =>
+        new Map(
+          locations.map(
+            (location) => [
+              location.id,
+              location,
+            ]
+          )
+        ),
+
+      [locations]
+    );
+
+
   /*
-   * =====================================================
-   * OPERATIONAL LOCATIONS
-   * =====================================================
+   * Receiving
+   *
+   * ใช้เป็นต้นทางของ Putaway
    */
 
   const receivingLocation =
@@ -219,9 +328,16 @@ export default function RobotTaskDispatcher() {
           locations,
           "RECEIVING"
         ),
+
       [locations]
     );
 
+
+  /*
+   * Shipping
+   *
+   * ใช้เป็นปลายทางของ Picking
+   */
 
   const shippingLocation =
     useMemo(
@@ -230,183 +346,264 @@ export default function RobotTaskDispatcher() {
           locations,
           "SHIPPING"
         ),
+
       [locations]
     );
 
 
-  /*
-   * =====================================================
-   * DISPATCH CANDIDATES
-   * =====================================================
-   */
+  /* =====================================================
+     WAREHOUSE TASK CANDIDATES
+  ===================================================== */
 
   const candidates =
     useMemo(() => {
       return warehouseTasks
+
+        /*
+         * เอาเฉพาะ Task
+         * ที่ยังรอทำ
+         */
+
         .filter(
           (task) =>
             task.status ===
             "PENDING"
         )
+
+
+        /*
+         * หา Source / Destination
+         */
+
         .map(
           (task) => {
             const endpoints =
               resolveTaskEndpoints({
                 task,
+                locationMap,
                 receivingLocation,
                 shippingLocation,
               });
 
 
-            const existingRobotTask =
-              robotTasks.find(
-                (robotTask) =>
-                  robotTask.warehouseTaskId ===
+            /*
+             * Task นี้อยู่ใน Queue แล้วหรือยัง
+             */
+
+            const existingQueueItem =
+              dispatchQueue.find(
+                (item) =>
+                  item.warehouseTaskId ===
                   task.id
               );
 
 
-            const ready =
-              Boolean(
-                endpoints.sourceNodeId
-              ) &&
-              Boolean(
-                endpoints.destinationNodeId
-              ) &&
-              !existingRobotTask;
+            /*
+             * ตรวจ mapping
+             */
 
-
-            let reason =
-              "";
-
-
-            if (
-              existingRobotTask
-            ) {
-              reason =
-                "Robot Task already prepared";
-            } else if (
-              !endpoints.sourceNodeId
-            ) {
-              reason =
-                "Source Map Node missing";
-            } else if (
-              !endpoints.destinationNodeId
-            ) {
-              reason =
-                "Destination Map Node missing";
-            }
+            const readiness =
+              getEndpointReadiness(
+                endpoints
+              );
 
 
             return {
               task,
+
               endpoints,
-              existingRobotTask,
-              ready,
-              reason,
+
+              existingQueueItem,
+
+              ready:
+                readiness.ok &&
+                !existingQueueItem,
+
+              reason:
+                existingQueueItem
+                  ? "Already in RCS queue"
+                  : readiness.message,
             };
           }
         )
+
+
+        /*
+         * Warehouse Task list
+         * เรียง priority ก่อน
+         */
+
         .sort(
-          (a, b) => {
-            const priorityCompare =
-              (
-                PRIORITY_ORDER[
-                  a.task.priority
-                ] ?? 99
-              ) -
-              (
-                PRIORITY_ORDER[
-                  b.task.priority
-                ] ?? 99
-              );
-
-
-            if (
-              priorityCompare !==
-              0
-            ) {
-              return priorityCompare;
-            }
-
-
-            /*
-             * FIFO inside same priority
-             */
-
-            return (
-              getTime(
-                a.task.createdAt
-              ) -
-              getTime(
-                b.task.createdAt
-              )
-            );
-          }
+          compareWarehouseCandidates
         );
     }, [
       warehouseTasks,
-      robotTasks,
+      dispatchQueue,
+      locationMap,
       receivingLocation,
       shippingLocation,
     ]);
 
 
-  const readyCandidates =
+  /* =====================================================
+     QUEUE ROWS
+  ===================================================== */
+
+  const queueRows =
+    useMemo(() => {
+      const enriched =
+        dispatchQueue.map(
+          (item) => {
+            /*
+             * Refresh RCS Point
+             * จาก Storage Location ล่าสุด
+             *
+             * เช่น user ไปแก้ Point หลังจาก Add Queue
+             */
+
+            const endpoints =
+              enrichQueuedEndpoints(
+                item,
+                locationMap
+              );
+
+
+            /*
+             * ตรวจ Queue state
+             */
+
+            const state =
+              getQueueState({
+                item,
+                endpoints,
+                now,
+              });
+
+
+            return {
+              ...item,
+
+              ...endpoints,
+
+              queueState:
+                state,
+
+              /*
+               * สร้าง preview
+               * สำหรับ command ที่จะส่งในอนาคต
+               */
+
+              commandDraft:
+                buildCommandDraft({
+                  ...item,
+                  ...endpoints,
+                }),
+            };
+          }
+        );
+
+
+      return enriched.sort(
+        compareQueueRows
+      );
+    }, [
+      dispatchQueue,
+      locationMap,
+      now,
+    ]);
+
+
+  /*
+   * READY only
+   */
+
+  const readyQueue =
     useMemo(
       () =>
-        candidates.filter(
+        queueRows.filter(
           (item) =>
-            item.ready
+            item.queueState ===
+            "READY"
         ),
-      [candidates]
+
+      [queueRows]
     );
 
 
   /*
-   * =====================================================
-   * SUMMARY
-   * =====================================================
+   * Ranking
+   *
+   * READY #1
+   * READY #2
+   * ...
    */
+
+  const readyRankMap =
+    useMemo(
+      () =>
+        new Map(
+          readyQueue.map(
+            (
+              item,
+              index
+            ) => [
+              item.id,
+              index + 1,
+            ]
+          )
+        ),
+
+      [readyQueue]
+    );
+
+
+  /* =====================================================
+     SUMMARY
+  ===================================================== */
 
   const summary =
     useMemo(
       () => ({
-        pending:
+        pendingWarehouse:
           candidates.length,
 
-        ready:
-          readyCandidates.length,
-
-        notReady:
+        readyWarehouse:
           candidates.filter(
             (item) =>
-              !item.ready &&
-              !item.existingRobotTask
+              item.ready
           ).length,
 
-        prepared:
-          robotTasks.filter(
-            (task) =>
-              task.status ===
-              "READY_TO_SEND"
+        waitingTime:
+          queueRows.filter(
+            (item) =>
+              item.queueState ===
+              "WAITING_TIME"
+          ).length,
+
+        readyToSend:
+          readyQueue.length,
+
+        mappingRequired:
+          queueRows.filter(
+            (item) =>
+              item.queueState ===
+              "MAPPING_REQUIRED"
           ).length,
       }),
+
       [
         candidates,
-        readyCandidates,
-        robotTasks,
+        queueRows,
+        readyQueue,
       ]
     );
 
 
-  /*
-   * =====================================================
-   * PREPARE ONE
-   * =====================================================
-   */
+  /* =====================================================
+     ADD TO QUEUE
+  ===================================================== */
 
-  function prepareRobotTask(
+  function queueWarehouseTask(
     candidate
   ) {
     if (
@@ -416,12 +613,38 @@ export default function RobotTaskDispatcher() {
     }
 
 
-    setRobotTasks(
+    /*
+     * อ่านเวลาที่เลือก
+     */
+
+    const scheduleValue =
+      scheduleDrafts[
+        candidate.task.id
+      ] || "";
+
+
+    /*
+     * ถ้าไม่ได้เลือกเวลา
+     *
+     * = พร้อมทันที
+     */
+
+    const scheduledSendAt =
+      parseScheduleInput(
+        scheduleValue
+      );
+
+
+    setDispatchQueue(
       (current) => {
+        /*
+         * กัน duplicate
+         */
+
         const exists =
           current.some(
-            (robotTask) =>
-              robotTask.warehouseTaskId ===
+            (item) =>
+              item.warehouseTaskId ===
               candidate.task.id
           );
 
@@ -431,16 +654,18 @@ export default function RobotTaskDispatcher() {
         }
 
 
-        const robotTask =
-          createRobotTask({
+        const record =
+          createDispatchRecord({
             warehouseTask:
               candidate.task,
 
             endpoints:
               candidate.endpoints,
 
+            scheduledSendAt,
+
             id:
-              getNextRobotTaskId(
+              getNextQueueId(
                 current
               ),
           });
@@ -448,128 +673,86 @@ export default function RobotTaskDispatcher() {
 
         return [
           ...current,
-          robotTask,
+          record,
         ];
       }
     );
-  }
 
 
-  /*
-   * =====================================================
-   * PREPARE ALL
-   * =====================================================
-   */
+    /*
+     * clear schedule field
+     */
 
-  function prepareAllReady() {
-    setRobotTasks(
+    setScheduleDrafts(
       (current) => {
-        const existingWarehouseIds =
-          new Set(
-            current.map(
-              (robotTask) =>
-                robotTask.warehouseTaskId
-            )
-          );
-
-
-        const ready =
-          readyCandidates.filter(
-            (candidate) =>
-              !existingWarehouseIds.has(
-                candidate.task.id
-              )
-          );
-
-
-        if (
-          ready.length ===
-          0
-        ) {
-          return current;
-        }
-
-
-        let nextNumber =
-          getHighestRobotTaskNumber(
-            current
-          ) + 1;
-
-
-        const newRobotTasks =
-          ready.map(
-            (candidate) => {
-              const id =
-                `RT-${String(
-                  nextNumber
-                ).padStart(
-                  3,
-                  "0"
-                )}`;
-
-
-              nextNumber +=
-                1;
-
-
-              return createRobotTask({
-                warehouseTask:
-                  candidate.task,
-
-                endpoints:
-                  candidate.endpoints,
-
-                id,
-              });
-            }
-          );
-
-
-        return [
+        const next = {
           ...current,
-          ...newRobotTasks,
+        };
+
+
+        delete next[
+          candidate.task.id
         ];
+
+
+        return next;
       }
     );
   }
 
 
-  /*
-   * =====================================================
-   * REMOVE PREPARED TASK
-   * =====================================================
-   */
+  /* =====================================================
+     REMOVE QUEUE ITEM
+  ===================================================== */
 
-  function removeRobotTask(
-    robotTask
+  function removeQueueItem(
+    item
   ) {
-    const confirmed =
-      window.confirm(
-        `Remove prepared Robot Task ${robotTask.id}?`
+    /*
+     * ในอนาคตถ้าส่งแล้ว
+     * จะไม่ให้ลบง่าย ๆ
+     */
+
+    if (
+      item.sendStatus ===
+      "SENT"
+    ) {
+      window.alert(
+        "A sent task cannot be removed from this preparation queue."
       );
 
 
-    if (!confirmed) {
       return;
     }
 
 
-    setRobotTasks(
+    const confirmed =
+      window.confirm(
+        `Remove ${item.id} from the RCS dispatch queue?`
+      );
+
+
+    if (
+      !confirmed
+    ) {
+      return;
+    }
+
+
+    setDispatchQueue(
       (current) =>
         current.filter(
-          (item) =>
-            item.id !==
-            robotTask.id
+          (entry) =>
+            entry.id !==
+            item.id
         )
     );
   }
 
 
-  /*
-   * =====================================================
-   * RCS ROUTE COMMAND
-   * =====================================================
-   */
+  /* =====================================================
+     RCS NETWORK ROUTE
+  ===================================================== */
 
   const gatewayValidation =
     validateGatewayOctet(
@@ -583,8 +766,10 @@ export default function RobotTaskDispatcher() {
       : "";
 
 
-  async function handleCopyCommand() {
-    if (!routeCommand) {
+  async function handleCopyRoute() {
+    if (
+      !routeCommand
+    ) {
       return;
     }
 
@@ -612,11 +797,9 @@ export default function RobotTaskDispatcher() {
   }
 
 
-  /*
-   * =====================================================
-   * UI
-   * =====================================================
-   */
+  /* =====================================================
+     UI
+  ===================================================== */
 
   return (
     <div className="dispatcher-page">
@@ -626,22 +809,23 @@ export default function RobotTaskDispatcher() {
       <div className="dispatcher-header">
 
         <div>
+
           <span className="dispatcher-label">
-            ROBOT EXECUTION PREPARATION
+            WMS → HIK RCS PREPARATION
           </span>
 
 
           <h2>
-            Robot Task Dispatcher
+            RCS Dispatch Queue
           </h2>
 
 
           <p>
-            Convert ready Warehouse
-            Tasks into internal Robot
-            Tasks before connecting to
-            the external HIK RCS.
+            Prepare Warehouse Tasks for HIK RCS,
+            schedule when they become eligible,
+            and order due tasks by priority.
           </p>
+
         </div>
 
 
@@ -667,9 +851,9 @@ export default function RobotTaskDispatcher() {
       <div className="dispatcher-summary-grid">
 
         <SummaryCard
-          title="Pending Tasks"
+          title="Pending Warehouse"
           value={
-            summary.pending
+            summary.pendingWarehouse
           }
           icon={
             <Clipboard
@@ -680,9 +864,9 @@ export default function RobotTaskDispatcher() {
 
 
         <SummaryCard
-          title="Ready for Robot"
+          title="Can Queue"
           value={
-            summary.ready
+            summary.readyWarehouse
           }
           icon={
             <CheckCircle2
@@ -694,12 +878,12 @@ export default function RobotTaskDispatcher() {
 
 
         <SummaryCard
-          title="Missing Endpoint"
+          title="Waiting Time"
           value={
-            summary.notReady
+            summary.waitingTime
           }
           icon={
-            <AlertTriangle
+            <Send
               size={20}
             />
           }
@@ -710,7 +894,7 @@ export default function RobotTaskDispatcher() {
         <SummaryCard
           title="Ready to Send"
           value={
-            summary.prepared
+            summary.readyToSend
           }
           icon={
             <Send
@@ -720,31 +904,48 @@ export default function RobotTaskDispatcher() {
           tone="cyan"
         />
 
+
+        <SummaryCard
+          title="Mapping Required"
+          value={
+            summary.mappingRequired
+          }
+          icon={
+            <AlertTriangle
+              size={20}
+            />
+          }
+          tone="danger"
+        />
+
       </div>
 
 
-      {/* RCS PREPARATION */}
+      {/* =================================================
+          NETWORK
+      ================================================= */}
 
       <section className="dispatcher-panel">
 
         <div className="dispatcher-panel-header">
 
           <div>
+
             <span className="dispatcher-section-label">
-              RCS NETWORK PREPARATION
+              NETWORK PREPARATION
             </span>
 
+
             <h3>
-              HIK RCS Connection Prep
+              HIK RCS Access
             </h3>
 
+
             <p>
-              This page only prepares
-              the Windows route command.
-              It cannot execute an
-              Administrator command
-              directly from the browser.
+              The browser only prepares the Windows route
+              command. Run it manually in Administrator CMD.
             </p>
+
           </div>
 
         </div>
@@ -752,9 +953,12 @@ export default function RobotTaskDispatcher() {
 
         <div className="rcs-prep-grid">
 
+          {/* GATEWAY */}
+
           <div className="rcs-gateway-card">
 
             <label>
+
               <span>
                 Gateway
               </span>
@@ -786,6 +990,7 @@ export default function RobotTaskDispatcher() {
                 />
 
               </div>
+
             </label>
 
 
@@ -795,16 +1000,18 @@ export default function RobotTaskDispatcher() {
                 size={15}
               />
 
+
               <span>
-                Check and enter this
-                number again every time
-                before accessing RCS.
+                Enter the current last IP number again
+                before each RCS session.
               </span>
 
             </div>
 
           </div>
 
+
+          {/* CMD */}
 
           <div className="rcs-command-card">
 
@@ -825,7 +1032,7 @@ export default function RobotTaskDispatcher() {
                 !routeCommand
               }
               onClick={
-                handleCopyCommand
+                handleCopyRoute
               }
             >
               <Copy
@@ -846,6 +1053,8 @@ export default function RobotTaskDispatcher() {
 
           </div>
 
+
+          {/* LINKS */}
 
           <div className="rcs-links-card">
 
@@ -896,46 +1105,33 @@ export default function RobotTaskDispatcher() {
       </section>
 
 
-      {/* WAREHOUSE TASKS */}
+      {/* =================================================
+          WAREHOUSE TASKS
+      ================================================= */}
 
       <section className="dispatcher-panel">
 
         <div className="dispatcher-panel-header">
 
           <div>
+
             <span className="dispatcher-section-label">
-              DISPATCH QUEUE
+              WAREHOUSE TASKS
             </span>
 
+
             <h3>
-              Warehouse Tasks
+              Add Task to RCS Queue
             </h3>
 
+
             <p>
-              Priority is processed
-              first, then FIFO inside
-              the same priority.
+              A task can be queued only when both source
+              and destination locations have HIK RCS mapping.
+              Leave Send Time empty to make it eligible now.
             </p>
+
           </div>
-
-
-          <button
-            type="button"
-            className="prepare-all-button"
-            disabled={
-              readyCandidates.length ===
-              0
-            }
-            onClick={
-              prepareAllReady
-            }
-          >
-            <Bot
-              size={16}
-            />
-
-            Prepare All Ready
-          </button>
 
         </div>
 
@@ -945,25 +1141,19 @@ export default function RobotTaskDispatcher() {
           <table className="dispatcher-table">
 
             <thead>
+
               <tr>
+
                 <th>
                   Task
                 </th>
 
                 <th>
-                  Type
+                  WMS Route
                 </th>
 
                 <th>
-                  SKU / Qty
-                </th>
-
-                <th>
-                  Source
-                </th>
-
-                <th>
-                  Destination
+                  HIK RCS Route
                 </th>
 
                 <th>
@@ -971,18 +1161,26 @@ export default function RobotTaskDispatcher() {
                 </th>
 
                 <th>
+                  Send Time
+                </th>
+
+                <th>
                   Readiness
                 </th>
 
                 <th></th>
+
               </tr>
+
             </thead>
 
 
             <tbody>
 
               {candidates.map(
-                (candidate) => (
+                (
+                  candidate
+                ) => (
                   <tr
                     key={
                       candidate.task.id
@@ -990,97 +1188,162 @@ export default function RobotTaskDispatcher() {
                   >
 
                     <td>
+
                       <strong>
                         {
                           candidate.task.id
                         }
                       </strong>
 
+
                       <small>
                         {
-                          candidate.task
-                            .sourceOrderNo
-                        }
-                      </small>
-                    </td>
-
-
-                    <td>
-                      <TaskTypeBadge
-                        type={
                           candidate.task.type
                         }
-                      />
-                    </td>
 
+                        {" · "}
 
-                    <td>
-                      <strong>
-                        {
-                          candidate.task.sku
-                        }
-                      </strong>
-
-                      <small>
-                        Qty
-                        {" "}
                         {
                           candidate.task
-                            .quantity
+                            .sourceOrderNo ||
+                          "-"
                         }
                       </small>
+
                     </td>
 
 
+                    {/* WMS ROUTE */}
+
                     <td>
-                      <NodeCell
-                        label={
+
+                      <RouteCell
+                        sourceLabel={
                           candidate.endpoints
                             .sourceLabel
                         }
-                        nodeId={
-                          candidate.endpoints
-                            .sourceNodeId
-                        }
-                      />
-                    </td>
-
-
-                    <td>
-                      <NodeCell
-                        label={
+                        destinationLabel={
                           candidate.endpoints
                             .destinationLabel
                         }
-                        nodeId={
+                        sourceCode={
+                          candidate.endpoints
+                            .sourceNodeId
+                        }
+                        destinationCode={
                           candidate.endpoints
                             .destinationNodeId
                         }
+                        emptyText="WMS node missing"
                       />
+
                     </td>
 
 
+                    {/* RCS ROUTE */}
+
                     <td>
+
+                      <RouteCell
+                        sourceLabel={
+                          candidate.endpoints
+                            .sourceRcsTargetType
+                        }
+                        destinationLabel={
+                          candidate.endpoints
+                            .destinationRcsTargetType
+                        }
+                        sourceCode={
+                          candidate.endpoints
+                            .sourceRcsPointCode
+                        }
+                        destinationCode={
+                          candidate.endpoints
+                            .destinationRcsPointCode
+                        }
+                        emptyText="RCS point missing"
+                        rcs
+                      />
+
+                    </td>
+
+
+                    {/* PRIORITY */}
+
+                    <td>
+
                       <PriorityBadge
                         priority={
                           candidate.task
                             .priority
                         }
+                        rcsPriority={
+                          RCS_PRIORITY[
+                            candidate.task
+                              .priority
+                          ] ||
+                          60
+                        }
                       />
+
                     </td>
 
 
+                    {/* SCHEDULE */}
+
                     <td>
+
+                      <input
+                        className="dispatch-schedule-input"
+                        type="datetime-local"
+                        value={
+                          scheduleDrafts[
+                            candidate.task.id
+                          ] ||
+                          ""
+                        }
+                        onChange={(
+                          event
+                        ) =>
+                          setScheduleDrafts(
+                            (
+                              current
+                            ) => ({
+                              ...current,
+
+                              [candidate.task.id]:
+                                event.target
+                                  .value,
+                            })
+                          )
+                        }
+                      />
+
+
+                      <small className="schedule-help">
+                        Empty = send when queue sender is available
+                      </small>
+
+                    </td>
+
+
+                    {/* READINESS */}
+
+                    <td>
+
                       {candidate.ready ? (
                         <span className="readiness ready">
+
                           <CheckCircle2
                             size={13}
                           />
 
                           Ready
+
                         </span>
                       ) : (
                         <span className="readiness not-ready">
+
                           <AlertTriangle
                             size={13}
                           />
@@ -1088,12 +1351,17 @@ export default function RobotTaskDispatcher() {
                           {
                             candidate.reason
                           }
+
                         </span>
                       )}
+
                     </td>
 
 
+                    {/* ADD */}
+
                     <td>
+
                       <button
                         type="button"
                         className="prepare-task-button"
@@ -1101,17 +1369,18 @@ export default function RobotTaskDispatcher() {
                           !candidate.ready
                         }
                         onClick={() =>
-                          prepareRobotTask(
+                          queueWarehouseTask(
                             candidate
                           )
                         }
                       >
-                        <Bot
+                        <Send
                           size={14}
                         />
 
-                        Prepare
+                        Add Queue
                       </button>
+
                     </td>
 
                   </tr>
@@ -1136,10 +1405,7 @@ export default function RobotTaskDispatcher() {
               </strong>
 
               <span>
-                New robot candidates
-                will appear when
-                Warehouse Tasks are
-                Pending.
+                Pending Putaway/Picking tasks will appear here.
               </span>
 
             </div>
@@ -1150,28 +1416,69 @@ export default function RobotTaskDispatcher() {
       </section>
 
 
-      {/* ROBOT TASKS */}
+      {/* =================================================
+          QUEUE
+      ================================================= */}
 
       <section className="dispatcher-panel">
 
         <div className="dispatcher-panel-header">
 
           <div>
+
             <span className="dispatcher-section-label">
-              ROBOT TASK BUFFER
+              RCS DISPATCH QUEUE
             </span>
 
+
             <h3>
-              Prepared Robot Tasks
+              Scheduled Command Queue
             </h3>
 
+
             <p>
-              These are internal WMS
-              Robot Tasks only. They
-              have not been sent to
-              HIK RCS yet.
+              Only tasks whose Send Time has arrived become READY.
+              READY tasks are ordered by RCS priority, then FIFO.
             </p>
+
           </div>
+
+
+          <div className="dispatcher-live-time">
+
+            <span>
+              Local time
+            </span>
+
+
+            <strong>
+              {
+                new Date(
+                  now
+                ).toLocaleString()
+              }
+            </strong>
+
+          </div>
+
+        </div>
+
+
+        {/* IMPORTANT WARNING */}
+
+        <div className="dispatcher-api-warning">
+
+          <AlertTriangle
+            size={16}
+          />
+
+
+          <span>
+            Queue and scheduling are active in WMS only.
+            Automatic HIK sending is intentionally disabled until
+            the GenerateTaskOrder endpoint, authentication and exact
+            request/response format are confirmed.
+          </span>
 
         </div>
 
@@ -1181,9 +1488,11 @@ export default function RobotTaskDispatcher() {
           <table className="dispatcher-table robot-task-table">
 
             <thead>
+
               <tr>
+
                 <th>
-                  Robot Task
+                  Queue
                 </th>
 
                 <th>
@@ -1191,176 +1500,235 @@ export default function RobotTaskDispatcher() {
                 </th>
 
                 <th>
-                  Type
+                  HIK RCS Route
                 </th>
 
                 <th>
-                  Route
+                  Priority
                 </th>
 
                 <th>
-                  Status
+                  Scheduled Send
                 </th>
 
                 <th>
-                  Payload
+                  Queue State
+                </th>
+
+                <th>
+                  Command Draft
                 </th>
 
                 <th></th>
+
               </tr>
+
             </thead>
 
 
             <tbody>
 
-              {[...robotTasks]
-                .sort(
-                  (a, b) =>
-                    getTime(
-                      b.createdAt
-                    ) -
-                    getTime(
-                      a.createdAt
-                    )
-                )
-                .map(
-                  (robotTask) => (
-                    <tr
-                      key={
-                        robotTask.id
-                      }
-                    >
+              {queueRows.map(
+                (
+                  item
+                ) => (
+                  <tr
+                    key={
+                      item.id
+                    }
+                  >
 
-                      <td>
-                        <strong>
-                          {
-                            robotTask.id
-                          }
-                        </strong>
+                    {/* QUEUE */}
 
-                        <small>
-                          {
-                            formatDateTime(
-                              robotTask.createdAt
-                            )
-                          }
-                        </small>
-                      </td>
+                    <td>
 
-
-                      <td>
+                      <strong>
                         {
-                          robotTask
-                            .warehouseTaskId
+                          item.id
                         }
-                      </td>
+                      </strong>
 
 
-                      <td>
-                        <TaskTypeBadge
-                          type={
-                            robotTask.type
-                          }
+                      <small>
+
+                        {item.queueState ===
+                        "READY"
+                          ? `Ready rank #${readyRankMap.get(
+                              item.id
+                            )}`
+                          : formatDateTime(
+                              item.createdAt
+                            )}
+
+                      </small>
+
+                    </td>
+
+
+                    {/* WAREHOUSE TASK */}
+
+                    <td>
+
+                      <strong>
+                        {
+                          item.warehouseTaskId
+                        }
+                      </strong>
+
+
+                      <small>
+
+                        {
+                          item.type
+                        }
+
+                        {item.sourceOrderNo
+                          ? ` · ${item.sourceOrderNo}`
+                          : ""}
+
+                      </small>
+
+                    </td>
+
+
+                    {/* ROUTE */}
+
+                    <td>
+
+                      <RouteCell
+                        sourceLabel={
+                          item.sourceRcsTargetType
+                        }
+                        destinationLabel={
+                          item.destinationRcsTargetType
+                        }
+                        sourceCode={
+                          item.sourceRcsPointCode
+                        }
+                        destinationCode={
+                          item.destinationRcsPointCode
+                        }
+                        emptyText="RCS point missing"
+                        rcs
+                      />
+
+                    </td>
+
+
+                    {/* PRIORITY */}
+
+                    <td>
+
+                      <PriorityBadge
+                        priority={
+                          item.wmsPriority
+                        }
+                        rcsPriority={
+                          item.rcsPriority
+                        }
+                      />
+
+                    </td>
+
+
+                    {/* TIME */}
+
+                    <td>
+
+                      <strong className="scheduled-time">
+                        {
+                          formatDateTime(
+                            item.scheduledSendAt
+                          )
+                        }
+                      </strong>
+
+                    </td>
+
+
+                    {/* STATE */}
+
+                    <td>
+
+                      <QueueStateBadge
+                        state={
+                          item.queueState
+                        }
+                      />
+
+                    </td>
+
+
+                    {/* COMMAND PREVIEW */}
+
+                    <td>
+
+                      <button
+                        type="button"
+                        className="payload-button"
+                        onClick={() =>
+                          copyText(
+                            JSON.stringify(
+                              item.commandDraft,
+                              null,
+                              2
+                            )
+                          )
+                        }
+                      >
+                        <Copy
+                          size={14}
                         />
-                      </td>
+
+                        Copy Draft
+                      </button>
+
+                    </td>
 
 
-                      <td>
-                        <div className="robot-route">
+                    {/* REMOVE */}
 
-                          <span>
-                            {
-                              robotTask
-                                .sourceNodeId
-                            }
-                          </span>
+                    <td>
 
-                          <Route
-                            size={14}
-                          />
+                      <button
+                        type="button"
+                        className="robot-remove-button"
+                        onClick={() =>
+                          removeQueueItem(
+                            item
+                          )
+                        }
+                      >
+                        <Trash2
+                          size={14}
+                        />
+                      </button>
 
-                          <span>
-                            {
-                              robotTask
-                                .destinationNodeId
-                            }
-                          </span>
+                    </td>
 
-                        </div>
-                      </td>
-
-
-                      <td>
-                        <span className="robot-ready-status">
-                          READY_TO_SEND
-                        </span>
-                      </td>
-
-
-                      <td>
-                        <button
-                          type="button"
-                          className="payload-button"
-                          onClick={() =>
-                            copyText(
-                              JSON.stringify(
-                                robotTask.payload,
-                                null,
-                                2
-                              )
-                            )
-                          }
-                        >
-                          <Copy
-                            size={14}
-                          />
-
-                          Copy Payload
-                        </button>
-                      </td>
-
-
-                      <td>
-                        <button
-                          type="button"
-                          className="robot-remove-button"
-                          onClick={() =>
-                            removeRobotTask(
-                              robotTask
-                            )
-                          }
-                        >
-                          <Trash2
-                            size={14}
-                          />
-                        </button>
-                      </td>
-
-                    </tr>
-                  )
-                )}
+                  </tr>
+                )
+              )}
 
             </tbody>
 
           </table>
 
 
-          {robotTasks.length ===
+          {queueRows.length ===
             0 && (
             <div className="dispatcher-empty">
 
-              <Bot
+              <Send
                 size={30}
               />
 
               <strong>
-                No Robot Task Prepared
+                RCS Queue is Empty
               </strong>
 
               <span>
-                Prepare a Warehouse
-                Task when both Map
-                Nodes are available.
+                Add a mapped Warehouse Task to start scheduling.
               </span>
 
             </div>
@@ -1396,13 +1764,16 @@ function SummaryCard({
 
 
       <div>
+
         <span>
           {title}
         </span>
 
+
         <strong>
           {value}
         </strong>
+
       </div>
 
     </div>
@@ -1411,66 +1782,87 @@ function SummaryCard({
 
 
 /* =========================================================
-   NODE CELL
+   ROUTE CELL
 ========================================================= */
 
-function NodeCell({
-  label,
-  nodeId,
+function RouteCell({
+  sourceLabel,
+  destinationLabel,
+  sourceCode,
+  destinationCode,
+  emptyText,
+  rcs = false,
 }) {
   return (
-    <div className="dispatcher-node">
+    <div
+      className={`dispatcher-route-cell ${
+        rcs
+          ? "rcs"
+          : ""
+      }`}
+    >
 
-      <span>
-        {
-          label ||
-          "-"
-        }
-      </span>
+      {/* SOURCE */}
+
+      <div>
+
+        <span>
+          {sourceLabel ||
+            "Source"}
+        </span>
 
 
-      <small
-        className={
-          nodeId
-            ? "node-linked"
-            : "node-missing"
-        }
-      >
-        <MapPin
-          size={11}
-        />
+        <strong
+          className={
+            sourceCode
+              ? ""
+              : "missing"
+          }
+        >
+          <MapPin
+            size={11}
+          />
 
-        {
-          nodeId ||
-          "No Map Node"
-        }
-      </small>
+          {sourceCode ||
+            emptyText}
+        </strong>
+
+      </div>
+
+
+      <Route
+        size={14}
+      />
+
+
+      {/* DESTINATION */}
+
+      <div>
+
+        <span>
+          {destinationLabel ||
+            "Destination"}
+        </span>
+
+
+        <strong
+          className={
+            destinationCode
+              ? ""
+              : "missing"
+          }
+        >
+          <MapPin
+            size={11}
+          />
+
+          {destinationCode ||
+            emptyText}
+        </strong>
+
+      </div>
 
     </div>
-  );
-}
-
-
-/* =========================================================
-   TYPE
-========================================================= */
-
-function TaskTypeBadge({
-  type,
-}) {
-  return (
-    <span
-      className={`dispatcher-type type-${String(
-        type
-      ).toLowerCase()}`}
-    >
-      {
-        type ===
-        "PUTAWAY"
-          ? "Putaway"
-          : "Picking"
-      }
-    </span>
   );
 }
 
@@ -1481,16 +1873,79 @@ function TaskTypeBadge({
 
 function PriorityBadge({
   priority,
+  rcsPriority,
 }) {
+  const normalized =
+    String(
+      priority ||
+      "NORMAL"
+    ).toUpperCase();
+
+
+  return (
+    <div className="dispatcher-priority-wrap">
+
+      <span
+        className={`dispatcher-priority priority-${normalized.toLowerCase()}`}
+      >
+        {
+          normalized
+        }
+      </span>
+
+
+      <small>
+        RCS
+        {" "}
+        {
+          Number(
+            rcsPriority ||
+            60
+          )
+        }
+      </small>
+
+    </div>
+  );
+}
+
+
+/* =========================================================
+   QUEUE STATE
+========================================================= */
+
+function QueueStateBadge({
+  state,
+}) {
+  const labels = {
+    READY:
+      "READY",
+
+    WAITING_TIME:
+      "WAITING TIME",
+
+    MAPPING_REQUIRED:
+      "MAPPING REQUIRED",
+
+    SENT:
+      "SENT",
+  };
+
+
   return (
     <span
-      className={`dispatcher-priority priority-${String(
-        priority
-      ).toLowerCase()}`}
+      className={`queue-state queue-${String(
+        state
+      )
+        .toLowerCase()
+        .replaceAll(
+          "_",
+          "-"
+        )}`}
     >
       {
-        priority ||
-        "NORMAL"
+        labels[state] ||
+        state
       }
     </span>
   );
@@ -1498,14 +1953,22 @@ function PriorityBadge({
 
 
 /* =========================================================
-   ENDPOINT RESOLUTION
+   RESOLVE SOURCE / DESTINATION
 ========================================================= */
 
 function resolveTaskEndpoints({
   task,
+  locationMap,
   receivingLocation,
   shippingLocation,
 }) {
+  let sourceLocation =
+    null;
+
+  let destinationLocation =
+    null;
+
+
   /*
    * PUTAWAY
    *
@@ -1516,38 +1979,19 @@ function resolveTaskEndpoints({
     task.type ===
     "PUTAWAY"
   ) {
-    return {
-      sourceNodeId:
-        task.sourceNodeId ||
-        receivingLocation
-          ?.mapNodeId ||
-        "",
+    sourceLocation =
+      task.sourceLocationId
+        ? locationMap.get(
+            task.sourceLocationId
+          )
+        : receivingLocation;
 
-      sourceLocationId:
-        task.sourceLocationId ||
-        receivingLocation?.id ||
-        "",
 
-      sourceLabel:
-        task.sourceNodeId
-          ? task.sourceLabel
-          : (
-              receivingLocation?.code ||
-              "RECEIVING"
-            ),
-
-      destinationNodeId:
-        task.destinationNodeId ||
-        "",
-
-      destinationLocationId:
-        task.destinationLocationId ||
-        "",
-
-      destinationLabel:
-        task.destinationLabel ||
-        "STORAGE",
-    };
+    destinationLocation =
+      locationMap.get(
+        task.destinationLocationId
+      ) ||
+      null;
   }
 
 
@@ -1557,43 +2001,212 @@ function resolveTaskEndpoints({
    * Storage -> Shipping
    */
 
-  return {
-    sourceNodeId:
-      task.sourceNodeId ||
-      "",
+  else {
+    sourceLocation =
+      locationMap.get(
+        task.sourceLocationId
+      ) ||
+      null;
 
+
+    destinationLocation =
+      task.destinationLocationId
+        ? locationMap.get(
+            task.destinationLocationId
+          )
+        : shippingLocation;
+  }
+
+
+  return {
     sourceLocationId:
+      sourceLocation?.id ||
       task.sourceLocationId ||
       "",
 
-    sourceLabel:
-      task.sourceLabel ||
-      "STORAGE",
-
-    destinationNodeId:
-      task.destinationNodeId ||
-      shippingLocation
-        ?.mapNodeId ||
-      "",
-
     destinationLocationId:
+      destinationLocation?.id ||
       task.destinationLocationId ||
-      shippingLocation?.id ||
       "",
+
+
+    sourceLabel:
+      sourceLocation?.code ||
+      task.sourceLabel ||
+      "SOURCE",
 
     destinationLabel:
-      task.destinationNodeId
-        ? task.destinationLabel
-        : (
-            shippingLocation?.code ||
-            "SHIPPING"
-          ),
+      destinationLocation?.code ||
+      task.destinationLabel ||
+      "DESTINATION",
+
+
+    sourceNodeId:
+      sourceLocation?.mapNodeId ||
+      task.sourceNodeId ||
+      "",
+
+    destinationNodeId:
+      destinationLocation?.mapNodeId ||
+      task.destinationNodeId ||
+      "",
+
+
+    /*
+     * HIK POINT
+     */
+
+    sourceRcsPointCode:
+      sourceLocation?.rcsPointCode ||
+      "",
+
+    destinationRcsPointCode:
+      destinationLocation?.rcsPointCode ||
+      "",
+
+
+    sourceRcsMapCode:
+      sourceLocation?.rcsMapCode ||
+      "",
+
+    destinationRcsMapCode:
+      destinationLocation?.rcsMapCode ||
+      "",
+
+
+    sourceRcsTargetType:
+      sourceLocation?.rcsTargetType ||
+      "SITE",
+
+    destinationRcsTargetType:
+      destinationLocation?.rcsTargetType ||
+      "SITE",
   };
 }
 
 
 /* =========================================================
-   FIND RECEIVING / SHIPPING LOCATION
+   REFRESH RCS POINTS FOR QUEUED TASK
+========================================================= */
+
+function enrichQueuedEndpoints(
+  item,
+  locationMap
+) {
+  const sourceLocation =
+    locationMap.get(
+      item.sourceLocationId
+    );
+
+
+  const destinationLocation =
+    locationMap.get(
+      item.destinationLocationId
+    );
+
+
+  return {
+    sourceRcsPointCode:
+      sourceLocation?.rcsPointCode ||
+      item.sourceRcsPointCode ||
+      "",
+
+    destinationRcsPointCode:
+      destinationLocation?.rcsPointCode ||
+      item.destinationRcsPointCode ||
+      "",
+
+
+    sourceRcsMapCode:
+      sourceLocation?.rcsMapCode ||
+      item.sourceRcsMapCode ||
+      "",
+
+    destinationRcsMapCode:
+      destinationLocation?.rcsMapCode ||
+      item.destinationRcsMapCode ||
+      "",
+
+
+    sourceRcsTargetType:
+      sourceLocation?.rcsTargetType ||
+      item.sourceRcsTargetType ||
+      "SITE",
+
+    destinationRcsTargetType:
+      destinationLocation?.rcsTargetType ||
+      item.destinationRcsTargetType ||
+      "SITE",
+  };
+}
+
+
+/* =========================================================
+   MAPPING VALIDATION
+========================================================= */
+
+function getEndpointReadiness(
+  endpoints
+) {
+  if (
+    !endpoints.sourceLocationId
+  ) {
+    return {
+      ok: false,
+
+      message:
+        "Source WMS location missing",
+    };
+  }
+
+
+  if (
+    !endpoints.destinationLocationId
+  ) {
+    return {
+      ok: false,
+
+      message:
+        "Destination WMS location missing",
+    };
+  }
+
+
+  if (
+    !endpoints.sourceRcsPointCode
+  ) {
+    return {
+      ok: false,
+
+      message:
+        "Source HIK RCS point missing",
+    };
+  }
+
+
+  if (
+    !endpoints.destinationRcsPointCode
+  ) {
+    return {
+      ok: false,
+
+      message:
+        "Destination HIK RCS point missing",
+    };
+  }
+
+
+  return {
+    ok: true,
+
+    message:
+      "Ready",
+  };
+}
+
+
+/* =========================================================
+   RECEIVING / SHIPPING
 ========================================================= */
 
 function findOperationalLocation(
@@ -1602,6 +2215,7 @@ function findOperationalLocation(
 ) {
   return (
     locations
+
       .filter(
         (location) =>
           location.type ===
@@ -1611,11 +2225,9 @@ function findOperationalLocation(
             "MAINTENANCE",
           ].includes(
             location.status
-          ) &&
-          Boolean(
-            location.mapNodeId
           )
       )
+
       .sort(
         (a, b) =>
           String(
@@ -1628,80 +2240,77 @@ function findOperationalLocation(
             )
           )
       )[0] ||
+
     null
   );
 }
 
 
 /* =========================================================
-   CREATE ROBOT TASK
+   CREATE QUEUE RECORD
 ========================================================= */
 
-function createRobotTask({
+function createDispatchRecord({
   warehouseTask,
   endpoints,
+  scheduledSendAt,
   id,
 }) {
   const createdAt =
     new Date().toISOString();
 
 
-  const payload = {
-    robotTaskId:
-      id,
-
-    warehouseTaskId:
-      warehouseTask.id,
-
-    taskType:
-      warehouseTask.type,
-
-    sourceNode:
-      endpoints.sourceNodeId,
-
-    destinationNode:
-      endpoints.destinationNodeId,
-
-    sku:
-      warehouseTask.sku,
-
-    quantity:
-      warehouseTask.quantity,
-
-    priority:
-      warehouseTask.priority,
-
-    sourceOrderId:
-      warehouseTask.sourceOrderId,
-  };
+  const wmsPriority =
+    normalizeWmsPriority(
+      warehouseTask.priority
+    );
 
 
   return {
     id,
 
+
+    /*
+     * WMS reference
+     */
+
     warehouseTaskId:
       warehouseTask.id,
 
     sourceOrderId:
-      warehouseTask.sourceOrderId,
+      warehouseTask.sourceOrderId ||
+      "",
 
     sourceOrderNo:
-      warehouseTask.sourceOrderNo,
+      warehouseTask.sourceOrderNo ||
+      "",
+
+
+    /*
+     * Task information
+     */
 
     type:
       warehouseTask.type,
 
     sku:
-      warehouseTask.sku,
+      warehouseTask.sku ||
+      "",
 
     itemName:
-      warehouseTask.itemName,
+      warehouseTask.itemName ||
+      "",
 
     quantity:
-      warehouseTask.quantity,
+      Number(
+        warehouseTask.quantity ||
+        0
+      ),
 
-    priority:
-      warehouseTask.priority,
+
+    /*
+     * WMS locations
+     */
 
     sourceLocationId:
       endpoints.sourceLocationId,
@@ -1709,66 +2318,668 @@ function createRobotTask({
     destinationLocationId:
       endpoints.destinationLocationId,
 
+
+    /*
+     * WMS Map Nodes
+     */
+
     sourceNodeId:
       endpoints.sourceNodeId,
 
     destinationNodeId:
       endpoints.destinationNodeId,
 
-    status:
-      "READY_TO_SEND",
+
+    /*
+     * HIK RCS mapping
+     */
+
+    sourceRcsPointCode:
+      endpoints.sourceRcsPointCode,
+
+    destinationRcsPointCode:
+      endpoints.destinationRcsPointCode,
+
+    sourceRcsMapCode:
+      endpoints.sourceRcsMapCode,
+
+    destinationRcsMapCode:
+      endpoints.destinationRcsMapCode,
+
+    sourceRcsTargetType:
+      endpoints.sourceRcsTargetType,
+
+    destinationRcsTargetType:
+      endpoints.destinationRcsTargetType,
+
+
+    /*
+     * Priority
+     */
+
+    wmsPriority,
+
+    rcsPriority:
+      RCS_PRIORITY[
+        wmsPriority
+      ] ||
+      60,
+
+
+    /*
+     * Schedule
+     */
+
+    scheduledSendAt,
+
+
+    /*
+     * RCS connection state
+     *
+     * ยังไม่ได้ส่งจริง
+     */
+
+    sendStatus:
+      "NOT_SENT",
+
+    rcsTaskChainCode:
+      "",
+
+    rcsStatus:
+      "NOT_SENT",
+
 
     createdAt,
-
-    payload,
   };
 }
 
 
 /* =========================================================
-   ROBOT TASK ID
+   LOAD OLD V6 / NORMALIZE
 ========================================================= */
 
-function getNextRobotTaskId(
-  tasks
+function normalizeDispatchRecord(
+  item,
+  index
 ) {
-  const next =
-    getHighestRobotTaskNumber(
-      tasks
-    ) + 1;
+  /*
+   * รองรับข้อมูล V6 เดิม
+   */
+
+  const wmsPriority =
+    normalizeWmsPriority(
+      item.wmsPriority ||
+      item.priority
+    );
 
 
-  return `RT-${String(
-    next
-  ).padStart(
-    3,
-    "0"
-  )}`;
+  return {
+    id:
+      String(
+        item.id ||
+        `RCSQ-${String(
+          index + 1
+        ).padStart(
+          3,
+          "0"
+        )}`
+      ),
+
+
+    warehouseTaskId:
+      String(
+        item.warehouseTaskId ||
+        ""
+      ),
+
+
+    sourceOrderId:
+      String(
+        item.sourceOrderId ||
+        ""
+      ),
+
+
+    sourceOrderNo:
+      String(
+        item.sourceOrderNo ||
+        ""
+      ),
+
+
+    type:
+      String(
+        item.type ||
+        item.taskType ||
+        "TRANSPORT"
+      ).toUpperCase(),
+
+
+    sku:
+      String(
+        item.sku ||
+        ""
+      ),
+
+
+    itemName:
+      String(
+        item.itemName ||
+        ""
+      ),
+
+
+    quantity:
+      Number(
+        item.quantity ||
+        0
+      ),
+
+
+    sourceLocationId:
+      String(
+        item.sourceLocationId ||
+        ""
+      ),
+
+
+    destinationLocationId:
+      String(
+        item.destinationLocationId ||
+        ""
+      ),
+
+
+    sourceNodeId:
+      String(
+        item.sourceNodeId ||
+        ""
+      ),
+
+
+    destinationNodeId:
+      String(
+        item.destinationNodeId ||
+        ""
+      ),
+
+
+    sourceRcsPointCode:
+      String(
+        item.sourceRcsPointCode ||
+        item.sourcePointCode ||
+        ""
+      ),
+
+
+    destinationRcsPointCode:
+      String(
+        item.destinationRcsPointCode ||
+        item.destinationPointCode ||
+        ""
+      ),
+
+
+    sourceRcsMapCode:
+      String(
+        item.sourceRcsMapCode ||
+        ""
+      ),
+
+
+    destinationRcsMapCode:
+      String(
+        item.destinationRcsMapCode ||
+        ""
+      ),
+
+
+    sourceRcsTargetType:
+      String(
+        item.sourceRcsTargetType ||
+        "SITE"
+      ).toUpperCase(),
+
+
+    destinationRcsTargetType:
+      String(
+        item.destinationRcsTargetType ||
+        "SITE"
+      ).toUpperCase(),
+
+
+    wmsPriority,
+
+
+    rcsPriority:
+      clampRcsPriority(
+        item.rcsPriority ??
+        RCS_PRIORITY[
+          wmsPriority
+        ]
+      ),
+
+
+    scheduledSendAt:
+      item.scheduledSendAt ||
+      item.createdAt ||
+      new Date().toISOString(),
+
+
+    sendStatus:
+      item.sendStatus ||
+      (
+        item.status ===
+        "SENT"
+          ? "SENT"
+          : "NOT_SENT"
+      ),
+
+
+    rcsTaskChainCode:
+      String(
+        item.rcsTaskChainCode ||
+        ""
+      ),
+
+
+    rcsStatus:
+      String(
+        item.rcsStatus ||
+        "NOT_SENT"
+      ),
+
+
+    createdAt:
+      item.createdAt ||
+      new Date().toISOString(),
+  };
 }
 
 
-function getHighestRobotTaskNumber(
-  tasks
+/* =========================================================
+   COMMAND DRAFT
+========================================================= */
+
+function buildCommandDraft(
+  item
+) {
+  return {
+    _note:
+      "Internal WMS command draft only. Exact HIK GenerateTaskOrder endpoint/body is not configured yet.",
+
+
+    /*
+     * External Task ID
+     */
+
+    robotTaskCode:
+      item.warehouseTaskId,
+
+
+    taskType:
+      "TRANSPORT",
+
+
+    initPriority:
+      clampRcsPriority(
+        item.rcsPriority
+      ),
+
+
+    scheduledSendAt:
+      item.scheduledSendAt,
+
+
+    /*
+     * SOURCE
+     */
+
+    source: {
+      type:
+        item.sourceRcsTargetType ||
+        "SITE",
+
+      code:
+        item.sourceRcsPointCode ||
+        "",
+
+      mapCode:
+        item.sourceRcsMapCode ||
+        "",
+    },
+
+
+    /*
+     * DESTINATION
+     */
+
+    destination: {
+      type:
+        item.destinationRcsTargetType ||
+        "SITE",
+
+      code:
+        item.destinationRcsPointCode ||
+        "",
+
+      mapCode:
+        item.destinationRcsMapCode ||
+        "",
+    },
+  };
+}
+
+
+/* =========================================================
+   QUEUE STATE
+========================================================= */
+
+function getQueueState({
+  item,
+  endpoints,
+  now,
+}) {
+  /*
+   * ถ้าส่งแล้ว
+   */
+
+  if (
+    item.sendStatus ===
+    "SENT"
+  ) {
+    return "SENT";
+  }
+
+
+  /*
+   * ตรวจ RCS mapping
+   */
+
+  const readiness =
+    getEndpointReadiness({
+      sourceLocationId:
+        item.sourceLocationId,
+
+      destinationLocationId:
+        item.destinationLocationId,
+
+      sourceRcsPointCode:
+        endpoints.sourceRcsPointCode,
+
+      destinationRcsPointCode:
+        endpoints.destinationRcsPointCode,
+    });
+
+
+  if (
+    !readiness.ok
+  ) {
+    return "MAPPING_REQUIRED";
+  }
+
+
+  /*
+   * ตรวจเวลา
+   */
+
+  const scheduledTime =
+    getTime(
+      item.scheduledSendAt
+    );
+
+
+  if (
+    scheduledTime >
+    now
+  ) {
+    return "WAITING_TIME";
+  }
+
+
+  /*
+   * ถึงเวลาแล้ว
+   */
+
+  return "READY";
+}
+
+
+/* =========================================================
+   WAREHOUSE TASK SORT
+========================================================= */
+
+function compareWarehouseCandidates(
+  a,
+  b
+) {
+  const priorityCompare =
+    (
+      PRIORITY_ORDER[
+        a.task.priority
+      ] ??
+      99
+    ) -
+    (
+      PRIORITY_ORDER[
+        b.task.priority
+      ] ??
+      99
+    );
+
+
+  if (
+    priorityCompare !==
+    0
+  ) {
+    return priorityCompare;
+  }
+
+
+  /*
+   * Priority เท่ากัน
+   *
+   * Task เก่าก่อน
+   */
+
+  return (
+    getTime(
+      a.task.createdAt
+    ) -
+    getTime(
+      b.task.createdAt
+    )
+  );
+}
+
+
+/* =========================================================
+   RCS QUEUE SORT
+========================================================= */
+
+function compareQueueRows(
+  a,
+  b
+) {
+  /*
+   * READY อยู่บนสุด
+   */
+
+  const stateRank = {
+    READY: 0,
+    WAITING_TIME: 1,
+    MAPPING_REQUIRED: 2,
+    SENT: 3,
+  };
+
+
+  const stateCompare =
+    (
+      stateRank[
+        a.queueState
+      ] ??
+      99
+    ) -
+    (
+      stateRank[
+        b.queueState
+      ] ??
+      99
+    );
+
+
+  if (
+    stateCompare !==
+    0
+  ) {
+    return stateCompare;
+  }
+
+
+  /*
+   * ==========================
+   * READY
+   * ==========================
+   *
+   * Priority สูงก่อน
+   *
+   * ถ้า Priority เท่ากัน
+   * scheduled time ก่อน
+   *
+   * ถ้ายังเท่ากัน
+   * FIFO
+   */
+
+  if (
+    a.queueState ===
+    "READY"
+  ) {
+    const priorityCompare =
+      Number(
+        b.rcsPriority ||
+        0
+      ) -
+      Number(
+        a.rcsPriority ||
+        0
+      );
+
+
+    if (
+      priorityCompare !==
+      0
+    ) {
+      return priorityCompare;
+    }
+
+
+    const scheduleCompare =
+      getTime(
+        a.scheduledSendAt
+      ) -
+      getTime(
+        b.scheduledSendAt
+      );
+
+
+    if (
+      scheduleCompare !==
+      0
+    ) {
+      return scheduleCompare;
+    }
+
+
+    return (
+      getTime(
+        a.createdAt
+      ) -
+      getTime(
+        b.createdAt
+      )
+    );
+  }
+
+
+  /*
+   * ==========================
+   * WAITING TIME
+   * ==========================
+   *
+   * งานที่ถึงเวลาก่อน
+   * แสดงก่อน
+   */
+
+  if (
+    a.queueState ===
+    "WAITING_TIME"
+  ) {
+    const scheduleCompare =
+      getTime(
+        a.scheduledSendAt
+      ) -
+      getTime(
+        b.scheduledSendAt
+      );
+
+
+    if (
+      scheduleCompare !==
+      0
+    ) {
+      return scheduleCompare;
+    }
+
+
+    return (
+      Number(
+        b.rcsPriority ||
+        0
+      ) -
+      Number(
+        a.rcsPriority ||
+        0
+      )
+    );
+  }
+
+
+  return (
+    getTime(
+      a.createdAt
+    ) -
+    getTime(
+      b.createdAt
+    )
+  );
+}
+
+
+/* =========================================================
+   QUEUE ID
+========================================================= */
+
+function getNextQueueId(
+  items
 ) {
   let highest =
     0;
 
 
-  (
-    tasks ||
-    []
-  ).forEach(
-    (task) => {
+  items.forEach(
+    (item) => {
       const match =
-        /^RT-(\d+)$/i.exec(
+        /^RCSQ-(\d+)$/i.exec(
           String(
-            task.id ||
+            item.id ||
             ""
           )
         );
 
 
-      if (match) {
+      if (
+        match
+      ) {
         highest =
           Math.max(
             highest,
@@ -1781,7 +2992,110 @@ function getHighestRobotTaskNumber(
   );
 
 
-  return highest;
+  return `RCSQ-${String(
+    highest + 1
+  ).padStart(
+    3,
+    "0"
+  )}`;
+}
+
+
+/* =========================================================
+   PRIORITY
+========================================================= */
+
+function normalizeWmsPriority(
+  value
+) {
+  const priority =
+    String(
+      value ||
+      "NORMAL"
+    ).toUpperCase();
+
+
+  return [
+    "LOW",
+    "NORMAL",
+    "HIGH",
+    "URGENT",
+  ].includes(
+    priority
+  )
+    ? priority
+    : "NORMAL";
+}
+
+
+function clampRcsPriority(
+  value
+) {
+  const number =
+    Number(
+      value
+    );
+
+
+  if (
+    !Number.isFinite(
+      number
+    )
+  ) {
+    return 60;
+  }
+
+
+  return Math.min(
+    120,
+
+    Math.max(
+      1,
+
+      Math.round(
+        number
+      )
+    )
+  );
+}
+
+
+/* =========================================================
+   SCHEDULE
+========================================================= */
+
+function parseScheduleInput(
+  value
+) {
+  /*
+   * Empty
+   *
+   * = พร้อมทันที
+   */
+
+  if (
+    !value
+  ) {
+    return new Date().toISOString();
+  }
+
+
+  const date =
+    new Date(
+      value
+    );
+
+
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
+    return new Date().toISOString();
+  }
+
+
+  return date.toISOString();
 }
 
 
@@ -1814,8 +3128,10 @@ function validateGatewayOctet(
     !Number.isInteger(
       number
     ) ||
-    number < 1 ||
-    number > 254
+    number <
+      1 ||
+    number >
+      254
   ) {
     return {
       ok: false,
@@ -1825,6 +3141,7 @@ function validateGatewayOctet(
 
   return {
     ok: true,
+
     value:
       number,
   };
@@ -1847,6 +3164,7 @@ async function copyText(
         text
       );
 
+
       return true;
     }
 
@@ -1864,6 +3182,7 @@ async function copyText(
     textarea.style.position =
       "fixed";
 
+
     textarea.style.opacity =
       "0";
 
@@ -1874,6 +3193,7 @@ async function copyText(
 
 
     textarea.focus();
+
     textarea.select();
 
 
@@ -1894,6 +3214,7 @@ async function copyText(
       "Copy failed.",
       error
     );
+
 
     return false;
   }
@@ -1925,7 +3246,9 @@ function getTime(
 function formatDateTime(
   value
 ) {
-  if (!value) {
+  if (
+    !value
+  ) {
     return "-";
   }
 
@@ -1945,7 +3268,7 @@ function formatDateTime(
 
 
 /* =========================================================
-   LOAD
+   LOAD LOCAL STORAGE
 ========================================================= */
 
 function loadWarehouseTasks() {
@@ -1962,9 +3285,11 @@ function loadLocations() {
 }
 
 
-function loadRobotTasks() {
+function loadDispatchQueue() {
   return loadArray(
-    ROBOT_TASK_KEY
+    RCS_QUEUE_KEY
+  ).map(
+    normalizeDispatchRecord
   );
 }
 
@@ -1979,7 +3304,9 @@ function loadArray(
       );
 
 
-    if (!saved) {
+    if (
+      !saved
+    ) {
       return [];
     }
 

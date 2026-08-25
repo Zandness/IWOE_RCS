@@ -89,7 +89,7 @@ export default function Sidebar() {
 
     {
       name:
-        "Task Dispatcher",
+        "RCS Dispatch Queue",
 
       path:
         "/dispatcher",

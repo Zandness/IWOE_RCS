@@ -36,6 +36,9 @@ const INITIAL_LOCATIONS = [
     used: 65,
     mapId: "MAP-001",
     mapNodeId: "P003",
+    rcsPointCode: "",
+    rcsMapCode: "",
+    rcsTargetType: "SITE",
   },
   {
     id: "LOC-002",
@@ -50,6 +53,9 @@ const INITIAL_LOCATIONS = [
     used: 40,
     mapId: "",
     mapNodeId: "",
+    rcsPointCode: "",
+    rcsMapCode: "",
+    rcsTargetType: "SITE",
   },
   {
     id: "LOC-003",
@@ -64,6 +70,9 @@ const INITIAL_LOCATIONS = [
     used: 80,
     mapId: "",
     mapNodeId: "",
+    rcsPointCode: "",
+    rcsMapCode: "",
+    rcsTargetType: "SITE",
   },
   {
     id: "LOC-004",
@@ -78,6 +87,9 @@ const INITIAL_LOCATIONS = [
     used: 25,
     mapId: "",
     mapNodeId: "",
+    rcsPointCode: "",
+    rcsMapCode: "",
+    rcsTargetType: "SITE",
   },
 ];
 
@@ -219,6 +231,9 @@ export default function StorageLocations() {
             location.status,
             location.mapId,
             location.mapNodeId,
+            location.rcsPointCode,
+            location.rcsMapCode,
+            location.rcsTargetType,
             link.map?.name,
             link.node?.name,
           ]
@@ -787,6 +802,10 @@ export default function StorageLocations() {
                 </th>
 
                 <th>
+                  HIK RCS Point
+                </th>
+
+                <th>
                   Capacity
                 </th>
 
@@ -898,6 +917,22 @@ export default function StorageLocations() {
                             link
                           }
                         />
+                      </td>
+
+                      {/* HIK RCS POINT */}
+
+                      <td>
+                        <div className="rcs-point-cell">
+                          <strong>
+                            {location.rcsPointCode || "Not mapped"}
+                          </strong>
+
+                          <span>
+                            {location.rcsPointCode
+                              ? `${location.rcsTargetType || "SITE"}${location.rcsMapCode ? ` · Map ${location.rcsMapCode}` : ""}`
+                              : "RCS mapping not set"}
+                          </span>
+                        </div>
                       </td>
 
                       {/* CAPACITY */}
@@ -1242,6 +1277,18 @@ function LocationForm({
         ? KEEP_EXISTING_LINK
         : location?.mapNodeId ||
           "",
+
+    rcsPointCode:
+      location?.rcsPointCode ||
+      "",
+
+    rcsMapCode:
+      location?.rcsMapCode ||
+      "",
+
+    rcsTargetType:
+      location?.rcsTargetType ||
+      "SITE",
   });
 
   const [
@@ -1642,6 +1689,67 @@ function LocationForm({
 
           </label>
 
+          {/* HIK RCS MAPPING */}
+
+          <FormField
+            label="HIK RCS Point Code"
+            value={
+              form.rcsPointCode
+            }
+            placeholder="RCS Point No. / Site Code"
+            onChange={(
+              value
+            ) =>
+              updateField(
+                "rcsPointCode",
+                value
+              )
+            }
+          />
+
+          <FormField
+            label="HIK RCS Map Code"
+            value={
+              form.rcsMapCode
+            }
+            placeholder="Optional RCS Map No."
+            onChange={(
+              value
+            ) =>
+              updateField(
+                "rcsMapCode",
+                value
+              )
+            }
+          />
+
+          <label className="location-field">
+            <span>
+              HIK RCS Target Type
+            </span>
+
+            <select
+              value={form.rcsTargetType}
+              onChange={(event) =>
+                updateField(
+                  "rcsTargetType",
+                  event.target.value
+                )
+              }
+            >
+              <option value="SITE">
+                SITE (Point)
+              </option>
+              <option value="STORAGE">
+                STORAGE (Bin)
+              </option>
+            </select>
+
+            <small className="location-field-help">
+              Match this with the target type used by the HIK RCS point/bin configuration.
+            </small>
+          </label>
+
           {/* CAPACITY */}
 
           <FormField
@@ -1979,6 +2087,31 @@ function validateLocation({
       .trim()
       .toUpperCase();
 
+  const rcsPointCode =
+    String(
+      formData.rcsPointCode ||
+        ""
+    ).trim();
+
+  const rcsMapCode =
+    String(
+      formData.rcsMapCode ||
+        ""
+    ).trim();
+
+  const rcsTargetType =
+    ["SITE", "STORAGE"].includes(
+      String(
+        formData.rcsTargetType ||
+          "SITE"
+      ).toUpperCase()
+    )
+      ? String(
+          formData.rcsTargetType ||
+            "SITE"
+        ).toUpperCase()
+      : "SITE";
+
   const capacity =
     Number(
       formData.capacity
@@ -2204,6 +2337,9 @@ function validateLocation({
       used,
       mapId,
       mapNodeId,
+      rcsPointCode,
+      rcsMapCode,
+      rcsTargetType,
     },
   };
 }
@@ -2474,6 +2610,31 @@ function normalizeLocationRecord(
         location.mapNodeId ||
           ""
       ),
+
+    rcsPointCode:
+      String(
+        location.rcsPointCode ||
+          ""
+      ).trim(),
+
+    rcsMapCode:
+      String(
+        location.rcsMapCode ||
+          ""
+      ).trim(),
+
+    rcsTargetType:
+      ["SITE", "STORAGE"].includes(
+        String(
+          location.rcsTargetType ||
+            "SITE"
+        ).toUpperCase()
+      )
+        ? String(
+            location.rcsTargetType ||
+              "SITE"
+          ).toUpperCase()
+        : "SITE",
   };
 }
 
