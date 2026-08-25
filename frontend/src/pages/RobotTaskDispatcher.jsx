@@ -2434,6 +2434,21 @@ function removeQueueItem(
                       <button
                         type="button"
                         className="robot-remove-button"
+
+                        disabled={
+                          isQueueLocked(
+                            item
+                          )
+                        }   
+
+                        title={
+                          isQueueLocked(
+                            item
+                          )
+                            ? "Locked after RCS sending starts"
+                            : "Remove this unsent dispatch from the RCS Queue"
+                        }
+
                         onClick={() =>
                           removeQueueItem(
                             item
@@ -2443,6 +2458,7 @@ function removeQueueItem(
                         <Trash2
                           size={14}
                         />
+
                       </button>
 
                     </td>

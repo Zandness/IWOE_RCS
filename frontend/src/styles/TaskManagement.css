@@ -1017,3 +1017,178 @@ tr:hover {
   }
 
 }
+
+/* =========================================================
+   TASK LIFECYCLE RULE
+========================================================= */
+
+.task-lifecycle-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+
+  margin-bottom: 16px;
+  padding: 11px 13px;
+
+  border: 1px solid #334155;
+  border-radius: 8px;
+
+  background: #111827;
+  color: #94a3b8;
+}
+
+
+.task-lifecycle-note > svg {
+  flex: 0 0 auto;
+
+  margin-top: 1px;
+
+  color: #fbbf24;
+}
+
+
+.task-lifecycle-note strong {
+  display: block;
+
+  margin-bottom: 3px;
+
+  color: #e2e8f0;
+
+  font-size: 10px;
+}
+
+
+.task-lifecycle-note span {
+  display: block;
+
+  max-width: 980px;
+
+  font-size: 9px;
+
+  line-height: 1.55;
+}
+
+
+/* =========================================================
+   RCS DISPATCH STATE
+========================================================= */
+
+.task-rcs-dispatch-cell {
+  min-width: 125px;
+}
+
+
+.task-rcs-state {
+  display: inline-flex;
+  align-items: center;
+
+  padding: 4px 7px;
+
+  border-radius: 5px;
+
+  font-size: 8px;
+  font-weight: 700;
+
+  white-space: nowrap;
+}
+
+
+.task-rcs-state.not-queued {
+  background: #1e293b;
+
+  color: #94a3b8;
+}
+
+
+.task-rcs-state.queued {
+  background: #083344;
+
+  color: #67e8f9;
+}
+
+
+.task-rcs-state.locked {
+  background: #172554;
+
+  color: #93c5fd;
+}
+
+
+.task-rcs-dispatch-cell small {
+  display: block;
+
+  max-width: 150px;
+
+  margin-top: 4px;
+
+  overflow: hidden;
+
+  color: #64748b;
+
+  font-family: monospace;
+
+  font-size: 7px;
+
+  text-overflow: ellipsis;
+
+  white-space: nowrap;
+}
+
+
+/* =========================================================
+   REMOVE RCS QUEUE
+========================================================= */
+
+.task-actions .task-remove-rcs {
+  border-color: #7f1d1d;
+
+  background: #450a0a;
+
+  color: #fca5a5;
+}
+
+
+.task-actions .task-remove-rcs:hover {
+  border-color: #ef4444;
+
+  background: #5f1111;
+}
+
+
+/* =========================================================
+   RCS CONTROLLED
+========================================================= */
+
+.task-rcs-controlled {
+  display: inline-flex;
+  align-items: center;
+
+  gap: 5px;
+
+  min-height: 29px;
+
+  padding: 0 8px;
+
+  border: 1px solid #1d4ed8;
+  border-radius: 6px;
+
+  background: #172554;
+
+  color: #93c5fd;
+
+  font-size: 8px;
+  font-weight: 700;
+
+  white-space: nowrap;
+}
+
+
+/* =========================================================
+   LOCKED PRIORITY
+========================================================= */
+
+.task-priority:disabled {
+  opacity: 0.45;
+
+  cursor: not-allowed;
+}
