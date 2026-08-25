@@ -1749,3 +1749,411 @@
   }
 
 }
+
+/* =========================================================
+   SIMULATE SEND
+========================================================= */
+
+.simulate-send-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  gap: 5px;
+
+  min-width: 108px;
+
+  padding: 7px 9px;
+
+  border: 1px solid #0e7490;
+  border-radius: 6px;
+
+  background: #083344;
+
+  color: #67e8f9;
+
+  font-size: 8px;
+  font-weight: 700;
+
+  white-space: nowrap;
+
+  cursor: pointer;
+}
+
+
+.simulate-send-button:hover:not(:disabled) {
+  border-color: #22d3ee;
+
+  background: #155e75;
+}
+
+
+.simulate-send-button:disabled {
+  opacity: 0.4;
+
+  cursor: not-allowed;
+}
+
+
+/* =========================================================
+   SENDING QUEUE STATE
+========================================================= */
+
+.queue-sending {
+  background: #172554;
+
+  color: #93c5fd;
+}
+
+
+/* =========================================================
+   RCS STATUS
+========================================================= */
+
+.rcs-status-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+
+  gap: 4px;
+
+  min-width: 115px;
+}
+
+
+.rcs-status {
+  display: inline-flex;
+
+  padding: 4px 7px;
+
+  border-radius: 5px;
+
+  font-size: 8px;
+  font-weight: 700;
+
+  white-space: nowrap;
+}
+
+
+.rcs-status-not-sent {
+  background: #1e293b;
+
+  color: #94a3b8;
+}
+
+
+.rcs-status-created {
+  background: #172554;
+
+  color: #93c5fd;
+}
+
+
+.rcs-status-running {
+  background: #083344;
+
+  color: #67e8f9;
+}
+
+
+.rcs-status-completed {
+  background: #052e16;
+
+  color: #4ade80;
+}
+
+
+.rcs-status-exception,
+.rcs-status-interrupted,
+.rcs-status-canceled {
+  background: #450a0a;
+
+  color: #f87171;
+}
+
+
+.rcs-status-wrap small {
+  display: block;
+
+  max-width: 140px;
+
+  overflow: hidden;
+
+  color: #64748b;
+
+  font-family: monospace;
+  font-size: 7px;
+
+  text-overflow: ellipsis;
+
+  white-space: nowrap;
+}
+/* =========================================================
+   DESKTOP FIT-WIDTH OVERRIDES
+   Scheduled Command Queue: keep all columns inside panel
+   without horizontal scrolling on normal desktop widths.
+========================================================= */
+
+@media (min-width: 1100px) {
+  .robot-task-table {
+    width: 100%;
+    min-width: 0;
+    table-layout: fixed;
+  }
+
+  .robot-task-table th,
+  .robot-task-table td {
+    min-width: 0;
+    padding: 10px 7px;
+    overflow: hidden;
+  }
+
+  .robot-task-table th {
+    font-size: 8px;
+    line-height: 1.25;
+    white-space: normal;
+  }
+
+  .robot-task-table td {
+    font-size: 9px;
+  }
+
+  /* 11 queue columns = 100% */
+  .robot-task-table th:nth-child(1),
+  .robot-task-table td:nth-child(1) {
+    width: 5%;
+  }
+
+  .robot-task-table th:nth-child(2),
+  .robot-task-table td:nth-child(2) {
+    width: 6.5%;
+  }
+
+  .robot-task-table th:nth-child(3),
+  .robot-task-table td:nth-child(3) {
+    width: 15%;
+  }
+
+  .robot-task-table th:nth-child(4),
+  .robot-task-table td:nth-child(4) {
+    width: 9%;
+  }
+
+  .robot-task-table th:nth-child(5),
+  .robot-task-table td:nth-child(5) {
+    width: 15%;
+  }
+
+  .robot-task-table th:nth-child(6),
+  .robot-task-table td:nth-child(6) {
+    width: 7%;
+  }
+
+  .robot-task-table th:nth-child(7),
+  .robot-task-table td:nth-child(7) {
+    width: 8.5%;
+  }
+
+  .robot-task-table th:nth-child(8),
+  .robot-task-table td:nth-child(8) {
+    width: 12%;
+  }
+
+  .robot-task-table th:nth-child(9),
+  .robot-task-table td:nth-child(9) {
+    width: 7%;
+  }
+
+  .robot-task-table th:nth-child(10),
+  .robot-task-table td:nth-child(10) {
+    width: 10%;
+  }
+
+  .robot-task-table th:nth-child(11),
+  .robot-task-table td:nth-child(11) {
+    width: 5%;
+  }
+
+  /* Queue / task identifiers */
+  .robot-task-table td:nth-child(1) > strong,
+  .robot-task-table td:nth-child(2) > strong,
+  .robot-task-table td:nth-child(1) > small,
+  .robot-task-table td:nth-child(2) > small {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  /* HIK RCS route: remove the old 250px minimum width */
+  .robot-task-table .dispatcher-route-cell {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    align-items: center;
+    gap: 5px;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .robot-task-table .dispatcher-route-cell > div {
+    min-width: 0;
+  }
+
+  .robot-task-table .dispatcher-route-cell > div > span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .robot-task-table .dispatcher-route-cell strong {
+    display: flex;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    word-break: normal;
+  }
+
+  .robot-task-table .dispatcher-route-cell svg {
+    width: 13px;
+    height: 13px;
+    flex: 0 0 auto;
+  }
+
+  /* Priority editor */
+  .robot-task-table .queue-priority-editor {
+    display: grid;
+    grid-template-columns: 1fr;
+    align-items: stretch;
+    gap: 4px;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .robot-task-table .queue-priority-editor select {
+    width: 100%;
+    min-width: 0;
+    padding: 6px 5px;
+  }
+
+  .robot-task-table .queue-priority-value {
+    width: fit-content;
+    max-width: 100%;
+    padding: 3px 5px;
+  }
+
+  /* Schedule editor */
+  .robot-task-table .queue-schedule-editor {
+    grid-template-columns: minmax(0, 1fr) auto;
+    width: 100%;
+    min-width: 0;
+    gap: 4px;
+  }
+
+  .robot-task-table .queue-schedule-editor input {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+    padding: 6px;
+    font-size: 8px;
+  }
+
+  .robot-task-table .queue-schedule-editor button {
+    padding: 6px 7px;
+  }
+
+  .robot-task-table .queue-schedule-editor small {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* Queue-state badges */
+  .robot-task-table .queue-state {
+    max-width: 100%;
+    padding: 4px 5px;
+    font-size: 7px;
+    white-space: normal;
+    text-align: center;
+  }
+
+  /* RCS status */
+  .robot-task-table .rcs-status-wrap {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .robot-task-table .rcs-status {
+    max-width: 100%;
+    padding: 4px 5px;
+    font-size: 7px;
+  }
+
+  .robot-task-table .rcs-status-wrap small {
+    width: 100%;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* Draft actions stack vertically to save width */
+  .robot-task-table .draft-action-buttons {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 5px;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .robot-task-table .view-draft-button,
+  .robot-task-table .payload-button {
+    width: 100%;
+    min-width: 0;
+    padding: 6px 5px;
+    font-size: 7px;
+  }
+
+  /* History */
+  .robot-task-table .history-button {
+    width: 100%;
+    min-width: 0;
+    justify-content: center;
+    gap: 4px;
+    padding: 6px 4px;
+    font-size: 7px;
+  }
+
+  .robot-task-table .history-button span {
+    min-width: 16px;
+    height: 16px;
+    padding: 0 3px;
+  }
+
+  /* Action / simulate send */
+  .robot-task-table .simulate-send-button {
+    width: 100%;
+    min-width: 0;
+    padding: 6px 4px;
+    font-size: 7px;
+    white-space: normal;
+    line-height: 1.2;
+  }
+
+  /* Delete */
+  .robot-task-table .robot-remove-button {
+    width: 100%;
+    min-width: 0;
+    padding: 6px 4px;
+  }
+}
+
+/* On smaller screens, keep horizontal scrolling rather than crushing data. */
+@media (max-width: 1099px) {
+  .robot-task-table {
+    min-width: 1050px;
+  }
+}

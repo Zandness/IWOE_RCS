@@ -646,6 +646,26 @@ export default function OutboundOperations({
             order.id
         )
     );
+
+
+    /*
+     * The order is still DRAFT here, so no picking
+     * task/reservation has been committed yet. Close any
+     * Draft/Allocation preview that is currently open.
+     */
+
+    if (
+      selectedOrder?.id ===
+      order.id
+    ) {
+      setShowOrderForm(false);
+      setShowAllocation(false);
+      setAllocationPreview(null);
+      setSelectedOrder(null);
+    }
+
+
+    return true;
   }
 
 
@@ -1731,6 +1751,14 @@ export default function OutboundOperations({
           onSave={
             handleSaveOrder
           }
+          onDelete={
+            selectedOrder
+              ? () =>
+                  handleDeleteOrder(
+                    selectedOrder
+                  )
+              : null
+          }
           onCancel={() => {
             setShowOrderForm(
               false
@@ -1761,6 +1789,11 @@ export default function OutboundOperations({
             }
             onConfirm={
               handleConfirmAllocation
+            }
+            onDelete={() =>
+              handleDeleteOrder(
+                selectedOrder
+              )
             }
             onCancel={() => {
               setShowAllocation(
@@ -1910,6 +1943,7 @@ function OutboundOrderForm({
   skuMasters,
   freeStockBySku,
   onSave,
+  onDelete,
   onCancel,
 }) {
   const [
@@ -2427,6 +2461,24 @@ function OutboundOrderForm({
 
         <div className="outbound-modal-actions">
 
+          {order &&
+            onDelete && (
+            <button
+              type="button"
+              className="outbound-delete-draft"
+              onClick={
+                onDelete
+              }
+            >
+              <Trash2
+                size={15}
+              />
+
+              Delete Draft
+            </button>
+          )}
+
+
           <button
             type="button"
             className="outbound-cancel"
@@ -2465,6 +2517,7 @@ function AllocationModal({
   lines,
   locationMap,
   onConfirm,
+  onDelete,
   onCancel,
 }) {
   return (
@@ -2646,6 +2699,21 @@ function AllocationModal({
 
 
         <div className="outbound-modal-actions">
+
+          <button
+            type="button"
+            className="outbound-delete-draft"
+            onClick={
+              onDelete
+            }
+          >
+            <Trash2
+              size={15}
+            />
+
+            Delete Draft
+          </button>
+
 
           <button
             type="button"

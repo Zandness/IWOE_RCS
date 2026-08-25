@@ -7,6 +7,7 @@ import {
   Eye,
   History,
   MapPin,
+  Play,
   RefreshCw,
   Route,
   Send,
@@ -17,7 +18,6 @@ import {
 import {
   useEffect,
   useMemo,
-  useRef,
   useState,
 } from "react";
 
@@ -133,14 +133,6 @@ export default function RobotTaskDispatcher() {
     selectedHistoryItem,
     setSelectedHistoryItem,
   ] = useState(null);
-
-
-  /*
-  * ใช้กันการบันทึก Queue State ซ้ำ
-  */
-
-  const queueStateInitialized =
-    useRef(false);
 
   /*
    * เวลา realtime
@@ -607,9 +599,6 @@ useEffect(() => {
     queueRows.length ===
     0
   ) {
-    queueStateInitialized.current =
-      true;
-
     return;
   }
 
@@ -734,9 +723,6 @@ useEffect(() => {
     }
   );
 
-
-  queueStateInitialized.current =
-    true;
 }, [queueRows]);
 
 
@@ -896,101 +882,60 @@ function updateQueuePriority(
       priority
     );
 
-
   const rcsPriority =
-    RCS_PRIORITY[
-      normalized
-    ] ||
+    RCS_PRIORITY[normalized] ||
     60;
-
 
   const nowIso =
     new Date().toISOString();
-
 
   setDispatchQueue(
     (current) =>
       current.map(
         (item) => {
           if (
-            item.id !==
-            itemId
+            item.id !== itemId ||
+            isQueueLocked(item)
           ) {
             return item;
           }
-
 
           const oldPriority =
             normalizeWmsPriority(
               item.wmsPriority
             );
 
-
           const oldRcsPriority =
             clampRcsPriority(
               item.rcsPriority
             );
 
-
-          /*
-           * ถ้าค่าเดิม
-           * ไม่ต้องบันทึกซ้ำ
-           */
-
           if (
-            oldPriority ===
-            normalized &&
-            oldRcsPriority ===
-            rcsPriority
+            oldPriority === normalized &&
+            oldRcsPriority === rcsPriority
           ) {
             return item;
           }
 
-
           return {
             ...item,
-
-
-            wmsPriority:
-              normalized,
-
-
+            wmsPriority: normalized,
             rcsPriority,
-
-
-            priorityUpdatedAt:
-              nowIso,
-
-
-            history:
-              appendHistory(
-                item.history,
-
-                createHistoryEvent({
-                  type:
-                    "PRIORITY_UPDATED",
-
-                  message:
-                    `Priority changed from ${oldPriority} (RCS ${oldRcsPriority}) to ${normalized} (RCS ${rcsPriority}).`,
-
-                  at:
-                    nowIso,
-
-                  details: {
-                    fromPriority:
-                      oldPriority,
-
-                    toPriority:
-                      normalized,
-
-                    fromRcsPriority:
-                      oldRcsPriority,
-
-                    toRcsPriority:
-                      rcsPriority,
-                  },
-                })
-              ),
+            priorityUpdatedAt: nowIso,
+            history: appendHistory(
+              item.history,
+              createHistoryEvent({
+                type: "PRIORITY_UPDATED",
+                message: `Priority changed from ${oldPriority} (RCS ${oldRcsPriority}) to ${normalized} (RCS ${rcsPriority}).`,
+                at: nowIso,
+                details: {
+                  fromPriority: oldPriority,
+                  toPriority: normalized,
+                  fromRcsPriority: oldRcsPriority,
+                  toRcsPriority: rcsPriority,
+                },
+              })
+            ),
           };
         }
       )
@@ -1005,23 +950,7 @@ function updateQueueSchedule(
   itemId,
   value
 ) {
-  /*
-   * datetime-local จะส่งค่าประมาณ:
-   *
-   * 2026-08-25T14:30
-   *
-   * เราจะแปลงเป็น ISO
-   * ก่อนเก็บลง localStorage
-   */
-
   let scheduledSendAt;
-
-
-  /*
-   * ถ้าลบเวลาออก
-   *
-   * = พร้อมส่งตั้งแต่ตอนนี้
-   */
 
   if (!value) {
     scheduledSendAt =
@@ -1029,7 +958,6 @@ function updateQueueSchedule(
   } else {
     const selectedDate =
       new Date(value);
-
 
     if (
       Number.isNaN(
@@ -1039,30 +967,56 @@ function updateQueueSchedule(
       return;
     }
 
-
     scheduledSendAt =
       selectedDate.toISOString();
   }
 
+  const nowIso =
+    new Date().toISOString();
 
   setDispatchQueue(
     (current) =>
       current.map(
-        (item) =>
-          item.id === itemId
-            ? {
-                ...item,
+        (item) => {
+          if (
+            item.id !== itemId ||
+            isQueueLocked(item)
+          ) {
+            return item;
+          }
 
-                scheduledSendAt,
+          const oldSchedule =
+            item.scheduledSendAt ||
+            "";
 
-                scheduleUpdatedAt:
-                  new Date().toISOString(),
-              }
-            : item
+          if (
+            oldSchedule ===
+            scheduledSendAt
+          ) {
+            return item;
+          }
+
+          return {
+            ...item,
+            scheduledSendAt,
+            scheduleUpdatedAt: nowIso,
+            history: appendHistory(
+              item.history,
+              createHistoryEvent({
+                type: "SCHEDULE_UPDATED",
+                message: `Scheduled Send changed from ${formatDateTime(oldSchedule)} to ${formatDateTime(scheduledSendAt)}.`,
+                at: nowIso,
+                details: {
+                  from: oldSchedule || null,
+                  to: scheduledSendAt,
+                },
+              })
+            ),
+          };
+        }
       )
   );
 }
-
 
 /* =====================================================
    SET QUEUE TO NOW
@@ -1074,110 +1028,269 @@ function setQueueScheduleNow(
   const currentTime =
     new Date().toISOString();
 
-
   setDispatchQueue(
     (current) =>
       current.map(
         (item) => {
           if (
-            item.id !==
-            itemId
+            item.id !== itemId ||
+            isQueueLocked(item)
           ) {
             return item;
           }
 
-
           return {
             ...item,
-
-
             scheduledSendAt:
               currentTime,
-
-
             scheduleUpdatedAt:
               currentTime,
-
-
-            history:
-              appendHistory(
-                item.history,
-
-                createHistoryEvent({
-                  type:
-                    "SCHEDULE_NOW",
-
-                  message:
-                    "Scheduled Send changed to current time.",
-
-                  at:
-                    currentTime,
-
-                  details: {
-                    from:
-                      item.scheduledSendAt,
-
-                    to:
-                      currentTime,
-                  },
-                })
-              ),
+            history: appendHistory(
+              item.history,
+              createHistoryEvent({
+                type: "SCHEDULE_NOW",
+                message:
+                  "Scheduled Send changed to current time.",
+                at: currentTime,
+                details: {
+                  from:
+                    item.scheduledSendAt ||
+                    null,
+                  to: currentTime,
+                },
+              })
+            ),
           };
         }
       )
   );
 }
 
-  /* =====================================================
-     REMOVE QUEUE ITEM
-  ===================================================== */
+/* =====================================================
+   SIMULATE SEND TO RCS
+===================================================== */
 
-  function removeQueueItem(
-    item
+function simulateSendToRcs(
+  item
+) {
+  if (
+    item.queueState !== "READY"
   ) {
-    /*
-     * ในอนาคตถ้าส่งแล้ว
-     * จะไม่ให้ลบง่าย ๆ
-     */
-
-    if (
-      item.sendStatus ===
-      "SENT"
-    ) {
-      window.alert(
-        "A sent task cannot be removed from this preparation queue."
-      );
-
-
-      return;
-    }
-
-
-    const confirmed =
-      window.confirm(
-        `Remove ${item.id} from the RCS dispatch queue?`
-      );
-
-
-    if (
-      !confirmed
-    ) {
-      return;
-    }
-
-
-    setDispatchQueue(
-      (current) =>
-        current.filter(
-          (entry) =>
-            entry.id !==
-            item.id
-        )
+    window.alert(
+      "Only a READY task can be sent."
     );
+    return;
   }
 
+  if (isQueueLocked(item)) {
+    return;
+  }
 
-  /* =====================================================
+  const startedAt =
+    new Date().toISOString();
+
+  /* STEP 1: READY -> SENDING */
+  setDispatchQueue(
+    (current) =>
+      current.map(
+        (entry) =>
+          entry.id === item.id
+            ? {
+                ...entry,
+
+                // Keep the latest mapping shown in queueRows.
+                sourceRcsPointCode:
+                  item.sourceRcsPointCode ||
+                  entry.sourceRcsPointCode ||
+                  "",
+                destinationRcsPointCode:
+                  item.destinationRcsPointCode ||
+                  entry.destinationRcsPointCode ||
+                  "",
+                sourceRcsMapCode:
+                  item.sourceRcsMapCode ||
+                  entry.sourceRcsMapCode ||
+                  "",
+                destinationRcsMapCode:
+                  item.destinationRcsMapCode ||
+                  entry.destinationRcsMapCode ||
+                  "",
+                sourceRcsTargetType:
+                  item.sourceRcsTargetType ||
+                  entry.sourceRcsTargetType ||
+                  "SITE",
+                destinationRcsTargetType:
+                  item.destinationRcsTargetType ||
+                  entry.destinationRcsTargetType ||
+                  "SITE",
+
+                sendStatus: "SENDING",
+                rcsStatus: "NOT_SENT",
+                sendStartedAt:
+                  startedAt,
+                history: appendHistory(
+                  entry.history,
+                  createHistoryEvent({
+                    type:
+                      "SIMULATED_SEND_STARTED",
+                    message:
+                      "Simulated transmission to HIK RCS started.",
+                    at: startedAt,
+                    details: {
+                      mode: "SIMULATION",
+                      warehouseTaskId:
+                        entry.warehouseTaskId,
+                      rcsPriority:
+                        entry.rcsPriority,
+                      source:
+                        item.sourceRcsPointCode ||
+                        entry.sourceRcsPointCode,
+                      destination:
+                        item.destinationRcsPointCode ||
+                        entry.destinationRcsPointCode,
+                    },
+                  })
+                ),
+              }
+            : entry
+      )
+  );
+
+  /* STEP 2: SENDING -> SENT */
+  window.setTimeout(
+    () => {
+      const sentAt =
+        new Date().toISOString();
+
+      setDispatchQueue(
+        (current) =>
+          current.map(
+            (entry) => {
+              if (
+                entry.id !== item.id ||
+                entry.sendStatus !==
+                  "SENDING"
+              ) {
+                return entry;
+              }
+
+              return {
+                ...entry,
+                sendStatus: "SENT",
+                sentAt,
+                history: appendHistory(
+                  entry.history,
+                  createHistoryEvent({
+                    type: "COMMAND_SENT",
+                    message:
+                      "Command was simulated as successfully sent to HIK RCS.",
+                    at: sentAt,
+                    details: {
+                      mode: "SIMULATION",
+                      command:
+                        buildCommandDraft(
+                          entry
+                        ),
+                    },
+                  })
+                ),
+              };
+            }
+          )
+      );
+    },
+    1000
+  );
+
+  /* STEP 3: simulated RCS creates a task chain */
+  window.setTimeout(
+    () => {
+      const createdAt =
+        new Date().toISOString();
+
+      setDispatchQueue(
+        (current) =>
+          current.map(
+            (entry) => {
+              if (
+                entry.id !== item.id ||
+                entry.sendStatus !==
+                  "SENT" ||
+                entry.rcsStatus ===
+                  "CREATED"
+              ) {
+                return entry;
+              }
+
+              const simulatedTaskChainCode =
+                createSimulatedRcsTaskChainCode(
+                  entry
+                );
+
+              return {
+                ...entry,
+                rcsStatus: "CREATED",
+                rcsTaskChainCode:
+                  simulatedTaskChainCode,
+                rcsCreatedAt:
+                  createdAt,
+                history: appendHistory(
+                  entry.history,
+                  createHistoryEvent({
+                    type: "RCS_CREATED",
+                    message: `Simulated RCS task created with Task Chain ${simulatedTaskChainCode}.`,
+                    at: createdAt,
+                    details: {
+                      taskChainCode:
+                        simulatedTaskChainCode,
+                      rcsStatus:
+                        "CREATED",
+                      mode: "SIMULATION",
+                    },
+                  })
+                ),
+              };
+            }
+          )
+      );
+    },
+    2000
+  );
+}
+
+/* =====================================================
+   REMOVE QUEUE ITEM
+===================================================== */
+
+function removeQueueItem(
+  item
+) {
+  if (isQueueLocked(item)) {
+    window.alert(
+      "A task that is sending or already sent cannot be removed."
+    );
+    return;
+  }
+
+  const confirmed =
+    window.confirm(
+      `Remove ${item.id} from the RCS dispatch queue?`
+    );
+
+  if (!confirmed) {
+    return;
+  }
+
+  setDispatchQueue(
+    (current) =>
+      current.filter(
+        (entry) =>
+          entry.id !== item.id
+      )
+  );
+}
+
+/* =====================================================
      RCS NETWORK ROUTE
   ===================================================== */
 
@@ -1925,11 +2038,19 @@ function setQueueScheduleNow(
                 </th>
 
                 <th>
+                  RCS Status
+                </th>
+
+                <th>
                   Command Draft
                 </th>
 
                 <th>
                   History
+                </th>
+
+                <th>
+                  Action
                 </th>
 
                 <th></th>
@@ -2041,8 +2162,7 @@ function setQueueScheduleNow(
                           }
 
                           disabled={
-                            item.sendStatus ===
-                            "SENT"
+                            isQueueLocked(item)
                           }
 
                           onChange={(
@@ -2111,8 +2231,7 @@ function setQueueScheduleNow(
                           }
 
                           disabled={
-                            item.sendStatus ===
-                            "SENT"
+                            isQueueLocked(item)
                           }
 
                           onChange={(
@@ -2130,8 +2249,7 @@ function setQueueScheduleNow(
                           type="button"
 
                           disabled={
-                            item.sendStatus ===
-                            "SENT"
+                            isQueueLocked(item)
                           }
 
                           onClick={() =>
@@ -2152,7 +2270,13 @@ function setQueueScheduleNow(
                             : item.queueState ===
                                 "READY"
                               ? "Eligible to send now"
-                              : "Schedule saved"}
+                              : item.queueState ===
+                                  "SENDING"
+                                ? "Sending command"
+                                : item.queueState ===
+                                    "SENT"
+                                  ? "Command sent"
+                                  : "Schedule saved"}
 
                         </small>
 
@@ -2165,6 +2289,21 @@ function setQueueScheduleNow(
                       <QueueStateBadge
                         state={
                           item.queueState
+                        }
+                      />
+
+                    </td>
+
+                    {/* RCS STATUS */}
+
+                    <td>
+
+                      <RcsStatusBadge
+                        status={
+                          item.rcsStatus
+                        }
+                        taskChainCode={
+                          item.rcsTaskChainCode
                         }
                       />
 
@@ -2250,6 +2389,43 @@ function setQueueScheduleNow(
                       </button>
 
                     </td>
+
+                    
+
+
+                    {/* SIMULATE SEND */}
+
+                    <td>
+
+                      <button
+                        type="button"
+                        className="simulate-send-button"
+                        disabled={
+                          item.queueState !==
+                            "READY" ||
+                          isQueueLocked(item)
+                        }
+                        onClick={() =>
+                          simulateSendToRcs(
+                            item
+                          )
+                        }
+                      >
+                        <Play
+                          size={14}
+                        />
+
+                        {item.sendStatus ===
+                        "SENDING"
+                          ? "Sending..."
+                          : item.sendStatus ===
+                              "SENT"
+                            ? "Sent"
+                            : "Simulate Send"}
+                      </button>
+
+                    </td>
+
 
                     {/* REMOVE */}
 
@@ -3198,6 +3374,9 @@ function QueueStateBadge({
     READY:
       "READY",
 
+    SENDING:
+      "SENDING",
+
     WAITING_TIME:
       "WAITING TIME",
 
@@ -3225,6 +3404,57 @@ function QueueStateBadge({
         state
       }
     </span>
+  );
+}
+
+/* =========================================================
+   RCS STATUS BADGE
+========================================================= */
+
+function RcsStatusBadge({
+  status,
+  taskChainCode,
+}) {
+  const normalized =
+    String(
+      status ||
+      "NOT_SENT"
+    ).toUpperCase();
+
+
+  return (
+    <div className="rcs-status-wrap">
+
+      <span
+        className={`rcs-status rcs-status-${normalized
+          .toLowerCase()
+          .replaceAll(
+            "_",
+            "-"
+          )}`}
+      >
+        {
+          normalized.replaceAll(
+            "_",
+            " "
+          )
+        }
+      </span>
+
+
+      {taskChainCode && (
+        <small
+          title={
+            taskChainCode
+          }
+        >
+          {
+            taskChainCode
+          }
+        </small>
+      )}
+
+    </div>
   );
 }
 
@@ -3580,10 +3810,6 @@ function enrichQueuedEndpoints(
   };
 }
 
-
-/* =========================================================
-   MAPPING VALIDATION
-========================================================= */
 
 /* =========================================================
    RCS ENDPOINT VALIDATION
@@ -4252,14 +4478,12 @@ function normalizeDispatchRecord(
 
 
     sendStatus:
-      item.sendStatus ||
-      (
-        item.status ===
-        "SENT"
-          ? "SENT"
-          : "NOT_SENT"
-      ),
-
+      String(
+        item.sendStatus ||
+          (item.status === "SENT"
+            ? "SENT"
+            : "NOT_SENT")
+      ).toUpperCase(),
 
     rcsTaskChainCode:
       String(
@@ -4267,12 +4491,31 @@ function normalizeDispatchRecord(
         ""
       ),
 
-
     rcsStatus:
       String(
         item.rcsStatus ||
         "NOT_SENT"
-      ),
+      ).toUpperCase(),
+
+    sendStartedAt:
+      item.sendStartedAt ||
+      "",
+
+    sentAt:
+      item.sentAt ||
+      "",
+
+    rcsCreatedAt:
+      item.rcsCreatedAt ||
+      "",
+
+    priorityUpdatedAt:
+      item.priorityUpdatedAt ||
+      "",
+
+    scheduleUpdatedAt:
+      item.scheduleUpdatedAt ||
+      "",
 
     lastQueueState:
       String(
@@ -4378,7 +4621,23 @@ function getQueueState({
   now,
 }) {
   /*
-   * ถ้าส่งแล้ว
+   * =====================================================
+   * SENDING
+   * =====================================================
+   */
+
+  if (
+    item.sendStatus ===
+    "SENDING"
+  ) {
+    return "SENDING";
+  }
+
+
+  /*
+   * =====================================================
+   * SENT
+   * =====================================================
    */
 
   if (
@@ -4387,7 +4646,6 @@ function getQueueState({
   ) {
     return "SENT";
   }
-
 
   /*
    * ตรวจ RCS mapping
@@ -4542,9 +4800,10 @@ function compareQueueRows(
 
   const stateRank = {
     READY: 0,
-    WAITING_TIME: 1,
-    MAPPING_REQUIRED: 2,
-    SENT: 3,
+    SENDING: 1,
+    WAITING_TIME: 2,
+    MAPPING_REQUIRED: 3,
+    SENT: 4,
   };
 
 
@@ -4953,6 +5212,53 @@ async function copyText(
 
     return false;
   }
+}
+
+/* =========================================================
+   QUEUE LOCK
+========================================================= */
+
+function isQueueLocked(
+  item
+) {
+  return [
+    "SENDING",
+    "SENT",
+  ].includes(
+    String(
+      item?.sendStatus ||
+      "NOT_SENT"
+    ).toUpperCase()
+  );
+}
+
+
+/* =========================================================
+   SIMULATED RCS TASK CHAIN
+========================================================= */
+
+function createSimulatedRcsTaskChainCode(
+  item
+) {
+  const taskPart =
+    String(
+      item.warehouseTaskId ||
+      "TASK"
+    )
+      .replace(
+        /[^A-Za-z0-9]/g,
+        ""
+      )
+      .toUpperCase();
+
+
+  const timePart =
+    Date.now()
+      .toString()
+      .slice(-6);
+
+
+  return `SIM-RCS-${taskPart}-${timePart}`;
 }
 
 /* =========================================================

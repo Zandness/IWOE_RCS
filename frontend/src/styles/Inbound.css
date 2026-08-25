@@ -811,3 +811,28 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* =========================================================
+   DELETE DRAFT
+========================================================= */
+
+.inbound-delete-draft {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-right: auto;
+  padding: 9px 15px;
+  border: 1px solid #7f1d1d;
+  border-radius: 7px;
+  background: #450a0a;
+  color: #fca5a5;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.inbound-delete-draft:hover {
+  border-color: #ef4444;
+  background: #7f1d1d;
+  color: #fee2e2;
+}

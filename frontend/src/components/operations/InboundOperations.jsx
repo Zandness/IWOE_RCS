@@ -573,6 +573,24 @@ export default function InboundOperations({
             order.id
         )
     );
+
+
+    /*
+     * If the Draft is currently open in a modal,
+     * close the modal after deletion.
+     */
+
+    if (
+      selectedOrder?.id ===
+      order.id
+    ) {
+      setShowOrderForm(false);
+      setShowReceiveForm(false);
+      setSelectedOrder(null);
+    }
+
+
+    return true;
   }
 
 
@@ -1331,6 +1349,14 @@ export default function InboundOperations({
           onSave={
             handleSaveOrder
           }
+          onDelete={
+            selectedOrder
+              ? () =>
+                  handleDeleteOrder(
+                    selectedOrder
+                  )
+              : null
+          }
           onCancel={() => {
             setShowOrderForm(
               false
@@ -1357,6 +1383,11 @@ export default function InboundOperations({
             }
             onSave={
               handleReceive
+            }
+            onDelete={() =>
+              handleDeleteOrder(
+                selectedOrder
+              )
             }
             onCancel={() => {
               setShowReceiveForm(
@@ -1447,6 +1478,7 @@ function InboundOrderForm({
   order,
   skuMasters,
   onSave,
+  onDelete,
   onCancel,
 }) {
   const [
@@ -1870,6 +1902,24 @@ function InboundOrderForm({
 
 
         <div className="inbound-modal-actions">
+          {order &&
+            onDelete && (
+            <button
+              type="button"
+              className="inbound-delete-draft"
+              onClick={
+                onDelete
+              }
+            >
+              <Trash2
+                size={15}
+              />
+
+              Delete Draft
+            </button>
+          )}
+
+
           <button
             type="button"
             className="inbound-cancel"
@@ -1906,6 +1956,7 @@ function ReceiveForm({
   order,
   locations,
   onSave,
+  onDelete,
   onCancel,
 }) {
   const [
@@ -2280,6 +2331,21 @@ function ReceiveForm({
 
 
         <div className="inbound-modal-actions">
+          <button
+            type="button"
+            className="inbound-delete-draft"
+            onClick={
+              onDelete
+            }
+          >
+            <Trash2
+              size={15}
+            />
+
+            Delete Draft
+          </button>
+
+
           <button
             type="button"
             className="inbound-cancel"
