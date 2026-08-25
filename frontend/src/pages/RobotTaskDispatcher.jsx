@@ -4,16 +4,20 @@ import {
   Clipboard,
   Copy,
   ExternalLink,
+  Eye,
+  History,
   MapPin,
   RefreshCw,
   Route,
   Send,
   Trash2,
+  X,
 } from "lucide-react";
 
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -112,6 +116,31 @@ export default function RobotTaskDispatcher() {
     setCopyMessage,
   ] = useState("");
 
+  /*
+  * Command Draft ที่กำลังเปิดดู
+  */
+
+  const [
+    selectedDraft,
+    setSelectedDraft,
+  ] = useState(null);
+
+  /*
+  * Queue Item ที่กำลังเปิดดู History
+  */
+
+  const [
+    selectedHistoryItem,
+    setSelectedHistoryItem,
+  ] = useState(null);
+
+
+  /*
+  * ใช้กันการบันทึก Queue State ซ้ำ
+  */
+
+  const queueStateInitialized =
+    useRef(false);
 
   /*
    * เวลา realtime
@@ -414,6 +443,8 @@ export default function RobotTaskDispatcher() {
               endpoints,
 
               existingQueueItem,
+              
+              readiness,
 
               ready:
                 readiness.ok &&
@@ -555,6 +586,158 @@ export default function RobotTaskDispatcher() {
 
       [readyQueue]
     );
+
+/* =========================================================
+   QUEUE STATE HISTORY WATCHER
+========================================================= */
+
+useEffect(() => {
+  /*
+   * queueRows จะคำนวณ Queue State ใหม่
+   * ทุกครั้งที่เวลาเปลี่ยน
+   *
+   * เช่น:
+   *
+   * WAITING_TIME
+   *       ↓
+   * READY
+   */
+
+  if (
+    queueRows.length ===
+    0
+  ) {
+    queueStateInitialized.current =
+      true;
+
+    return;
+  }
+
+
+  const rowMap =
+    new Map(
+      queueRows.map(
+        (row) => [
+          row.id,
+          row,
+        ]
+      )
+    );
+
+
+  setDispatchQueue(
+    (current) => {
+      let changed =
+        false;
+
+
+      const updated =
+        current.map(
+          (item) => {
+            const row =
+              rowMap.get(
+                item.id
+              );
+
+
+            if (!row) {
+              return item;
+            }
+
+
+            const nextState =
+              row.queueState;
+
+
+            const previousState =
+              item.lastQueueState ||
+              "";
+
+
+            /*
+             * ไม่มีการเปลี่ยน State
+             */
+
+            if (
+              previousState ===
+              nextState
+            ) {
+              return item;
+            }
+
+
+            changed =
+              true;
+
+
+            const eventTime =
+              new Date().toISOString();
+
+
+            let message;
+
+
+            /*
+             * ครั้งแรก
+             */
+
+            if (
+              !previousState
+            ) {
+              message =
+                `Initial Queue State: ${nextState}.`;
+            } else {
+              message =
+                `Queue State changed from ${previousState} to ${nextState}.`;
+            }
+
+
+            return {
+              ...item,
+
+
+              lastQueueState:
+                nextState,
+
+
+              history:
+                appendHistory(
+                  item.history,
+
+                  createHistoryEvent({
+                    type:
+                      "QUEUE_STATE_CHANGED",
+
+                    message,
+
+                    at:
+                      eventTime,
+
+                    details: {
+                      from:
+                        previousState ||
+                        null,
+
+                      to:
+                        nextState,
+                    },
+                  })
+                ),
+            };
+          }
+        );
+
+
+      return changed
+        ? updated
+        : current;
+    }
+  );
+
+
+  queueStateInitialized.current =
+    true;
+}, [queueRows]);
 
 
   /* =====================================================
@@ -700,6 +883,250 @@ export default function RobotTaskDispatcher() {
     );
   }
 
+/* =====================================================
+   UPDATE QUEUE PRIORITY
+===================================================== */
+
+function updateQueuePriority(
+  itemId,
+  priority
+) {
+  const normalized =
+    normalizeWmsPriority(
+      priority
+    );
+
+
+  const rcsPriority =
+    RCS_PRIORITY[
+      normalized
+    ] ||
+    60;
+
+
+  const nowIso =
+    new Date().toISOString();
+
+
+  setDispatchQueue(
+    (current) =>
+      current.map(
+        (item) => {
+          if (
+            item.id !==
+            itemId
+          ) {
+            return item;
+          }
+
+
+          const oldPriority =
+            normalizeWmsPriority(
+              item.wmsPriority
+            );
+
+
+          const oldRcsPriority =
+            clampRcsPriority(
+              item.rcsPriority
+            );
+
+
+          /*
+           * ถ้าค่าเดิม
+           * ไม่ต้องบันทึกซ้ำ
+           */
+
+          if (
+            oldPriority ===
+            normalized &&
+            oldRcsPriority ===
+            rcsPriority
+          ) {
+            return item;
+          }
+
+
+          return {
+            ...item,
+
+
+            wmsPriority:
+              normalized,
+
+
+            rcsPriority,
+
+
+            priorityUpdatedAt:
+              nowIso,
+
+
+            history:
+              appendHistory(
+                item.history,
+
+                createHistoryEvent({
+                  type:
+                    "PRIORITY_UPDATED",
+
+                  message:
+                    `Priority changed from ${oldPriority} (RCS ${oldRcsPriority}) to ${normalized} (RCS ${rcsPriority}).`,
+
+                  at:
+                    nowIso,
+
+                  details: {
+                    fromPriority:
+                      oldPriority,
+
+                    toPriority:
+                      normalized,
+
+                    fromRcsPriority:
+                      oldRcsPriority,
+
+                    toRcsPriority:
+                      rcsPriority,
+                  },
+                })
+              ),
+          };
+        }
+      )
+  );
+}
+
+/* =====================================================
+   UPDATE QUEUE SCHEDULE
+===================================================== */
+
+function updateQueueSchedule(
+  itemId,
+  value
+) {
+  /*
+   * datetime-local จะส่งค่าประมาณ:
+   *
+   * 2026-08-25T14:30
+   *
+   * เราจะแปลงเป็น ISO
+   * ก่อนเก็บลง localStorage
+   */
+
+  let scheduledSendAt;
+
+
+  /*
+   * ถ้าลบเวลาออก
+   *
+   * = พร้อมส่งตั้งแต่ตอนนี้
+   */
+
+  if (!value) {
+    scheduledSendAt =
+      new Date().toISOString();
+  } else {
+    const selectedDate =
+      new Date(value);
+
+
+    if (
+      Number.isNaN(
+        selectedDate.getTime()
+      )
+    ) {
+      return;
+    }
+
+
+    scheduledSendAt =
+      selectedDate.toISOString();
+  }
+
+
+  setDispatchQueue(
+    (current) =>
+      current.map(
+        (item) =>
+          item.id === itemId
+            ? {
+                ...item,
+
+                scheduledSendAt,
+
+                scheduleUpdatedAt:
+                  new Date().toISOString(),
+              }
+            : item
+      )
+  );
+}
+
+
+/* =====================================================
+   SET QUEUE TO NOW
+===================================================== */
+
+function setQueueScheduleNow(
+  itemId
+) {
+  const currentTime =
+    new Date().toISOString();
+
+
+  setDispatchQueue(
+    (current) =>
+      current.map(
+        (item) => {
+          if (
+            item.id !==
+            itemId
+          ) {
+            return item;
+          }
+
+
+          return {
+            ...item,
+
+
+            scheduledSendAt:
+              currentTime,
+
+
+            scheduleUpdatedAt:
+              currentTime,
+
+
+            history:
+              appendHistory(
+                item.history,
+
+                createHistoryEvent({
+                  type:
+                    "SCHEDULE_NOW",
+
+                  message:
+                    "Scheduled Send changed to current time.",
+
+                  at:
+                    currentTime,
+
+                  details: {
+                    from:
+                      item.scheduledSendAt,
+
+                    to:
+                      currentTime,
+                  },
+                })
+              ),
+          };
+        }
+      )
+  );
+}
 
   /* =====================================================
      REMOVE QUEUE ITEM
@@ -1331,29 +1758,11 @@ export default function RobotTaskDispatcher() {
 
                     <td>
 
-                      {candidate.ready ? (
-                        <span className="readiness ready">
-
-                          <CheckCircle2
-                            size={13}
-                          />
-
-                          Ready
-
-                        </span>
-                      ) : (
-                        <span className="readiness not-ready">
-
-                          <AlertTriangle
-                            size={13}
-                          />
-
-                          {
-                            candidate.reason
-                          }
-
-                        </span>
-                      )}
+                      <MappingReadiness
+                        candidate={
+                          candidate
+                        }
+                      />
 
                     </td>
 
@@ -1519,6 +1928,10 @@ export default function RobotTaskDispatcher() {
                   Command Draft
                 </th>
 
+                <th>
+                  History
+                </th>
+
                 <th></th>
 
               </tr>
@@ -1619,14 +2032,65 @@ export default function RobotTaskDispatcher() {
 
                     <td>
 
-                      <PriorityBadge
-                        priority={
-                          item.wmsPriority
-                        }
-                        rcsPriority={
-                          item.rcsPriority
-                        }
-                      />
+                      <div className="queue-priority-editor">
+
+                        <select
+                          value={
+                            item.wmsPriority ||
+                            "NORMAL"
+                          }
+
+                          disabled={
+                            item.sendStatus ===
+                            "SENT"
+                          }
+
+                          onChange={(
+                            event
+                          ) =>
+                            updateQueuePriority(
+                              item.id,
+                              event.target.value
+                            )
+                          }
+                        >
+
+                          <option value="LOW">
+                            LOW
+                          </option>
+
+
+                          <option value="NORMAL">
+                            NORMAL
+                          </option>
+
+
+                          <option value="HIGH">
+                            HIGH
+                          </option>
+
+
+                          <option value="URGENT">
+                            URGENT
+                          </option>
+
+                        </select>
+
+
+                        <span
+                          className={`queue-priority-value priority-${String(
+                            item.wmsPriority ||
+                            "NORMAL"
+                          ).toLowerCase()}`}
+                        >
+                          RCS
+                          {" "}
+                          {
+                            item.rcsPriority
+                          }
+                        </span>
+
+                      </div>
 
                     </td>
 
@@ -1635,18 +2099,66 @@ export default function RobotTaskDispatcher() {
 
                     <td>
 
-                      <strong className="scheduled-time">
-                        {
-                          formatDateTime(
-                            item.scheduledSendAt
-                          )
-                        }
-                      </strong>
+                      <div className="queue-schedule-editor">
+
+                        <input
+                          type="datetime-local"
+
+                          value={
+                            formatDateTimeLocalInput(
+                              item.scheduledSendAt
+                            )
+                          }
+
+                          disabled={
+                            item.sendStatus ===
+                            "SENT"
+                          }
+
+                          onChange={(
+                            event
+                          ) =>
+                            updateQueueSchedule(
+                              item.id,
+                              event.target.value
+                            )
+                          }
+                        />
+
+
+                        <button
+                          type="button"
+
+                          disabled={
+                            item.sendStatus ===
+                            "SENT"
+                          }
+
+                          onClick={() =>
+                            setQueueScheduleNow(
+                              item.id
+                            )
+                          }
+                        >
+                          Now
+                        </button>
+
+
+                        <small>
+
+                          {item.queueState ===
+                          "WAITING_TIME"
+                            ? "Waiting until scheduled time"
+                            : item.queueState ===
+                                "READY"
+                              ? "Eligible to send now"
+                              : "Schedule saved"}
+
+                        </small>
+
+                      </div>
 
                     </td>
-
-
-                    {/* STATE */}
 
                     <td>
 
@@ -1663,28 +2175,81 @@ export default function RobotTaskDispatcher() {
 
                     <td>
 
-                      <button
-                        type="button"
-                        className="payload-button"
-                        onClick={() =>
-                          copyText(
-                            JSON.stringify(
-                              item.commandDraft,
-                              null,
-                              2
-                            )
-                          )
-                        }
-                      >
-                        <Copy
-                          size={14}
-                        />
+                      <div className="draft-action-buttons">
 
-                        Copy Draft
-                      </button>
+                        {/* VIEW */}
+
+                        <button
+                          type="button"
+                          className="view-draft-button"
+                          onClick={() =>
+                            setSelectedDraft(
+                              item
+                            )
+                          }
+                        >
+                          <Eye
+                            size={14}
+                          />
+
+                          View Draft
+                        </button>
+
+
+                        {/* COPY */}
+
+                        <button
+                          type="button"
+                          className="payload-button"
+                          onClick={() =>
+                            copyText(
+                              JSON.stringify(
+                                item.commandDraft,
+                                null,
+                                2
+                              )
+                           )
+                          }
+                        >
+                          <Copy
+                            size={14}
+                          />
+
+                          Copy Draft
+                        </button>
+
+                      </div>
 
                     </td>
 
+                    <td>
+
+                      <button
+                        type="button"
+                        className="history-button"
+                        onClick={() =>
+                          setSelectedHistoryItem(
+                            item
+                          )
+                        }
+                      >
+                        <History
+                          size={14}
+                        />
+
+                        History
+
+                        <span>
+                          {
+                            item.history
+                              ?.length ||
+                            0
+                          }
+                        </span>
+
+                      </button>
+
+                    </td>
 
                     {/* REMOVE */}
 
@@ -1736,12 +2301,724 @@ export default function RobotTaskDispatcher() {
 
         </div>
 
-      </section>
+            </section>
+
+
+      {/* =================================================
+          COMMAND DRAFT MODAL
+      ================================================= */}
+
+      {selectedDraft && (
+        <CommandDraftModal
+          item={
+            selectedDraft
+          }
+          onClose={() =>
+            setSelectedDraft(
+              null
+            )
+          }
+        />
+      )}
+
+      {selectedHistoryItem && (
+        <QueueHistoryModal
+          item={
+            queueRows.find(
+              (row) =>
+                row.id ===
+                selectedHistoryItem.id
+            ) ||
+            selectedHistoryItem
+          }
+
+          onClose={() =>
+            setSelectedHistoryItem(
+              null
+            )
+          }
+        />
+      )}
 
     </div>
   );
 }
 
+/* =========================================================
+   COMMAND DRAFT MODAL
+========================================================= */
+
+function CommandDraftModal({
+  item,
+  onClose,
+}) {
+  const [
+    copied,
+    setCopied,
+  ] = useState(false);
+
+
+  const jsonText =
+    JSON.stringify(
+      item.commandDraft,
+      null,
+      2
+    );
+
+
+  async function handleCopy() {
+    const success =
+      await copyText(
+        jsonText
+      );
+
+
+    if (!success) {
+      return;
+    }
+
+
+    setCopied(true);
+
+
+    window.setTimeout(
+      () =>
+        setCopied(
+          false
+        ),
+      1800
+    );
+  }
+
+
+  return (
+    <div
+      className="draft-modal-backdrop"
+      onMouseDown={(
+        event
+      ) => {
+        /*
+         * คลิกพื้นที่ดำด้านนอก
+         * = ปิด Modal
+         */
+
+        if (
+          event.target ===
+          event.currentTarget
+        ) {
+          onClose();
+        }
+      }}
+    >
+
+      <div className="draft-modal">
+
+        {/* HEADER */}
+
+        <div className="draft-modal-header">
+
+          <div>
+
+            <span>
+              WMS INTERNAL COMMAND
+            </span>
+
+
+            <h3>
+              Command Draft
+            </h3>
+
+
+            <p>
+              Preview the command data prepared by WMS
+              before future transmission to HIK RCS.
+            </p>
+
+          </div>
+
+
+          <button
+            type="button"
+            className="draft-modal-close"
+            onClick={
+              onClose
+            }
+            aria-label="Close"
+          >
+            <X
+              size={18}
+            />
+          </button>
+
+        </div>
+
+
+        {/* TASK INFORMATION */}
+
+        <div className="draft-info-grid">
+
+          <DraftInfo
+            label="Queue ID"
+            value={
+              item.id
+            }
+          />
+
+
+          <DraftInfo
+            label="Warehouse Task"
+            value={
+              item.warehouseTaskId
+            }
+          />
+
+
+          <DraftInfo
+            label="Task Type"
+            value={
+              item.type ||
+              "-"
+            }
+          />
+
+
+          <DraftInfo
+            label="Queue State"
+            value={
+              item.queueState ||
+              "-"
+            }
+          />
+
+
+          <DraftInfo
+            label="WMS Priority"
+            value={
+              item.wmsPriority ||
+              "NORMAL"
+            }
+          />
+
+
+          <DraftInfo
+            label="RCS Priority"
+            value={
+              item.rcsPriority ??
+              "-"
+            }
+          />
+
+
+          <DraftInfo
+            label="Scheduled Send"
+            value={
+              formatDateTime(
+                item.scheduledSendAt
+              )
+            }
+            wide
+          />
+
+
+          <DraftInfo
+            label="Send Status"
+            value={
+              item.sendStatus ||
+              "NOT_SENT"
+            }
+          />
+
+        </div>
+
+
+        {/* ROUTE */}
+
+        <div className="draft-route-preview">
+
+          <div>
+
+            <span>
+              SOURCE
+            </span>
+
+
+            <strong>
+              {
+                item.sourceRcsPointCode ||
+                "Missing RCS Point"
+              }
+            </strong>
+
+
+            <small>
+              {
+                item.sourceRcsTargetType ||
+                "SITE"
+              }
+
+              {item.sourceRcsMapCode
+                ? ` · Map ${item.sourceRcsMapCode}`
+                : ""}
+            </small>
+
+          </div>
+
+
+          <Route
+            size={20}
+          />
+
+
+          <div>
+
+            <span>
+              DESTINATION
+            </span>
+
+
+            <strong>
+              {
+                item.destinationRcsPointCode ||
+                "Missing RCS Point"
+              }
+            </strong>
+
+
+            <small>
+              {
+                item.destinationRcsTargetType ||
+                "SITE"
+              }
+
+              {item.destinationRcsMapCode
+                ? ` · Map ${item.destinationRcsMapCode}`
+                : ""}
+            </small>
+
+          </div>
+
+        </div>
+
+
+        {/* WARNING */}
+
+        <div className="draft-notice">
+
+          <AlertTriangle
+            size={15}
+          />
+
+
+          <span>
+            This is an internal WMS command draft.
+            It is not yet the confirmed HIK
+            GenerateTaskOrder request body.
+          </span>
+
+        </div>
+
+
+        {/* JSON */}
+
+        <div className="draft-json-section">
+
+          <div className="draft-json-header">
+
+            <span>
+              JSON Preview
+            </span>
+
+
+            <button
+              type="button"
+              onClick={
+                handleCopy
+              }
+            >
+              <Copy
+                size={14}
+              />
+
+              {copied
+                ? "Copied"
+                : "Copy JSON"}
+            </button>
+
+          </div>
+
+
+          <pre>
+            <code>
+              {jsonText}
+            </code>
+          </pre>
+
+        </div>
+
+
+        {/* FOOTER */}
+
+        <div className="draft-modal-footer">
+
+          <button
+            type="button"
+            className="draft-close-button"
+            onClick={
+              onClose
+            }
+          >
+            Close
+          </button>
+
+        </div>
+
+      </div>
+
+    </div>
+  );
+}
+
+/* =========================================================
+   QUEUE HISTORY MODAL
+========================================================= */
+
+function QueueHistoryModal({
+  item,
+  onClose,
+}) {
+  const history =
+    Array.isArray(
+      item.history
+    )
+      ? [...item.history]
+      : [];
+
+
+  /*
+   * ล่าสุดอยู่ด้านบน
+   */
+
+  history.sort(
+    (a, b) =>
+      getTime(
+        b.at
+      ) -
+      getTime(
+        a.at
+      )
+  );
+
+
+  return (
+    <div
+      className="history-modal-backdrop"
+
+      onMouseDown={(
+        event
+      ) => {
+        if (
+          event.target ===
+          event.currentTarget
+        ) {
+          onClose();
+        }
+      }}
+    >
+
+      <div className="history-modal">
+
+        {/* HEADER */}
+
+        <div className="history-modal-header">
+
+          <div>
+
+            <span>
+              RCS DISPATCH QUEUE
+            </span>
+
+
+            <h3>
+              Queue History
+            </h3>
+
+
+            <p>
+              {
+                item.id
+              }
+
+              {" · "}
+
+              {
+                item.warehouseTaskId
+              }
+            </p>
+
+          </div>
+
+
+          <button
+            type="button"
+            onClick={
+              onClose
+            }
+          >
+            <X
+              size={18}
+            />
+          </button>
+
+        </div>
+
+
+        {/* CURRENT STATE */}
+
+        <div className="history-current-state">
+
+          <div>
+
+            <span>
+              Current State
+            </span>
+
+
+            <strong>
+              {
+                item.queueState ||
+                item.lastQueueState ||
+                "-"
+              }
+            </strong>
+
+          </div>
+
+
+          <div>
+
+            <span>
+              Priority
+            </span>
+
+
+            <strong>
+              {
+                item.wmsPriority
+              }
+
+              {" / RCS "}
+
+              {
+                item.rcsPriority
+              }
+            </strong>
+
+          </div>
+
+
+          <div>
+
+            <span>
+              Scheduled Send
+            </span>
+
+
+            <strong>
+              {
+                formatDateTime(
+                  item.scheduledSendAt
+                )
+              }
+            </strong>
+
+          </div>
+
+        </div>
+
+
+        {/* TIMELINE */}
+
+        <div className="history-timeline">
+
+          {history.map(
+            (
+              event,
+              index
+            ) => (
+              <div
+                className="history-event"
+                key={
+                  event.id ||
+                  `${event.at}-${index}`
+                }
+              >
+
+                <div className="history-event-marker">
+
+                  <span />
+
+                </div>
+
+
+                <div className="history-event-content">
+
+                  <div className="history-event-top">
+
+                    <strong>
+                      {
+                        formatHistoryType(
+                          event.type
+                        )
+                      }
+                    </strong>
+
+
+                    <time>
+                      {
+                        formatDateTime(
+                          event.at
+                        )
+                      }
+                    </time>
+
+                  </div>
+
+
+                  <p>
+                    {
+                      event.message
+                    }
+                  </p>
+
+
+                  {event.details && (
+                    <details>
+
+                      <summary>
+                        Details
+                      </summary>
+
+
+                      <pre>
+                        {JSON.stringify(
+                          event.details,
+                          null,
+                          2
+                        )}
+                      </pre>
+
+                    </details>
+                  )}
+
+                </div>
+
+              </div>
+            )
+          )}
+
+
+          {history.length ===
+            0 && (
+            <div className="history-empty">
+
+              <History
+                size={26}
+              />
+
+
+              <strong>
+                No History Yet
+              </strong>
+
+
+              <span>
+                New queue events will appear here.
+              </span>
+
+            </div>
+          )}
+
+        </div>
+
+
+        {/* FOOTER */}
+
+        <div className="history-modal-footer">
+
+          <button
+            type="button"
+            onClick={
+              onClose
+            }
+          >
+            Close
+          </button>
+
+        </div>
+
+      </div>
+
+    </div>
+  );
+}
+
+
+/* =========================================================
+   FORMAT HISTORY TYPE
+========================================================= */
+
+function formatHistoryType(
+  value
+) {
+  return String(
+    value ||
+    "EVENT"
+  )
+    .replaceAll(
+      "_",
+      " "
+    )
+    .toLowerCase()
+    .replace(
+      /\b\w/g,
+      (
+        character
+      ) =>
+        character.toUpperCase()
+    );
+}
+
+
+/* =========================================================
+   DRAFT INFO
+========================================================= */
+
+function DraftInfo({
+  label,
+  value,
+  wide = false,
+}) {
+  return (
+    <div
+      className={`draft-info-item ${
+        wide
+          ? "wide"
+          : ""
+      }`}
+    >
+
+      <span>
+        {label}
+      </span>
+
+
+      <strong>
+        {value}
+      </strong>
+
+    </div>
+  );
+}
 
 /* =========================================================
    SUMMARY CARD
@@ -1951,6 +3228,169 @@ function QueueStateBadge({
   );
 }
 
+/* =========================================================
+   MAPPING READINESS
+========================================================= */
+
+function MappingReadiness({
+  candidate,
+}) {
+  /*
+   * Task เข้า Queue แล้ว
+   */
+
+  if (
+    candidate.existingQueueItem
+  ) {
+    return (
+      <div className="mapping-readiness">
+
+        <span className="readiness queued">
+
+          <CheckCircle2
+            size={13}
+          />
+
+          Already Queued
+
+        </span>
+
+      </div>
+    );
+  }
+
+
+  const errors =
+    candidate.readiness
+      ?.errors ||
+    [];
+
+
+  const warnings =
+    candidate.readiness
+      ?.warnings ||
+    [];
+
+
+  /*
+   * =====================================================
+   * ERROR
+   * =====================================================
+   */
+
+  if (
+    errors.length >
+    0
+  ) {
+    return (
+      <div className="mapping-readiness">
+
+        <span className="readiness not-ready">
+
+          <AlertTriangle
+            size={13}
+          />
+
+          Not Ready
+
+        </span>
+
+
+        <div className="mapping-message-list error">
+
+          {errors.map(
+            (
+              message,
+              index
+            ) => (
+              <small
+                key={`${message}-${index}`}
+              >
+                • {message}
+              </small>
+            )
+          )}
+
+        </div>
+
+      </div>
+    );
+  }
+
+
+  /*
+   * =====================================================
+   * WARNING
+   * =====================================================
+   */
+
+  if (
+    warnings.length >
+    0
+  ) {
+    return (
+      <div className="mapping-readiness">
+
+        <span className="readiness warning">
+
+          <AlertTriangle
+            size={13}
+          />
+
+          Ready with Warning
+
+        </span>
+
+
+        <div className="mapping-message-list warning">
+
+          {warnings.map(
+            (
+              message,
+              index
+            ) => (
+              <small
+                key={`${message}-${index}`}
+              >
+                • {message}
+              </small>
+            )
+          )}
+
+        </div>
+
+      </div>
+    );
+  }
+
+
+  /*
+   * =====================================================
+   * READY
+   * =====================================================
+   */
+
+  return (
+    <div className="mapping-readiness">
+
+      <span className="readiness ready">
+
+        <CheckCircle2
+          size={13}
+        />
+
+        Ready
+
+      </span>
+
+
+      <small className="mapping-all-good">
+        RCS mapping complete
+      </small>
+
+    </div>
+  );
+}
 
 /* =========================================================
    RESOLVE SOURCE / DESTINATION
@@ -2145,65 +3585,282 @@ function enrichQueuedEndpoints(
    MAPPING VALIDATION
 ========================================================= */
 
+/* =========================================================
+   RCS ENDPOINT VALIDATION
+========================================================= */
+
 function getEndpointReadiness(
   endpoints
 ) {
+  const errors = [];
+  const warnings = [];
+
+  /*
+   * =====================================================
+   * SOURCE WMS LOCATION
+   * =====================================================
+   */
+
   if (
     !endpoints.sourceLocationId
   ) {
-    return {
-      ok: false,
-
-      message:
-        "Source WMS location missing",
-    };
+    errors.push(
+      "Source WMS location missing"
+    );
   }
 
+
+  /*
+   * =====================================================
+   * DESTINATION WMS LOCATION
+   * =====================================================
+   */
 
   if (
     !endpoints.destinationLocationId
   ) {
-    return {
-      ok: false,
+    errors.push(
+      "Destination WMS location missing"
+    );
+  }
 
-      message:
-        "Destination WMS location missing",
-    };
+
+  /*
+   * =====================================================
+   * SOURCE HIK RCS POINT
+   * =====================================================
+   */
+
+  if (
+    !String(
+      endpoints.sourceRcsPointCode ||
+      ""
+    ).trim()
+  ) {
+    errors.push(
+      "Source HIK RCS point missing"
+    );
+  }
+
+
+  /*
+   * =====================================================
+   * DESTINATION HIK RCS POINT
+   * =====================================================
+   */
+
+  if (
+    !String(
+      endpoints.destinationRcsPointCode ||
+      ""
+    ).trim()
+  ) {
+    errors.push(
+      "Destination HIK RCS point missing"
+    );
+  }
+
+
+  /*
+   * =====================================================
+   * TARGET TYPES
+   *
+   * ตอนนี้ WMS รองรับเฉพาะ:
+   *
+   * SITE
+   * STORAGE
+   * =====================================================
+   */
+
+  const sourceType =
+    String(
+      endpoints.sourceRcsTargetType ||
+      "SITE"
+    ).toUpperCase();
+
+
+  const destinationType =
+    String(
+      endpoints.destinationRcsTargetType ||
+      "SITE"
+    ).toUpperCase();
+
+
+  const supportedTypes = [
+    "SITE",
+    "STORAGE",
+  ];
+
+
+  if (
+    !supportedTypes.includes(
+      sourceType
+    )
+  ) {
+    errors.push(
+      `Unsupported source RCS target type: ${sourceType}`
+    );
   }
 
 
   if (
-    !endpoints.sourceRcsPointCode
+    !supportedTypes.includes(
+      destinationType
+    )
   ) {
-    return {
-      ok: false,
+    errors.push(
+      `Unsupported destination RCS target type: ${destinationType}`
+    );
+  }
 
-      message:
-        "Source HIK RCS point missing",
-    };
+
+  /*
+   * =====================================================
+   * WMS MAP NODE
+   *
+   * ไม่ block
+   *
+   * เพราะการส่ง RCS ใช้ RCS Point
+   * ไม่ใช่ WMS Node โดยตรง
+   * =====================================================
+   */
+
+  if (
+    !String(
+      endpoints.sourceNodeId ||
+      ""
+    ).trim()
+  ) {
+    warnings.push(
+      "Source WMS map node missing"
+    );
   }
 
 
   if (
-    !endpoints.destinationRcsPointCode
+    !String(
+      endpoints.destinationNodeId ||
+      ""
+    ).trim()
   ) {
-    return {
-      ok: false,
-
-      message:
-        "Destination HIK RCS point missing",
-    };
+    warnings.push(
+      "Destination WMS map node missing"
+    );
   }
 
+
+  /*
+   * =====================================================
+   * RCS MAP CODE
+   *
+   * ตอนนี้ยังไม่บังคับ
+   *
+   * เพราะ exact GenerateTaskOrder
+   * request ยังไม่ยืนยัน
+   * =====================================================
+   */
+
+  if (
+    !String(
+      endpoints.sourceRcsMapCode ||
+      ""
+    ).trim()
+  ) {
+    warnings.push(
+      "Source RCS Map Code not set"
+    );
+  }
+
+
+  if (
+    !String(
+      endpoints.destinationRcsMapCode ||
+      ""
+    ).trim()
+  ) {
+    warnings.push(
+      "Destination RCS Map Code not set"
+    );
+  }
+
+
+  /*
+   * =====================================================
+   * SAME POINT
+   *
+   * ไม่ block
+   *
+   * แค่เตือน เพราะบาง Process
+   * อาจมี use case พิเศษ
+   * =====================================================
+   */
+
+  if (
+    endpoints.sourceRcsPointCode &&
+    endpoints.destinationRcsPointCode &&
+    String(
+      endpoints.sourceRcsPointCode
+    ).trim() ===
+      String(
+        endpoints.destinationRcsPointCode
+      ).trim()
+  ) {
+    warnings.push(
+      "Source and destination use the same RCS point"
+    );
+  }
+
+
+  /*
+   * =====================================================
+   * CROSS MAP
+   *
+   * HIK รองรับ cross-map process ได้
+   *
+   * เพราะฉะนั้นไม่ถือเป็น error
+   * =====================================================
+   */
+
+  if (
+    endpoints.sourceRcsMapCode &&
+    endpoints.destinationRcsMapCode &&
+    String(
+      endpoints.sourceRcsMapCode
+    ).trim() !==
+      String(
+        endpoints.destinationRcsMapCode
+      ).trim()
+  ) {
+    warnings.push(
+      "Source and destination are on different RCS maps"
+    );
+  }
+
+
+  /*
+   * =====================================================
+   * FINAL RESULT
+   * =====================================================
+   */
 
   return {
-    ok: true,
+    ok:
+      errors.length ===
+      0,
+
+    errors,
+
+    warnings,
 
     message:
-      "Ready",
+      errors[0] ||
+      (
+        warnings.length > 0
+          ? "Ready with warning"
+          : "Ready"
+      ),
   };
 }
-
 
 /* =========================================================
    RECEIVING / SHIPPING
@@ -2387,6 +4044,34 @@ function createDispatchRecord({
 
     rcsStatus:
       "NOT_SENT",
+
+
+    /*
+    * Queue state ล่าสุด
+    *
+    * จะถูก update โดย state watcher
+    */
+
+    lastQueueState:
+      "",
+
+
+    /*
+    * Event History
+    */
+
+    history: [
+      createHistoryEvent({
+        type:
+          "QUEUED",
+
+        message:
+          "Warehouse Task added to RCS Dispatch Queue.",
+
+        at:
+          createdAt,
+      }),
+    ],
 
 
     createdAt,
@@ -2589,6 +4274,18 @@ function normalizeDispatchRecord(
         "NOT_SENT"
       ),
 
+    lastQueueState:
+      String(
+        item.lastQueueState ||
+        ""
+      ),
+
+    history:
+      Array.isArray(
+        item.history
+      )
+        ? item.history
+        : [],
 
     createdAt:
       item.createdAt ||
@@ -2697,19 +4394,57 @@ function getQueueState({
    */
 
   const readiness =
-    getEndpointReadiness({
-      sourceLocationId:
-        item.sourceLocationId,
+  getEndpointReadiness({
+    sourceLocationId:
+      item.sourceLocationId,
 
-      destinationLocationId:
-        item.destinationLocationId,
+    destinationLocationId:
+      item.destinationLocationId,
 
-      sourceRcsPointCode:
-        endpoints.sourceRcsPointCode,
 
-      destinationRcsPointCode:
-        endpoints.destinationRcsPointCode,
-    });
+    /*
+     * WMS Map Node
+     */
+
+    sourceNodeId:
+      item.sourceNodeId,
+
+    destinationNodeId:
+      item.destinationNodeId,
+
+
+    /*
+     * RCS Point
+     */
+
+    sourceRcsPointCode:
+      endpoints.sourceRcsPointCode,
+
+    destinationRcsPointCode:
+      endpoints.destinationRcsPointCode,
+
+
+    /*
+     * RCS Map
+     */
+
+    sourceRcsMapCode:
+      endpoints.sourceRcsMapCode,
+
+    destinationRcsMapCode:
+      endpoints.destinationRcsMapCode,
+
+
+    /*
+     * RCS Target Type
+     */
+
+    sourceRcsTargetType:
+      endpoints.sourceRcsTargetType,
+
+    destinationRcsTargetType:
+      endpoints.destinationRcsTargetType,
+  });
 
 
   if (
@@ -3220,6 +4955,56 @@ async function copyText(
   }
 }
 
+/* =========================================================
+   HISTORY
+========================================================= */
+
+function createHistoryEvent({
+  type,
+  message,
+  at,
+  details = null,
+}) {
+  const timestamp =
+    at ||
+    new Date().toISOString();
+
+
+  return {
+    id:
+      `EVT-${Date.now()}-${Math.random()
+        .toString(36)
+        .slice(2, 8)}`,
+
+    type,
+
+    message,
+
+    at:
+      timestamp,
+
+    details,
+  };
+}
+
+
+function appendHistory(
+  history,
+  event
+) {
+  const current =
+    Array.isArray(
+      history
+    )
+      ? history
+      : [];
+
+
+  return [
+    ...current,
+    event,
+  ];
+}
 
 /* =========================================================
    DATE
@@ -3266,6 +5051,80 @@ function formatDateTime(
     : date.toLocaleString();
 }
 
+/* =========================================================
+   DATETIME LOCAL INPUT
+========================================================= */
+
+function formatDateTimeLocalInput(
+  value
+) {
+  if (!value) {
+    return "";
+  }
+
+
+  const date =
+    new Date(value);
+
+
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
+    return "";
+  }
+
+
+  /*
+   * datetime-local ต้องการรูปแบบ:
+   *
+   * YYYY-MM-DDTHH:mm
+   *
+   * และต้องใช้เวลาท้องถิ่น
+   * ไม่ใช่ UTC
+   */
+
+  const pad = (
+    number
+  ) =>
+    String(
+      number
+    ).padStart(
+      2,
+      "0"
+    );
+
+
+  return [
+    date.getFullYear(),
+
+    "-",
+
+    pad(
+      date.getMonth() +
+        1
+    ),
+
+    "-",
+
+    pad(
+      date.getDate()
+    ),
+
+    "T",
+
+    pad(
+      date.getHours()
+    ),
+
+    ":",
+
+    pad(
+      date.getMinutes()
+    ),
+  ].join("");
+}
 
 /* =========================================================
    LOAD LOCAL STORAGE
