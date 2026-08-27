@@ -21,6 +21,13 @@ import {
   useState,
 } from "react";
 
+import {
+  loadTasks,
+  notifyWmsDataChanged,
+  saveTasks,
+  syncTaskStatusToOperations,
+} from "../utils/taskOperationSync";
+
 import "../styles/RobotTaskDispatcher.css";
 
 
@@ -1067,6 +1074,203 @@ function setQueueScheduleNow(
 }
 
 /* =====================================================
+   RCS -> WAREHOUSE TASK SYNC
+===================================================== */
+
+function syncWarehouseTaskFromRcs({
+  warehouseTaskId,
+  nextStatus,
+  at = new Date().toISOString(),
+}) {
+  /*
+   * Always read the latest task records from localStorage.
+   * This avoids using a stale React state snapshot while the
+   * simulated RCS lifecycle is advancing through timers.
+   */
+  const latestTasks =
+    loadTasks();
+
+
+  const currentTask =
+    latestTasks.find(
+      (task) =>
+        task.id ===
+        warehouseTaskId
+    );
+
+
+  if (!currentTask) {
+    return {
+      ok: false,
+      message:
+        `Warehouse Task ${warehouseTaskId} was not found.`,
+    };
+  }
+
+
+  /*
+   * Do not move a completed Warehouse Task backwards.
+   * Repeated timer execution is also treated as idempotent.
+   */
+  if (
+    currentTask.status ===
+      "COMPLETED" ||
+    currentTask.status ===
+      nextStatus
+  ) {
+    setWarehouseTasks(
+      latestTasks
+    );
+
+
+    return {
+      ok: true,
+      skipped: true,
+      task: currentTask,
+    };
+  }
+
+
+  const nextTasks =
+    latestTasks.map(
+      (task) => {
+        if (
+          task.id !==
+          warehouseTaskId
+        ) {
+          return task;
+        }
+
+
+        /*
+         * RCS RUNNING
+         * -> Warehouse Task IN_PROGRESS
+         */
+        if (
+          nextStatus ===
+          "IN_PROGRESS"
+        ) {
+          return {
+            ...task,
+            status:
+              "IN_PROGRESS",
+            startedAt:
+              task.startedAt ||
+              at,
+            completedAt:
+              "",
+            blockedAt:
+              "",
+          };
+        }
+
+
+        /*
+         * RCS COMPLETED
+         * -> Warehouse Task COMPLETED
+         */
+        if (
+          nextStatus ===
+          "COMPLETED"
+        ) {
+          return {
+            ...task,
+            status:
+              "COMPLETED",
+            startedAt:
+              task.startedAt ||
+              at,
+            completedAt:
+              at,
+            blockedAt:
+              "",
+          };
+        }
+
+
+        return {
+          ...task,
+          status:
+            nextStatus,
+        };
+      }
+    );
+
+
+  const changedTask =
+    nextTasks.find(
+      (task) =>
+        task.id ===
+        warehouseTaskId
+    );
+
+
+  /*
+   * Reuse the same Task -> Operation synchronization logic
+   * already used by Task Management.
+   *
+   * This is important because inventory must be updated only
+   * through the existing operation workflow, not directly by
+   * the RCS simulator.
+   */
+  const operationResult =
+    syncTaskStatusToOperations({
+      changedTask,
+      allTasks:
+        nextTasks,
+      nextStatus,
+      now: at,
+    });
+
+
+  if (!operationResult.ok) {
+    return {
+      ok: false,
+      message:
+        operationResult.message ||
+        "Could not synchronize the Warehouse Operation.",
+    };
+  }
+
+
+  const saveResult =
+    saveTasks(
+      nextTasks
+    );
+
+
+  if (!saveResult.ok) {
+    return {
+      ok: false,
+      message:
+        saveResult.message ||
+        "Could not save Warehouse Tasks.",
+    };
+  }
+
+
+  setWarehouseTasks(
+    nextTasks
+  );
+
+
+  /*
+   * localStorage does not emit a storage event in the same tab.
+   * Notify Task Management and other WMS pages explicitly.
+   */
+  notifyWmsDataChanged([
+    WAREHOUSE_TASK_KEY,
+  ]);
+
+
+  return {
+    ok: true,
+    task: changedTask,
+  };
+}
+
+
+/* =====================================================
    SIMULATE SEND TO RCS
 ===================================================== */
 
@@ -1216,8 +1420,15 @@ function simulateSendToRcs(
                 entry.id !== item.id ||
                 entry.sendStatus !==
                   "SENT" ||
-                entry.rcsStatus ===
-                  "CREATED"
+                ![
+                  "NOT_SENT",
+                  "",
+                ].includes(
+                  String(
+                    entry.rcsStatus ||
+                    "NOT_SENT"
+                  ).toUpperCase()
+                )
               ) {
                 return entry;
               }
@@ -1255,6 +1466,296 @@ function simulateSendToRcs(
       );
     },
     2000
+  );
+
+
+  /*
+   * =====================================================
+   * STEP 4: CREATED -> RUNNING
+   * =====================================================
+   *
+   * This also mirrors the RCS execution state back to the
+   * Warehouse Task as IN_PROGRESS.
+   */
+  window.setTimeout(
+    () => {
+      const latestEntry =
+        loadDispatchQueue().find(
+          (entry) =>
+            entry.id ===
+            item.id
+        );
+
+
+      if (
+        !latestEntry ||
+        latestEntry.sendStatus !==
+          "SENT" ||
+        latestEntry.rcsStatus !==
+          "CREATED"
+      ) {
+        return;
+      }
+
+
+      const runningAt =
+        new Date().toISOString();
+
+
+      const taskSync =
+        syncWarehouseTaskFromRcs({
+          warehouseTaskId:
+            latestEntry.warehouseTaskId,
+          nextStatus:
+            "IN_PROGRESS",
+          at: runningAt,
+        });
+
+
+      setDispatchQueue(
+        (current) =>
+          current.map(
+            (entry) => {
+              if (
+                entry.id !==
+                  item.id ||
+                entry.sendStatus !==
+                  "SENT" ||
+                entry.rcsStatus !==
+                  "CREATED"
+              ) {
+                return entry;
+              }
+
+
+              let nextHistory =
+                appendHistory(
+                  entry.history,
+                  createHistoryEvent({
+                    type:
+                      "RCS_RUNNING",
+                    message:
+                      "Simulated RCS task started running.",
+                    at: runningAt,
+                    details: {
+                      taskChainCode:
+                        entry.rcsTaskChainCode ||
+                        null,
+                      rcsStatus:
+                        "RUNNING",
+                      mode:
+                        "SIMULATION",
+                    },
+                  })
+                );
+
+
+              nextHistory =
+                appendHistory(
+                  nextHistory,
+                  createHistoryEvent({
+                    type:
+                      taskSync.ok
+                        ? "WAREHOUSE_TASK_IN_PROGRESS"
+                        : "WAREHOUSE_TASK_SYNC_FAILED",
+                    message:
+                      taskSync.ok
+                        ? `Warehouse Task ${entry.warehouseTaskId} synchronized to IN_PROGRESS.`
+                        : `Could not synchronize Warehouse Task ${entry.warehouseTaskId} to IN_PROGRESS: ${taskSync.message}`,
+                    at: runningAt,
+                    details: {
+                      warehouseTaskId:
+                        entry.warehouseTaskId,
+                      warehouseTaskStatus:
+                        taskSync.ok
+                          ? "IN_PROGRESS"
+                          : null,
+                      syncOk:
+                        taskSync.ok,
+                    },
+                  })
+                );
+
+
+              return {
+                ...entry,
+                rcsStatus:
+                  "RUNNING",
+                rcsStartedAt:
+                  runningAt,
+                warehouseTaskSyncedAt:
+                  taskSync.ok
+                    ? runningAt
+                    : entry.warehouseTaskSyncedAt ||
+                      "",
+                warehouseTaskSyncStatus:
+                  taskSync.ok
+                    ? "IN_PROGRESS"
+                    : "ERROR",
+                history:
+                  nextHistory,
+              };
+            }
+          )
+      );
+
+
+      if (!taskSync.ok) {
+        console.error(
+          "RCS RUNNING -> Warehouse Task sync failed:",
+          taskSync.message
+        );
+      }
+    },
+    4000
+  );
+
+
+  /*
+   * =====================================================
+   * STEP 5: RUNNING -> COMPLETED
+   * =====================================================
+   *
+   * The RCS simulator does NOT edit inventory directly.
+   * It completes the Warehouse Task and then reuses the
+   * existing Task -> Operation synchronization logic.
+   */
+  window.setTimeout(
+    () => {
+      const latestEntry =
+        loadDispatchQueue().find(
+          (entry) =>
+            entry.id ===
+            item.id
+        );
+
+
+      if (
+        !latestEntry ||
+        latestEntry.sendStatus !==
+          "SENT" ||
+        latestEntry.rcsStatus !==
+          "RUNNING"
+      ) {
+        return;
+      }
+
+
+      const completedAt =
+        new Date().toISOString();
+
+
+      const taskSync =
+        syncWarehouseTaskFromRcs({
+          warehouseTaskId:
+            latestEntry.warehouseTaskId,
+          nextStatus:
+            "COMPLETED",
+          at: completedAt,
+        });
+
+
+      setDispatchQueue(
+        (current) =>
+          current.map(
+            (entry) => {
+              if (
+                entry.id !==
+                  item.id ||
+                entry.sendStatus !==
+                  "SENT" ||
+                entry.rcsStatus !==
+                  "RUNNING"
+              ) {
+                return entry;
+              }
+
+
+              let nextHistory =
+                appendHistory(
+                  entry.history,
+                  createHistoryEvent({
+                    type:
+                      "RCS_COMPLETED",
+                    message:
+                      "Simulated RCS task completed.",
+                    at: completedAt,
+                    details: {
+                      taskChainCode:
+                        entry.rcsTaskChainCode ||
+                        null,
+                      rcsStatus:
+                        "COMPLETED",
+                      mode:
+                        "SIMULATION",
+                    },
+                  })
+                );
+
+
+              nextHistory =
+                appendHistory(
+                  nextHistory,
+                  createHistoryEvent({
+                    type:
+                      taskSync.ok
+                        ? "WAREHOUSE_TASK_COMPLETED"
+                        : "WAREHOUSE_TASK_SYNC_FAILED",
+                    message:
+                      taskSync.ok
+                        ? `Warehouse Task ${entry.warehouseTaskId} synchronized to COMPLETED.`
+                        : `Could not synchronize Warehouse Task ${entry.warehouseTaskId} to COMPLETED: ${taskSync.message}`,
+                    at: completedAt,
+                    details: {
+                      warehouseTaskId:
+                        entry.warehouseTaskId,
+                      warehouseTaskStatus:
+                        taskSync.ok
+                          ? "COMPLETED"
+                          : null,
+                      syncOk:
+                        taskSync.ok,
+                    },
+                  })
+                );
+
+
+              return {
+                ...entry,
+                rcsStatus:
+                  "COMPLETED",
+                rcsCompletedAt:
+                  completedAt,
+                warehouseTaskSyncedAt:
+                  taskSync.ok
+                    ? completedAt
+                    : entry.warehouseTaskSyncedAt ||
+                      "",
+                warehouseTaskSyncStatus:
+                  taskSync.ok
+                    ? "COMPLETED"
+                    : "ERROR",
+                history:
+                  nextHistory,
+              };
+            }
+          )
+      );
+
+
+      if (!taskSync.ok) {
+        console.error(
+          "RCS COMPLETED -> Warehouse Task sync failed:",
+          taskSync.message
+        );
+
+
+        window.alert(
+          `RCS task completed, but WMS synchronization failed: ${taskSync.message}`
+        );
+      }
+    },
+    7000
   );
 }
 
@@ -4287,6 +4788,18 @@ function createDispatchRecord({
     rcsStatus:
       "NOT_SENT",
 
+    rcsStartedAt:
+      "",
+
+    rcsCompletedAt:
+      "",
+
+    warehouseTaskSyncedAt:
+      "",
+
+    warehouseTaskSyncStatus:
+      "NOT_SYNCED",
+
 
     /*
     * Queue state ล่าสุด
@@ -4524,6 +5037,24 @@ function normalizeDispatchRecord(
     rcsCreatedAt:
       item.rcsCreatedAt ||
       "",
+
+    rcsStartedAt:
+      item.rcsStartedAt ||
+      "",
+
+    rcsCompletedAt:
+      item.rcsCompletedAt ||
+      "",
+
+    warehouseTaskSyncedAt:
+      item.warehouseTaskSyncedAt ||
+      "",
+
+    warehouseTaskSyncStatus:
+      String(
+        item.warehouseTaskSyncStatus ||
+        "NOT_SYNCED"
+      ).toUpperCase(),
 
     priorityUpdatedAt:
       item.priorityUpdatedAt ||

@@ -189,10 +189,9 @@ export default function TaskManagement() {
      */
 
     setTasks(
-      (current) =>
-        syncWarehouseTasks(
-          current
-        )
+      syncWarehouseTasks(
+        loadTasks()
+      )
     );
 
 
@@ -296,6 +295,25 @@ export default function TaskManagement() {
       const keys =
         event.detail?.keys ||
         [];
+
+
+      /*
+       * Warehouse Task update
+       *
+       * RCS lifecycle can update Warehouse Tasks in the same tab,
+       * so Task Management must reload the latest task record here.
+       */
+
+      if (
+        keys.includes(
+          TASK_STORAGE_KEY
+        )
+      ) {
+
+        setTasks(
+          loadTasks()
+        );
+      }
 
 
       /*
