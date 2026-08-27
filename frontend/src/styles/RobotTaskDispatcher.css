@@ -568,6 +568,7 @@
   }
 }
 
+
 /* =========================================================
    COMMAND DRAFT BUTTONS
 ========================================================= */
@@ -579,36 +580,25 @@
   min-width: 175px;
 }
 
-
 .view-draft-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 5px;
-
   padding: 7px 9px;
-
   border: 1px solid #334155;
   border-radius: 6px;
-
   background: #1e293b;
-
   color: #cbd5e1;
-
   font-size: 8px;
   font-weight: 700;
-
   white-space: nowrap;
-
   cursor: pointer;
 }
 
-
 .view-draft-button:hover {
   border-color: #0891b2;
-
   background: #164e63;
-
   color: #cffafe;
 }
 
@@ -619,35 +609,23 @@
 
 .draft-modal-backdrop {
   position: fixed;
-
   inset: 0;
-
   z-index: 9999;
-
   display: flex;
   align-items: center;
   justify-content: center;
-
   padding: 24px;
-
   background: rgba(2, 6, 23, 0.82);
-
   backdrop-filter: blur(4px);
 }
 
-
 .draft-modal {
   width: min(820px, 100%);
-
   max-height: 90vh;
-
   overflow-y: auto;
-
   border: 1px solid #334155;
   border-radius: 12px;
-
   background: #0f172a;
-
   box-shadow:
     0 24px 70px
     rgba(0, 0, 0, 0.55);
@@ -662,72 +640,48 @@
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-
   gap: 20px;
-
   padding: 20px;
-
   border-bottom: 1px solid #1e293b;
-
   background: #020617;
 }
 
-
 .draft-modal-header > div > span {
   display: block;
-
   margin-bottom: 5px;
-
   color: #22d3ee;
-
   font-size: 9px;
   font-weight: 700;
-
   letter-spacing: 0.1em;
 }
 
-
 .draft-modal-header h3 {
   margin: 0;
-
   color: #f8fafc;
-
   font-size: 19px;
 }
 
-
 .draft-modal-header p {
   margin: 6px 0 0;
-
   color: #64748b;
-
   font-size: 10px;
 }
-
 
 .draft-modal-close {
   display: grid;
   place-items: center;
-
   width: 32px;
   height: 32px;
-
   flex: 0 0 32px;
-
   border: 1px solid #334155;
   border-radius: 7px;
-
   background: #0f172a;
-
   color: #94a3b8;
-
   cursor: pointer;
 }
 
-
 .draft-modal-close:hover {
   color: #f8fafc;
-
   border-color: #475569;
 }
 
@@ -738,59 +692,41 @@
 
 .draft-info-grid {
   display: grid;
-
   grid-template-columns:
     repeat(
       4,
       minmax(0, 1fr)
     );
-
   gap: 10px;
-
   padding: 18px 20px;
 }
 
-
 .draft-info-item {
   min-width: 0;
-
   padding: 10px;
-
   border: 1px solid #1e293b;
   border-radius: 7px;
-
   background: #020617;
 }
-
 
 .draft-info-item.wide {
   grid-column: span 2;
 }
 
-
 .draft-info-item span {
   display: block;
-
   margin-bottom: 4px;
-
   color: #64748b;
-
   font-size: 8px;
 }
 
-
 .draft-info-item strong {
   display: block;
-
   overflow: hidden;
-
   color: #e2e8f0;
-
   font-family: monospace;
   font-size: 10px;
-
   text-overflow: ellipsis;
-
   white-space: nowrap;
 }
 
@@ -801,66 +737,45 @@
 
 .draft-route-preview {
   display: grid;
-
   grid-template-columns:
     minmax(0, 1fr)
     auto
     minmax(0, 1fr);
-
   align-items: center;
-
   gap: 15px;
-
   margin: 0 20px 16px;
-
   padding: 15px;
-
   border: 1px solid #164e63;
   border-radius: 8px;
-
   background: #022c3a;
 }
-
 
 .draft-route-preview > div {
   min-width: 0;
 }
 
-
 .draft-route-preview span {
   display: block;
-
   margin-bottom: 5px;
-
   color: #67e8f9;
-
   font-size: 8px;
   font-weight: 700;
 }
 
-
 .draft-route-preview strong {
   display: block;
-
   color: #f8fafc;
-
   font-family: monospace;
   font-size: 11px;
-
   word-break: break-all;
 }
 
-
 .draft-route-preview small {
   display: block;
-
   margin-top: 4px;
-
   color: #94a3b8;
-
   font-size: 8px;
 }
-
 
 .draft-route-preview > svg {
   color: #22d3ee;
@@ -874,22 +789,14 @@
 .draft-notice {
   display: flex;
   align-items: flex-start;
-
   gap: 8px;
-
   margin: 0 20px 16px;
-
   padding: 10px 12px;
-
   border: 1px solid #78350f;
   border-radius: 7px;
-
   background: #451a03;
-
   color: #fbbf24;
-
   font-size: 9px;
-
   line-height: 1.5;
 }
 
@@ -900,81 +807,54 @@
 
 .draft-json-section {
   margin: 0 20px 20px;
-
   overflow: hidden;
-
   border: 1px solid #1e293b;
   border-radius: 8px;
-
   background: #020617;
 }
-
 
 .draft-json-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-
   gap: 10px;
-
   padding: 10px 12px;
-
   border-bottom: 1px solid #1e293b;
 }
 
-
 .draft-json-header > span {
   color: #94a3b8;
-
   font-size: 9px;
   font-weight: 700;
 }
 
-
 .draft-json-header button {
   display: inline-flex;
   align-items: center;
-
   gap: 5px;
-
   padding: 6px 9px;
-
   border: 1px solid #155e75;
   border-radius: 5px;
-
   background: #083344;
-
   color: #67e8f9;
-
   font-size: 8px;
   font-weight: 700;
-
   cursor: pointer;
 }
 
-
 .draft-json-section pre {
   max-height: 330px;
-
   overflow: auto;
-
   margin: 0;
-
   padding: 15px;
-
   background: #000;
-
   color: #a5f3fc;
-
   font-family:
     Consolas,
     Monaco,
     monospace;
-
   font-size: 10px;
-
   line-height: 1.55;
-
   white-space: pre;
 }
 
@@ -986,31 +866,21 @@
 .draft-modal-footer {
   display: flex;
   justify-content: flex-end;
-
   padding: 14px 20px;
-
   border-top: 1px solid #1e293b;
-
   background: #020617;
 }
 
-
 .draft-close-button {
   padding: 8px 16px;
-
   border: 1px solid #334155;
   border-radius: 6px;
-
   background: #1e293b;
-
   color: #e2e8f0;
-
   font-size: 9px;
   font-weight: 700;
-
   cursor: pointer;
 }
-
 
 .draft-close-button:hover {
   background: #334155;
@@ -1018,11 +888,10 @@
 
 
 /* =========================================================
-   RESPONSIVE
+   RESPONSIVE DRAFT
 ========================================================= */
 
 @media (max-width: 800px) {
-
   .draft-info-grid {
     grid-template-columns:
       repeat(
@@ -1031,45 +900,35 @@
       );
   }
 
-
   .draft-route-preview {
     grid-template-columns: 1fr;
-
     text-align: left;
   }
-
 
   .draft-route-preview > svg {
     transform: rotate(90deg);
   }
-
 }
 
-
 @media (max-width: 520px) {
-
   .draft-modal-backdrop {
     padding: 10px;
   }
-
 
   .draft-info-grid {
     grid-template-columns: 1fr;
   }
 
-
   .draft-info-item.wide {
     grid-column: span 1;
   }
 
-
   .draft-action-buttons {
     align-items: stretch;
-
     flex-direction: column;
   }
-
 }
+
 
 /* =========================================================
    QUEUE SCHEDULE EDITOR
@@ -1077,85 +936,60 @@
 
 .queue-schedule-editor {
   display: grid;
-
   grid-template-columns:
     minmax(155px, 1fr)
     auto;
-
   align-items: center;
-
   gap: 6px;
-
   min-width: 220px;
 }
 
-
 .queue-schedule-editor input {
   width: 100%;
-
   padding: 7px 8px;
-
   border: 1px solid #334155;
   border-radius: 6px;
-
   outline: none;
-
   background: #020617;
-
   color: #cbd5e1;
-
   font-size: 9px;
 }
 
-
 .queue-schedule-editor input:focus {
   border-color: #0891b2;
-
   box-shadow:
     0 0 0 2px
     rgba(8, 145, 178, 0.12);
 }
 
-
 .queue-schedule-editor button {
   padding: 7px 9px;
-
   border: 1px solid #155e75;
   border-radius: 6px;
-
   background: #083344;
-
   color: #67e8f9;
-
   font-size: 8px;
   font-weight: 700;
-
   cursor: pointer;
 }
-
 
 .queue-schedule-editor button:hover {
   background: #164e63;
 }
 
-
 .queue-schedule-editor input:disabled,
 .queue-schedule-editor button:disabled {
   opacity: 0.4;
-
   cursor: not-allowed;
 }
 
-
 .queue-schedule-editor small {
   grid-column: 1 / -1;
-
   display: block;
-
   color: #64748b;
-
   font-size: 7px;
 }
+
 
 /* =========================================================
    QUEUE PRIORITY EDITOR
@@ -1165,86 +999,62 @@
   display: flex;
   align-items: center;
   gap: 7px;
-
   min-width: 145px;
 }
 
-
 .queue-priority-editor select {
   padding: 7px 8px;
-
   border: 1px solid #334155;
   border-radius: 6px;
-
   outline: none;
-
   background: #020617;
-
   color: #e2e8f0;
-
   font-size: 8px;
   font-weight: 700;
-
   cursor: pointer;
 }
 
-
 .queue-priority-editor select:focus {
   border-color: #0891b2;
-
   box-shadow:
     0 0 0 2px
     rgba(8, 145, 178, 0.12);
 }
 
-
 .queue-priority-editor select:disabled {
   opacity: 0.4;
-
   cursor: not-allowed;
 }
 
-
 .queue-priority-value {
   display: inline-flex;
-
   padding: 4px 6px;
-
   border-radius: 5px;
-
   font-size: 8px;
   font-weight: 700;
-
   white-space: nowrap;
 }
 
-
 .queue-priority-value.priority-low {
   background: #1e293b;
-
   color: #94a3b8;
 }
 
-
 .queue-priority-value.priority-normal {
   background: #083344;
-
   color: #67e8f9;
 }
 
-
 .queue-priority-value.priority-high {
   background: #422006;
-
   color: #fbbf24;
 }
 
-
 .queue-priority-value.priority-urgent {
   background: #450a0a;
-
   color: #f87171;
 }
+
 
 /* =========================================================
    RCS MAPPING VALIDATION
@@ -1254,61 +1064,46 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-
   gap: 5px;
-
   min-width: 175px;
 }
 
-
 .readiness.warning {
   background: #422006;
-
   color: #fbbf24;
 }
 
-
 .readiness.queued {
   background: #172554;
-
   color: #93c5fd;
 }
-
 
 .mapping-message-list {
   display: flex;
   flex-direction: column;
-
   gap: 2px;
-
   max-width: 230px;
 }
 
-
 .mapping-message-list small {
   display: block;
-
   font-size: 7px;
-
   line-height: 1.4;
 }
-
 
 .mapping-message-list.error small {
   color: #f87171;
 }
 
-
 .mapping-message-list.warning small {
   color: #fbbf24;
 }
 
-
 .mapping-all-good {
   color: #4ade80;
-
   font-size: 7px;
 }
+
 
 /* =========================================================
    HISTORY BUTTON
@@ -1318,48 +1113,32 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-
   padding: 7px 9px;
-
   border: 1px solid #334155;
   border-radius: 6px;
-
   background: #1e293b;
-
   color: #cbd5e1;
-
   font-size: 8px;
   font-weight: 700;
-
   cursor: pointer;
   white-space: nowrap;
 }
 
-
 .history-button:hover {
   border-color: #0891b2;
-
   background: #164e63;
-
   color: #cffafe;
 }
-
 
 .history-button span {
   display: inline-grid;
   place-items: center;
-
   min-width: 18px;
   height: 18px;
-
   padding: 0 4px;
-
   border-radius: 999px;
-
   background: #020617;
-
   color: #67e8f9;
-
   font-size: 7px;
 }
 
@@ -1370,35 +1149,23 @@
 
 .history-modal-backdrop {
   position: fixed;
-
   inset: 0;
-
   z-index: 10000;
-
   display: flex;
   align-items: center;
   justify-content: center;
-
   padding: 24px;
-
   background: rgba(2, 6, 23, 0.84);
-
   backdrop-filter: blur(4px);
 }
 
-
 .history-modal {
   width: min(760px, 100%);
-
   max-height: 90vh;
-
   overflow-y: auto;
-
   border: 1px solid #334155;
   border-radius: 12px;
-
   background: #0f172a;
-
   box-shadow:
     0 24px 70px
     rgba(0, 0, 0, 0.55);
@@ -1406,292 +1173,292 @@
 
 
 /* =========================================================
-   HEADER
+   HISTORY HEADER
 ========================================================= */
 
 .history-modal-header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-
   gap: 20px;
-
   padding: 20px;
-
   border-bottom: 1px solid #1e293b;
-
   background: #020617;
 }
 
-
 .history-modal-header > div > span {
   display: block;
-
   margin-bottom: 5px;
-
   color: #22d3ee;
-
   font-size: 9px;
   font-weight: 700;
-
   letter-spacing: 0.1em;
 }
 
-
 .history-modal-header h3 {
   margin: 0;
-
   color: #f8fafc;
-
   font-size: 19px;
 }
 
-
 .history-modal-header p {
   margin: 6px 0 0;
-
   color: #64748b;
-
   font-size: 10px;
 }
-
 
 .history-modal-header > button {
   display: grid;
   place-items: center;
-
   width: 32px;
   height: 32px;
-
   border: 1px solid #334155;
   border-radius: 7px;
-
   background: #0f172a;
-
   color: #94a3b8;
-
   cursor: pointer;
+}
+
+.history-modal-header > button:hover {
+  border-color: #475569;
+  color: #f8fafc;
 }
 
 
 /* =========================================================
-   CURRENT STATE
+   HISTORY CURRENT STATE
 ========================================================= */
 
 .history-current-state {
   display: grid;
 
+  /* ปัจจุบันมี:
+     Current State
+     Priority
+     Scheduled Send
+  */
   grid-template-columns:
     repeat(
-      4,
+      3,
       minmax(0, 1fr)
     );
 
   gap: 10px;
-
   padding: 16px 20px;
-
   border-bottom: 1px solid #1e293b;
 }
 
-
 .history-current-state > div {
   padding: 10px;
-
   border: 1px solid #1e293b;
   border-radius: 7px;
-
   background: #020617;
 }
 
-
 .history-current-state span {
   display: block;
-
   margin-bottom: 4px;
-
   color: #64748b;
-
   font-size: 8px;
 }
 
-
 .history-current-state strong {
   display: block;
-
   color: #e2e8f0;
-
   font-size: 9px;
-
   word-break: break-word;
 }
 
 
 /* =========================================================
-   TIMELINE
+   HISTORY SORT CONTROL
+========================================================= */
+
+.history-sort-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 20px;
+  border-bottom: 1px solid #1e293b;
+  background: #0b1220;
+}
+
+.history-sort-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.history-sort-info > span {
+  color: #64748b;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.history-sort-info > strong {
+  color: #e2e8f0;
+  font-size: 10px;
+}
+
+.history-sort-info > small {
+  color: #64748b;
+  font-size: 8px;
+}
+
+.history-sort-buttons {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.history-sort-buttons button {
+  padding: 7px 11px;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  background: #020617;
+  color: #94a3b8;
+  font-size: 8px;
+  font-weight: 700;
+  cursor: pointer;
+
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.history-sort-buttons button:hover {
+  border-color: #475569;
+  background: #0f172a;
+  color: #e2e8f0;
+}
+
+.history-sort-buttons button.active {
+  border-color: #22d3ee;
+  background: rgba(34, 211, 238, 0.1);
+  color: #67e8f9;
+}
+
+
+/* =========================================================
+   HISTORY TIMELINE
 ========================================================= */
 
 .history-timeline {
   padding: 20px;
 }
 
-
 .history-event {
   display: grid;
-
   grid-template-columns:
     22px
     minmax(0, 1fr);
-
   gap: 10px;
 }
 
-
 .history-event-marker {
   position: relative;
-
   display: flex;
   justify-content: center;
 }
 
-
 .history-event-marker::after {
   position: absolute;
-
   top: 15px;
   bottom: -4px;
-
   width: 1px;
-
   background: #334155;
-
   content: "";
 }
-
 
 .history-event:last-child
 .history-event-marker::after {
   display: none;
 }
 
-
 .history-event-marker span {
   position: relative;
-
   z-index: 1;
-
   width: 9px;
   height: 9px;
-
   margin-top: 5px;
-
   border: 2px solid #22d3ee;
   border-radius: 50%;
-
   background: #020617;
 }
-
 
 .history-event-content {
   margin-bottom: 18px;
-
   padding: 10px 12px;
-
   border: 1px solid #1e293b;
   border-radius: 7px;
-
   background: #020617;
 }
-
 
 .history-event-top {
   display: flex;
   align-items: center;
   justify-content: space-between;
-
   gap: 10px;
 }
 
-
 .history-event-top strong {
   color: #67e8f9;
-
   font-size: 9px;
 }
-
 
 .history-event-top time {
   color: #64748b;
-
   font-size: 8px;
 }
 
-
 .history-event-content p {
   margin: 7px 0 0;
-
   color: #cbd5e1;
-
   font-size: 9px;
-
   line-height: 1.5;
 }
-
 
 .history-event-content details {
   margin-top: 8px;
 }
 
-
 .history-event-content summary {
   color: #64748b;
-
   font-size: 8px;
-
   cursor: pointer;
 }
 
-
 .history-event-content pre {
   overflow-x: auto;
-
   margin: 7px 0 0;
-
   padding: 8px;
-
   border-radius: 5px;
-
   background: #000;
-
   color: #a5f3fc;
-
   font-size: 8px;
 }
 
 
 /* =========================================================
-   EMPTY
+   HISTORY EMPTY
 ========================================================= */
 
 .history-empty {
   display: flex;
   flex-direction: column;
   align-items: center;
-
   gap: 7px;
-
   padding: 35px;
-
   color: #64748b;
-
   text-align: center;
 }
-
 
 .history-empty strong {
   color: #94a3b8;
 }
-
 
 .history-empty span {
   font-size: 8px;
@@ -1699,98 +1466,90 @@
 
 
 /* =========================================================
-   FOOTER
+   HISTORY FOOTER
 ========================================================= */
 
 .history-modal-footer {
   display: flex;
   justify-content: flex-end;
-
   padding: 14px 20px;
-
   border-top: 1px solid #1e293b;
-
   background: #020617;
 }
 
-
 .history-modal-footer button {
   padding: 8px 15px;
-
   border: 1px solid #334155;
   border-radius: 6px;
-
   background: #1e293b;
-
   color: #e2e8f0;
-
   font-size: 9px;
   font-weight: 700;
-
   cursor: pointer;
+}
+
+.history-modal-footer button:hover {
+  background: #334155;
 }
 
 
 /* =========================================================
-   RESPONSIVE
+   HISTORY RESPONSIVE
 ========================================================= */
 
 @media (max-width: 700px) {
-
   .history-current-state {
     grid-template-columns: 1fr;
   }
 
-
-  .history-event-top {
-    align-items: flex-start;
-
+  .history-sort-bar {
+    align-items: stretch;
     flex-direction: column;
   }
 
+  .history-sort-buttons {
+    width: 100%;
+  }
+
+  .history-sort-buttons button {
+    flex: 1;
+  }
+
+  .history-event-top {
+    align-items: flex-start;
+    flex-direction: column;
+  }
 }
 
+
 /* =========================================================
-   SIMULATE SEND
+   SEND TO BRIDGE BUTTON
 ========================================================= */
 
 .simulate-send-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-
   gap: 5px;
-
   min-width: 108px;
-
   padding: 7px 9px;
-
   border: 1px solid #0e7490;
   border-radius: 6px;
-
   background: #083344;
-
   color: #67e8f9;
-
   font-size: 8px;
   font-weight: 700;
-
   white-space: nowrap;
-
   cursor: pointer;
 }
 
-
 .simulate-send-button:hover:not(:disabled) {
   border-color: #22d3ee;
-
   background: #155e75;
 }
 
-
 .simulate-send-button:disabled {
   opacity: 0.4;
-
   cursor: not-allowed;
 }
 
@@ -1801,7 +1560,6 @@
 
 .queue-sending {
   background: #172554;
-
   color: #93c5fd;
 }
 
@@ -1814,84 +1572,60 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-
   gap: 4px;
-
   min-width: 115px;
 }
 
-
 .rcs-status {
   display: inline-flex;
-
   padding: 4px 7px;
-
   border-radius: 5px;
-
   font-size: 8px;
   font-weight: 700;
-
   white-space: nowrap;
 }
 
-
 .rcs-status-not-sent {
   background: #1e293b;
-
   color: #94a3b8;
 }
 
-
 .rcs-status-created {
   background: #172554;
-
   color: #93c5fd;
 }
 
-
 .rcs-status-running {
   background: #083344;
-
   color: #67e8f9;
 }
 
-
 .rcs-status-completed {
   background: #052e16;
-
   color: #4ade80;
 }
-
 
 .rcs-status-exception,
 .rcs-status-interrupted,
 .rcs-status-canceled {
   background: #450a0a;
-
   color: #f87171;
 }
 
-
 .rcs-status-wrap small {
   display: block;
-
   max-width: 140px;
-
   overflow: hidden;
-
   color: #64748b;
-
   font-family: monospace;
   font-size: 7px;
-
   text-overflow: ellipsis;
-
   white-space: nowrap;
 }
+
+
 /* =========================================================
    DESKTOP FIT-WIDTH OVERRIDES
-   Scheduled Command Queue: keep all columns inside panel
-   without horizontal scrolling on normal desktop widths.
 ========================================================= */
 
 @media (min-width: 1100px) {
@@ -1918,7 +1652,11 @@
     font-size: 9px;
   }
 
-  /* 11 queue columns = 100% */
+
+  /* =======================================================
+     COLUMN WIDTHS
+  ======================================================= */
+
   .robot-task-table th:nth-child(1),
   .robot-task-table td:nth-child(1) {
     width: 5%;
@@ -1974,7 +1712,11 @@
     width: 5%;
   }
 
-  /* Queue / task identifiers */
+
+  /* =======================================================
+     QUEUE / TASK ID
+  ======================================================= */
+
   .robot-task-table td:nth-child(1) > strong,
   .robot-task-table td:nth-child(2) > strong,
   .robot-task-table td:nth-child(1) > small,
@@ -1985,10 +1727,18 @@
     overflow-wrap: anywhere;
   }
 
-  /* HIK RCS route: remove the old 250px minimum width */
+
+  /* =======================================================
+     HIK RCS ROUTE
+  ======================================================= */
+
   .robot-task-table .dispatcher-route-cell {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    grid-template-columns:
+      minmax(0, 1fr)
+      auto
+      minmax(0, 1fr);
+
     align-items: center;
     gap: 5px;
     width: 100%;
@@ -2023,7 +1773,11 @@
     flex: 0 0 auto;
   }
 
-  /* Priority editor */
+
+  /* =======================================================
+     PRIORITY EDITOR
+  ======================================================= */
+
   .robot-task-table .queue-priority-editor {
     display: grid;
     grid-template-columns: 1fr;
@@ -2045,9 +1799,16 @@
     padding: 3px 5px;
   }
 
-  /* Schedule editor */
+
+  /* =======================================================
+     SCHEDULE EDITOR
+  ======================================================= */
+
   .robot-task-table .queue-schedule-editor {
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns:
+      minmax(0, 1fr)
+      auto;
+
     width: 100%;
     min-width: 0;
     gap: 4px;
@@ -2072,7 +1833,11 @@
     white-space: nowrap;
   }
 
-  /* Queue-state badges */
+
+  /* =======================================================
+     QUEUE STATE
+  ======================================================= */
+
   .robot-task-table .queue-state {
     max-width: 100%;
     padding: 4px 5px;
@@ -2081,7 +1846,11 @@
     text-align: center;
   }
 
-  /* RCS status */
+
+  /* =======================================================
+     RCS STATUS
+  ======================================================= */
+
   .robot-task-table .rcs-status-wrap {
     width: 100%;
     min-width: 0;
@@ -2100,7 +1869,11 @@
     text-overflow: ellipsis;
   }
 
-  /* Draft actions stack vertically to save width */
+
+  /* =======================================================
+     DRAFT ACTION
+  ======================================================= */
+
   .robot-task-table .draft-action-buttons {
     display: grid;
     grid-template-columns: 1fr;
@@ -2117,7 +1890,11 @@
     font-size: 7px;
   }
 
-  /* History */
+
+  /* =======================================================
+     HISTORY
+  ======================================================= */
+
   .robot-task-table .history-button {
     width: 100%;
     min-width: 0;
@@ -2133,7 +1910,11 @@
     padding: 0 3px;
   }
 
-  /* Action / simulate send */
+
+  /* =======================================================
+     SEND TO BRIDGE
+  ======================================================= */
+
   .robot-task-table .simulate-send-button {
     width: 100%;
     min-width: 0;
@@ -2143,7 +1924,11 @@
     line-height: 1.2;
   }
 
-  /* Delete */
+
+  /* =======================================================
+     DELETE
+  ======================================================= */
+
   .robot-task-table .robot-remove-button {
     width: 100%;
     min-width: 0;
@@ -2151,12 +1936,17 @@
   }
 }
 
-/* On smaller screens, keep horizontal scrolling rather than crushing data. */
+
+/* =========================================================
+   SMALL SCREEN TABLE
+========================================================= */
+
 @media (max-width: 1099px) {
   .robot-task-table {
     min-width: 1050px;
   }
 }
+
 
 /* =========================================================
    QUEUE REMOVE LIFECYCLE LOCK
@@ -2164,6 +1954,298 @@
 
 .robot-remove-button:disabled {
   opacity: 0.35;
-
   cursor: not-allowed;
+}
+
+/* =========================================================
+   SCHEDULED QUEUE HEADER TOOLS
+========================================================= */
+
+.queue-header-tools {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+
+  gap: 12px;
+}
+
+
+/* =========================================================
+   QUEUE VIEW ORDER
+========================================================= */
+
+.queue-view-order {
+  display: flex;
+  flex-direction: column;
+
+  gap: 5px;
+
+  min-width: 220px;
+}
+
+
+.queue-view-order > span {
+  color: #64748b;
+
+  font-size: 8px;
+  font-weight: 700;
+
+  letter-spacing: 0.08em;
+}
+
+
+/* =========================================================
+   QUEUE VIEW ORDER BUTTONS
+========================================================= */
+
+.queue-view-order-buttons {
+  display: flex;
+  align-items: center;
+
+  gap: 5px;
+}
+
+
+.queue-view-order-buttons button {
+  padding: 7px 9px;
+
+  border: 1px solid #334155;
+  border-radius: 6px;
+
+  background: #020617;
+
+  color: #94a3b8;
+
+  font-size: 8px;
+  font-weight: 700;
+
+  white-space: nowrap;
+
+  cursor: pointer;
+
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+
+.queue-view-order-buttons button:hover {
+  border-color: #475569;
+
+  background: #0f172a;
+
+  color: #e2e8f0;
+}
+
+
+.queue-view-order-buttons button.active {
+  border-color: #22d3ee;
+
+  background: rgba(
+    34,
+    211,
+    238,
+    0.1
+  );
+
+  color: #67e8f9;
+}
+
+
+/* =========================================================
+   HISTORY SORT BAR
+========================================================= */
+
+.history-sort-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  gap: 16px;
+
+  padding: 12px 20px;
+
+  border-bottom: 1px solid #1e293b;
+
+  background: #0b1220;
+}
+
+
+/* =========================================================
+   HISTORY SORT INFO
+========================================================= */
+
+.history-sort-info {
+  display: flex;
+  flex-direction: column;
+
+  gap: 3px;
+}
+
+
+.history-sort-info > span {
+  color: #64748b;
+
+  font-size: 8px;
+  font-weight: 700;
+
+  letter-spacing: 0.08em;
+}
+
+
+.history-sort-info > strong {
+  color: #e2e8f0;
+
+  font-size: 10px;
+}
+
+
+.history-sort-info > small {
+  color: #64748b;
+
+  font-size: 8px;
+}
+
+
+/* =========================================================
+   HISTORY SORT BUTTONS
+========================================================= */
+
+.history-sort-buttons {
+  display: flex;
+  align-items: center;
+
+  gap: 6px;
+}
+
+
+.history-sort-buttons button {
+  padding: 7px 11px;
+
+  border: 1px solid #334155;
+  border-radius: 6px;
+
+  background: #020617;
+
+  color: #94a3b8;
+
+  font-size: 8px;
+  font-weight: 700;
+
+  cursor: pointer;
+
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+
+.history-sort-buttons button:hover {
+  border-color: #475569;
+
+  background: #0f172a;
+
+  color: #e2e8f0;
+}
+
+
+.history-sort-buttons button.active {
+  border-color: #22d3ee;
+
+  background: rgba(
+    34,
+    211,
+    238,
+    0.1
+  );
+
+  color: #67e8f9;
+}
+
+
+/* =========================================================
+   CURRENT HISTORY STATE
+========================================================= */
+
+.history-current-state {
+  display: grid;
+
+  grid-template-columns:
+    repeat(
+      3,
+      minmax(0, 1fr)
+    );
+
+  gap: 10px;
+
+  padding: 16px 20px;
+
+  border-bottom: 1px solid #1e293b;
+}
+
+
+/* =========================================================
+   RESPONSIVE
+========================================================= */
+
+@media (max-width: 900px) {
+
+  .queue-header-tools {
+    align-items: stretch;
+
+    flex-direction: column;
+  }
+
+
+  .queue-view-order {
+    width: 100%;
+
+    min-width: 0;
+  }
+
+
+  .queue-view-order-buttons {
+    width: 100%;
+  }
+
+
+  .queue-view-order-buttons button {
+    flex: 1;
+  }
+
+
+  .dispatcher-live-time {
+    width: 100%;
+
+    box-sizing: border-box;
+  }
+}
+
+
+@media (max-width: 700px) {
+
+  .history-current-state {
+    grid-template-columns:
+      1fr;
+  }
+
+
+  .history-sort-bar {
+    align-items: stretch;
+
+    flex-direction: column;
+  }
+
+
+  .history-sort-buttons {
+    width: 100%;
+  }
+
+
+  .history-sort-buttons button {
+    flex: 1;
+  }
+
 }

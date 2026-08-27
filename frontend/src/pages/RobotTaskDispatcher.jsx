@@ -18,6 +18,7 @@ import {
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -28,6 +29,11 @@ import {
   syncTaskStatusToOperations,
 } from "../utils/taskOperationSync";
 
+import {
+  createRcsBridgeTask,
+  getRcsBridgeTask,
+} from "../services/rcs";
+
 import "../styles/RobotTaskDispatcher.css";
 
 
@@ -37,12 +43,6 @@ const WAREHOUSE_TASK_KEY =
 const LOCATION_STORAGE_KEY =
   "wms-storage-locations-v1";
 
-
-/*
- * ยังใช้ key เดิมจาก V6
- *
- * เพื่อไม่ให้ข้อมูลเก่าที่เคยสร้างไว้หาย
- */
 const RCS_QUEUE_KEY =
   "wms-robot-tasks-v1";
 
@@ -55,13 +55,6 @@ const PRIORITY_ORDER = {
 };
 
 
-/*
- * WMS Priority
- * ↓
- * HIK RCS Priority
- *
- * HIK รองรับช่วง 1 - 120
- */
 const RCS_PRIORITY = {
   LOW: 30,
   NORMAL: 60,
@@ -71,6 +64,7 @@ const RCS_PRIORITY = {
 
 
 export default function RobotTaskDispatcher() {
+
   const [
     warehouseTasks,
     setWarehouseTasks,
@@ -95,22 +89,11 @@ export default function RobotTaskDispatcher() {
   );
 
 
-  /*
-   * เก็บเวลาที่ user กำลังเลือก
-   * ก่อน Add Queue
-   */
-
   const [
     scheduleDrafts,
     setScheduleDrafts,
   ] = useState({});
 
-
-  /*
-   * เลขท้าย gateway
-   *
-   * 192.168.50.xxx
-   */
 
   const [
     gatewayLastOctet,
@@ -123,30 +106,37 @@ export default function RobotTaskDispatcher() {
     setCopyMessage,
   ] = useState("");
 
-  /*
-  * Command Draft ที่กำลังเปิดดู
-  */
 
   const [
     selectedDraft,
     setSelectedDraft,
   ] = useState(null);
 
-  /*
-  * Queue Item ที่กำลังเปิดดู History
-  */
 
   const [
     selectedHistoryItem,
     setSelectedHistoryItem,
   ] = useState(null);
 
-  /*
-   * เวลา realtime
-   *
-   * ใช้ตรวจว่า Scheduled Task
-   * ถึงเวลาหรือยัง
-   */
+
+  /* =====================================================
+     QUEUE VIEW ORDER
+  ===================================================== */
+
+  const [
+    queueViewOrder,
+    setQueueViewOrder,
+  ] = useState(
+    "OLDEST"
+  );
+
+
+  /* =====================================================
+     LIVE CLOCK
+
+     IMPORTANT:
+     now ถูกประกาศแค่ครั้งเดียว
+  ===================================================== */
 
   const [
     now,
@@ -156,37 +146,48 @@ export default function RobotTaskDispatcher() {
   );
 
 
+  const rcsPollInFlightRef =
+    useRef(
+      new Set()
+    );
+
+
   /* =====================================================
      LIVE CLOCK
   ===================================================== */
 
   useEffect(() => {
+
     const timer =
       window.setInterval(
-        () =>
+        () => {
           setNow(
             Date.now()
-          ),
+          );
+        },
         1000
       );
 
 
-    return () =>
+    return () => {
       window.clearInterval(
         timer
       );
+    };
+
   }, []);
 
 
   /* =====================================================
-     SAVE RCS QUEUE
+     SAVE DISPATCH QUEUE
   ===================================================== */
 
   useEffect(() => {
+
     try {
+
       localStorage.setItem(
         RCS_QUEUE_KEY,
-
         JSON.stringify(
           dispatchQueue
         )
@@ -205,20 +206,159 @@ export default function RobotTaskDispatcher() {
           }
         )
       );
+
     } catch (error) {
+
       console.error(
         "Could not save RCS dispatch queue.",
         error
       );
+
     }
-  }, [dispatchQueue]);
+
+  }, [
+    dispatchQueue,
+  ]);
 
 
   /* =====================================================
-     REFRESH
+     BACKEND RCS BRIDGE POLLING
+  ===================================================== */
+
+  useEffect(() => {
+
+    let cancelled =
+      false;
+
+
+    async function pollActiveBridgeTasks() {
+
+      const latestQueue =
+        loadDispatchQueue();
+
+
+      const activeItems =
+        latestQueue.filter(
+          (entry) =>
+            entry.sendStatus ===
+              "SENT" &&
+            Boolean(
+              entry.bridgeTaskId
+            ) &&
+            String(
+              entry.rcsStatus ||
+              "NOT_SENT"
+            ).toUpperCase() !==
+              "COMPLETED"
+        );
+
+
+      for (
+        const entry
+        of activeItems
+      ) {
+
+        if (
+          rcsPollInFlightRef
+            .current
+            .has(
+              entry.id
+            )
+        ) {
+          continue;
+        }
+
+
+        rcsPollInFlightRef
+          .current
+          .add(
+            entry.id
+          );
+
+
+        try {
+
+          const response =
+            await getRcsBridgeTask(
+              entry.bridgeTaskId
+            );
+
+
+          if (
+            !cancelled
+          ) {
+
+            applyRcsBridgeSnapshot(
+              entry,
+              response
+            );
+
+          }
+
+        } catch (error) {
+
+          if (
+            !cancelled
+          ) {
+
+            markRcsBridgePollError(
+              entry.id,
+              error
+            );
+
+          }
+
+        } finally {
+
+          rcsPollInFlightRef
+            .current
+            .delete(
+              entry.id
+            );
+
+        }
+
+      }
+
+    }
+
+
+    pollActiveBridgeTasks();
+
+
+    const pollTimer =
+      window.setInterval(
+        pollActiveBridgeTasks,
+        1000
+      );
+
+
+    return () => {
+
+      cancelled =
+        true;
+
+
+      window.clearInterval(
+        pollTimer
+      );
+
+
+      rcsPollInFlightRef
+        .current
+        .clear();
+
+    };
+
+  }, []);
+
+
+  /* =====================================================
+     REFRESH DATA
   ===================================================== */
 
   function refreshData() {
+
     setWarehouseTasks(
       loadWarehouseTasks()
     );
@@ -232,13 +372,20 @@ export default function RobotTaskDispatcher() {
     setDispatchQueue(
       loadDispatchQueue()
     );
+
   }
 
 
+  /* =====================================================
+     DATA EVENTS
+  ===================================================== */
+
   useEffect(() => {
+
     function handleStorage(
       event
     ) {
+
       if (
         [
           WAREHOUSE_TASK_KEY,
@@ -248,14 +395,18 @@ export default function RobotTaskDispatcher() {
           event.key
         )
       ) {
+
         refreshData();
+
       }
+
     }
 
 
     function handleWmsDataChanged(
       event
     ) {
+
       const keys =
         event.detail?.keys ||
         [];
@@ -272,6 +423,7 @@ export default function RobotTaskDispatcher() {
             )
         )
       ) {
+
         setWarehouseTasks(
           loadWarehouseTasks()
         );
@@ -280,7 +432,9 @@ export default function RobotTaskDispatcher() {
         setLocations(
           loadLocations()
         );
+
       }
+
     }
 
 
@@ -303,6 +457,7 @@ export default function RobotTaskDispatcher() {
 
 
     return () => {
+
       window.removeEventListener(
         "focus",
         refreshData
@@ -319,12 +474,14 @@ export default function RobotTaskDispatcher() {
         "wms-data-changed",
         handleWmsDataChanged
       );
+
     };
+
   }, []);
 
 
   /* =====================================================
-     LOCATION LOOKUP
+     LOCATION MAP
   ===================================================== */
 
   const locationMap =
@@ -338,16 +495,11 @@ export default function RobotTaskDispatcher() {
             ]
           )
         ),
-
-      [locations]
+      [
+        locations,
+      ]
     );
 
-
-  /*
-   * Receiving
-   *
-   * ใช้เป็นต้นทางของ Putaway
-   */
 
   const receivingLocation =
     useMemo(
@@ -356,16 +508,11 @@ export default function RobotTaskDispatcher() {
           locations,
           "RECEIVING"
         ),
-
-      [locations]
+      [
+        locations,
+      ]
     );
 
-
-  /*
-   * Shipping
-   *
-   * ใช้เป็นปลายทางของ Picking
-   */
 
   const shippingLocation =
     useMemo(
@@ -374,8 +521,9 @@ export default function RobotTaskDispatcher() {
           locations,
           "SHIPPING"
         ),
-
-      [locations]
+      [
+        locations,
+      ]
     );
 
 
@@ -385,12 +533,8 @@ export default function RobotTaskDispatcher() {
 
   const candidates =
     useMemo(() => {
-      return warehouseTasks
 
-        /*
-         * เอาเฉพาะ Task
-         * ที่ยังรอทำ
-         */
+      return warehouseTasks
 
         .filter(
           (task) =>
@@ -398,13 +542,9 @@ export default function RobotTaskDispatcher() {
             "PENDING"
         )
 
-
-        /*
-         * หา Source / Destination
-         */
-
         .map(
           (task) => {
+
             const endpoints =
               resolveTaskEndpoints({
                 task,
@@ -414,10 +554,6 @@ export default function RobotTaskDispatcher() {
               });
 
 
-            /*
-             * Task นี้อยู่ใน Queue แล้วหรือยัง
-             */
-
             const existingQueueItem =
               dispatchQueue.find(
                 (item) =>
@@ -425,10 +561,6 @@ export default function RobotTaskDispatcher() {
                   task.id
               );
 
-
-            /*
-             * ตรวจ mapping
-             */
 
             const readiness =
               getEndpointReadiness(
@@ -442,7 +574,7 @@ export default function RobotTaskDispatcher() {
               endpoints,
 
               existingQueueItem,
-              
+
               readiness,
 
               ready:
@@ -454,18 +586,14 @@ export default function RobotTaskDispatcher() {
                   ? "Already in RCS queue"
                   : readiness.message,
             };
+
           }
         )
-
-
-        /*
-         * Warehouse Task list
-         * เรียง priority ก่อน
-         */
 
         .sort(
           compareWarehouseCandidates
         );
+
     }, [
       warehouseTasks,
       dispatchQueue,
@@ -477,19 +605,16 @@ export default function RobotTaskDispatcher() {
 
   /* =====================================================
      QUEUE ROWS
+
+     นี่คือลำดับสำหรับ dispatch จริง
   ===================================================== */
 
   const queueRows =
     useMemo(() => {
+
       const enriched =
         dispatchQueue.map(
           (item) => {
-            /*
-             * Refresh RCS Point
-             * จาก Storage Location ล่าสุด
-             *
-             * เช่น user ไปแก้ Point หลังจาก Add Queue
-             */
 
             const endpoints =
               enrichQueuedEndpoints(
@@ -497,10 +622,6 @@ export default function RobotTaskDispatcher() {
                 locationMap
               );
 
-
-            /*
-             * ตรวจ Queue state
-             */
 
             const state =
               getQueueState({
@@ -518,17 +639,13 @@ export default function RobotTaskDispatcher() {
               queueState:
                 state,
 
-              /*
-               * สร้าง preview
-               * สำหรับ command ที่จะส่งในอนาคต
-               */
-
               commandDraft:
                 buildCommandDraft({
                   ...item,
                   ...endpoints,
                 }),
             };
+
           }
         );
 
@@ -536,6 +653,7 @@ export default function RobotTaskDispatcher() {
       return enriched.sort(
         compareQueueRows
       );
+
     }, [
       dispatchQueue,
       locationMap,
@@ -543,9 +661,122 @@ export default function RobotTaskDispatcher() {
     ]);
 
 
-  /*
-   * READY only
-   */
+  /* =====================================================
+     TABLE VIEW ORDER
+
+     เปลี่ยนเฉพาะลำดับที่เห็นบนหน้าจอ
+  ===================================================== */
+
+  const displayQueueRows =
+    useMemo(
+      () => {
+
+        const rows =
+          [
+            ...queueRows,
+          ];
+
+
+        rows.sort(
+          (
+            a,
+            b
+          ) => {
+
+            const timeA =
+              getTime(
+                a.createdAt
+              );
+
+
+            const timeB =
+              getTime(
+                b.createdAt
+              );
+
+
+            /* -------------------------------------------
+               OLDEST → NEWEST
+            ------------------------------------------- */
+
+            if (
+              queueViewOrder ===
+              "OLDEST"
+            ) {
+
+              if (
+                timeA !==
+                timeB
+              ) {
+
+                return (
+                  timeA -
+                  timeB
+                );
+
+              }
+
+
+              return (
+                getQueueNumber(
+                  a.id
+                )
+                -
+                getQueueNumber(
+                  b.id
+                )
+              );
+
+            }
+
+
+            /* -------------------------------------------
+               NEWEST → OLDEST
+            ------------------------------------------- */
+
+            if (
+              timeA !==
+              timeB
+            ) {
+
+              return (
+                timeB -
+                timeA
+              );
+
+            }
+
+
+            return (
+              getQueueNumber(
+                b.id
+              )
+              -
+              getQueueNumber(
+                a.id
+              )
+            );
+
+          }
+        );
+
+
+        return rows;
+
+      },
+
+      [
+        queueRows,
+        queueViewOrder,
+      ]
+    );
+
+
+  /* =====================================================
+     READY QUEUE
+
+     ใช้ queueRows ไม่ใช่ displayQueueRows
+  ===================================================== */
 
   const readyQueue =
     useMemo(
@@ -555,18 +786,11 @@ export default function RobotTaskDispatcher() {
             item.queueState ===
             "READY"
         ),
-
-      [queueRows]
+      [
+        queueRows,
+      ]
     );
 
-
-  /*
-   * Ranking
-   *
-   * READY #1
-   * READY #2
-   * ...
-   */
 
   const readyRankMap =
     useMemo(
@@ -582,155 +806,144 @@ export default function RobotTaskDispatcher() {
             ]
           )
         ),
-
-      [readyQueue]
-    );
-
-/* =========================================================
-   QUEUE STATE HISTORY WATCHER
-========================================================= */
-
-useEffect(() => {
-  /*
-   * queueRows จะคำนวณ Queue State ใหม่
-   * ทุกครั้งที่เวลาเปลี่ยน
-   *
-   * เช่น:
-   *
-   * WAITING_TIME
-   *       ↓
-   * READY
-   */
-
-  if (
-    queueRows.length ===
-    0
-  ) {
-    return;
-  }
-
-
-  const rowMap =
-    new Map(
-      queueRows.map(
-        (row) => [
-          row.id,
-          row,
-        ]
-      )
+      [
+        readyQueue,
+      ]
     );
 
 
-  setDispatchQueue(
-    (current) => {
-      let changed =
-        false;
+  /* =====================================================
+     QUEUE STATE HISTORY
+  ===================================================== */
 
+  useEffect(() => {
 
-      const updated =
-        current.map(
-          (item) => {
-            const row =
-              rowMap.get(
-                item.id
-              );
+    if (
+      queueRows.length ===
+      0
+    ) {
 
+      return;
 
-            if (!row) {
-              return item;
-            }
-
-
-            const nextState =
-              row.queueState;
-
-
-            const previousState =
-              item.lastQueueState ||
-              "";
-
-
-            /*
-             * ไม่มีการเปลี่ยน State
-             */
-
-            if (
-              previousState ===
-              nextState
-            ) {
-              return item;
-            }
-
-
-            changed =
-              true;
-
-
-            const eventTime =
-              new Date().toISOString();
-
-
-            let message;
-
-
-            /*
-             * ครั้งแรก
-             */
-
-            if (
-              !previousState
-            ) {
-              message =
-                `Initial Queue State: ${nextState}.`;
-            } else {
-              message =
-                `Queue State changed from ${previousState} to ${nextState}.`;
-            }
-
-
-            return {
-              ...item,
-
-
-              lastQueueState:
-                nextState,
-
-
-              history:
-                appendHistory(
-                  item.history,
-
-                  createHistoryEvent({
-                    type:
-                      "QUEUE_STATE_CHANGED",
-
-                    message,
-
-                    at:
-                      eventTime,
-
-                    details: {
-                      from:
-                        previousState ||
-                        null,
-
-                      to:
-                        nextState,
-                    },
-                  })
-                ),
-            };
-          }
-        );
-
-
-      return changed
-        ? updated
-        : current;
     }
-  );
 
-}, [queueRows]);
+
+    const rowMap =
+      new Map(
+        queueRows.map(
+          (row) => [
+            row.id,
+            row,
+          ]
+        )
+      );
+
+
+    setDispatchQueue(
+      (current) => {
+
+        let changed =
+          false;
+
+
+        const updated =
+          current.map(
+            (item) => {
+
+              const row =
+                rowMap.get(
+                  item.id
+                );
+
+
+              if (
+                !row
+              ) {
+
+                return item;
+
+              }
+
+
+              const nextState =
+                row.queueState;
+
+
+              const previousState =
+                item.lastQueueState ||
+                "";
+
+
+              if (
+                previousState ===
+                nextState
+              ) {
+
+                return item;
+
+              }
+
+
+              changed =
+                true;
+
+
+              const eventTime =
+                new Date()
+                  .toISOString();
+
+
+              const message =
+                !previousState
+                  ? `Initial Queue State: ${nextState}.`
+                  : `Queue State changed from ${previousState} to ${nextState}.`;
+
+
+              return {
+                ...item,
+
+                lastQueueState:
+                  nextState,
+
+                history:
+                  appendHistory(
+                    item.history,
+
+                    createHistoryEvent({
+                      type:
+                        "QUEUE_STATE_CHANGED",
+
+                      message,
+
+                      at:
+                        eventTime,
+
+                      details: {
+                        from:
+                          previousState ||
+                          null,
+
+                        to:
+                          nextState,
+                      },
+                    })
+                  ),
+              };
+
+            }
+          );
+
+
+        return changed
+          ? updated
+          : current;
+
+      }
+    );
+
+  }, [
+    queueRows,
+  ]);
 
 
   /* =====================================================
@@ -740,6 +953,7 @@ useEffect(() => {
   const summary =
     useMemo(
       () => ({
+
         pendingWarehouse:
           candidates.length,
 
@@ -765,8 +979,8 @@ useEffect(() => {
               item.queueState ===
               "MAPPING_REQUIRED"
           ).length,
-      }),
 
+      }),
       [
         candidates,
         queueRows,
@@ -782,28 +996,22 @@ useEffect(() => {
   function queueWarehouseTask(
     candidate
   ) {
+
     if (
       !candidate.ready
     ) {
+
       return;
+
     }
 
-
-    /*
-     * อ่านเวลาที่เลือก
-     */
 
     const scheduleValue =
       scheduleDrafts[
         candidate.task.id
-      ] || "";
+      ] ||
+      "";
 
-
-    /*
-     * ถ้าไม่ได้เลือกเวลา
-     *
-     * = พร้อมทันที
-     */
 
     const scheduledSendAt =
       parseScheduleInput(
@@ -813,9 +1021,6 @@ useEffect(() => {
 
     setDispatchQueue(
       (current) => {
-        /*
-         * กัน duplicate
-         */
 
         const exists =
           current.some(
@@ -825,8 +1030,12 @@ useEffect(() => {
           );
 
 
-        if (exists) {
+        if (
+          exists
+        ) {
+
           return current;
+
         }
 
 
@@ -851,16 +1060,14 @@ useEffect(() => {
           ...current,
           record,
         ];
+
       }
     );
 
 
-    /*
-     * clear schedule field
-     */
-
     setScheduleDrafts(
       (current) => {
+
         const next = {
           ...current,
         };
@@ -872,927 +1079,1527 @@ useEffect(() => {
 
 
         return next;
+
       }
     );
+
   }
 
-/* =====================================================
-   UPDATE QUEUE PRIORITY
-===================================================== */
 
-function updateQueuePriority(
-  itemId,
-  priority
-) {
-  const normalized =
-    normalizeWmsPriority(
-      priority
+  /* =====================================================
+     UPDATE PRIORITY
+  ===================================================== */
+
+  function updateQueuePriority(
+    itemId,
+    priority
+  ) {
+
+    const normalized =
+      normalizeWmsPriority(
+        priority
+      );
+
+
+    const rcsPriority =
+      RCS_PRIORITY[
+        normalized
+      ] ||
+      60;
+
+
+    const nowIso =
+      new Date()
+        .toISOString();
+
+
+    setDispatchQueue(
+      (current) =>
+        current.map(
+          (item) => {
+
+            if (
+              item.id !==
+                itemId ||
+              isQueueLocked(
+                item
+              )
+            ) {
+
+              return item;
+
+            }
+
+
+            const oldPriority =
+              normalizeWmsPriority(
+                item.wmsPriority
+              );
+
+
+            const oldRcsPriority =
+              clampRcsPriority(
+                item.rcsPriority
+              );
+
+
+            if (
+              oldPriority ===
+                normalized &&
+              oldRcsPriority ===
+                rcsPriority
+            ) {
+
+              return item;
+
+            }
+
+
+            return {
+              ...item,
+
+              wmsPriority:
+                normalized,
+
+              rcsPriority,
+
+              priorityUpdatedAt:
+                nowIso,
+
+              history:
+                appendHistory(
+                  item.history,
+
+                  createHistoryEvent({
+                    type:
+                      "PRIORITY_UPDATED",
+
+                    message:
+                      `Priority changed from ${oldPriority} (RCS ${oldRcsPriority}) to ${normalized} (RCS ${rcsPriority}).`,
+
+                    at:
+                      nowIso,
+
+                    details: {
+                      fromPriority:
+                        oldPriority,
+
+                      toPriority:
+                        normalized,
+
+                      fromRcsPriority:
+                        oldRcsPriority,
+
+                      toRcsPriority:
+                        rcsPriority,
+                    },
+                  })
+                ),
+            };
+
+          }
+        )
     );
 
-  const rcsPriority =
-    RCS_PRIORITY[normalized] ||
-    60;
+  }
 
-  const nowIso =
-    new Date().toISOString();
 
-  setDispatchQueue(
-    (current) =>
-      current.map(
-        (item) => {
-          if (
-            item.id !== itemId ||
-            isQueueLocked(item)
-          ) {
-            return item;
-          }
+  /* =====================================================
+     UPDATE SCHEDULE
+  ===================================================== */
 
-          const oldPriority =
-            normalizeWmsPriority(
-              item.wmsPriority
-            );
+  function updateQueueSchedule(
+    itemId,
+    value
+  ) {
 
-          const oldRcsPriority =
-            clampRcsPriority(
-              item.rcsPriority
-            );
+    let scheduledSendAt;
 
-          if (
-            oldPriority === normalized &&
-            oldRcsPriority === rcsPriority
-          ) {
-            return item;
-          }
-
-          return {
-            ...item,
-            wmsPriority: normalized,
-            rcsPriority,
-            priorityUpdatedAt: nowIso,
-            history: appendHistory(
-              item.history,
-              createHistoryEvent({
-                type: "PRIORITY_UPDATED",
-                message: `Priority changed from ${oldPriority} (RCS ${oldRcsPriority}) to ${normalized} (RCS ${rcsPriority}).`,
-                at: nowIso,
-                details: {
-                  fromPriority: oldPriority,
-                  toPriority: normalized,
-                  fromRcsPriority: oldRcsPriority,
-                  toRcsPriority: rcsPriority,
-                },
-              })
-            ),
-          };
-        }
-      )
-  );
-}
-
-/* =====================================================
-   UPDATE QUEUE SCHEDULE
-===================================================== */
-
-function updateQueueSchedule(
-  itemId,
-  value
-) {
-  let scheduledSendAt;
-
-  if (!value) {
-    scheduledSendAt =
-      new Date().toISOString();
-  } else {
-    const selectedDate =
-      new Date(value);
 
     if (
-      Number.isNaN(
-        selectedDate.getTime()
-      )
+      !value
     ) {
-      return;
+
+      scheduledSendAt =
+        new Date()
+          .toISOString();
+
+    } else {
+
+      const selectedDate =
+        new Date(
+          value
+        );
+
+
+      if (
+        Number.isNaN(
+          selectedDate.getTime()
+        )
+      ) {
+
+        return;
+
+      }
+
+
+      scheduledSendAt =
+        selectedDate
+          .toISOString();
+
     }
 
-    scheduledSendAt =
-      selectedDate.toISOString();
-  }
 
-  const nowIso =
-    new Date().toISOString();
+    const nowIso =
+      new Date()
+        .toISOString();
 
-  setDispatchQueue(
-    (current) =>
-      current.map(
-        (item) => {
-          if (
-            item.id !== itemId ||
-            isQueueLocked(item)
-          ) {
-            return item;
+
+    setDispatchQueue(
+      (current) =>
+        current.map(
+          (item) => {
+
+            if (
+              item.id !==
+                itemId ||
+              isQueueLocked(
+                item
+              )
+            ) {
+
+              return item;
+
+            }
+
+
+            const oldSchedule =
+              item.scheduledSendAt ||
+              "";
+
+
+            if (
+              oldSchedule ===
+              scheduledSendAt
+            ) {
+
+              return item;
+
+            }
+
+
+            return {
+              ...item,
+
+              scheduledSendAt,
+
+              scheduleUpdatedAt:
+                nowIso,
+
+              history:
+                appendHistory(
+                  item.history,
+
+                  createHistoryEvent({
+                    type:
+                      "SCHEDULE_UPDATED",
+
+                    message:
+                      `Scheduled Send changed from ${formatDateTime(
+                        oldSchedule
+                      )} to ${formatDateTime(
+                        scheduledSendAt
+                      )}.`,
+
+                    at:
+                      nowIso,
+
+                    details: {
+                      from:
+                        oldSchedule ||
+                        null,
+
+                      to:
+                        scheduledSendAt,
+                    },
+                  })
+                ),
+            };
+
           }
-
-          const oldSchedule =
-            item.scheduledSendAt ||
-            "";
-
-          if (
-            oldSchedule ===
-            scheduledSendAt
-          ) {
-            return item;
-          }
-
-          return {
-            ...item,
-            scheduledSendAt,
-            scheduleUpdatedAt: nowIso,
-            history: appendHistory(
-              item.history,
-              createHistoryEvent({
-                type: "SCHEDULE_UPDATED",
-                message: `Scheduled Send changed from ${formatDateTime(oldSchedule)} to ${formatDateTime(scheduledSendAt)}.`,
-                at: nowIso,
-                details: {
-                  from: oldSchedule || null,
-                  to: scheduledSendAt,
-                },
-              })
-            ),
-          };
-        }
-      )
-  );
-}
-
-/* =====================================================
-   SET QUEUE TO NOW
-===================================================== */
-
-function setQueueScheduleNow(
-  itemId
-) {
-  const currentTime =
-    new Date().toISOString();
-
-  setDispatchQueue(
-    (current) =>
-      current.map(
-        (item) => {
-          if (
-            item.id !== itemId ||
-            isQueueLocked(item)
-          ) {
-            return item;
-          }
-
-          return {
-            ...item,
-            scheduledSendAt:
-              currentTime,
-            scheduleUpdatedAt:
-              currentTime,
-            history: appendHistory(
-              item.history,
-              createHistoryEvent({
-                type: "SCHEDULE_NOW",
-                message:
-                  "Scheduled Send changed to current time.",
-                at: currentTime,
-                details: {
-                  from:
-                    item.scheduledSendAt ||
-                    null,
-                  to: currentTime,
-                },
-              })
-            ),
-          };
-        }
-      )
-  );
-}
-
-/* =====================================================
-   RCS -> WAREHOUSE TASK SYNC
-===================================================== */
-
-function syncWarehouseTaskFromRcs({
-  warehouseTaskId,
-  nextStatus,
-  at = new Date().toISOString(),
-}) {
-  /*
-   * Always read the latest task records from localStorage.
-   * This avoids using a stale React state snapshot while the
-   * simulated RCS lifecycle is advancing through timers.
-   */
-  const latestTasks =
-    loadTasks();
-
-
-  const currentTask =
-    latestTasks.find(
-      (task) =>
-        task.id ===
-        warehouseTaskId
+        )
     );
 
-
-  if (!currentTask) {
-    return {
-      ok: false,
-      message:
-        `Warehouse Task ${warehouseTaskId} was not found.`,
-    };
   }
 
 
-  /*
-   * Do not move a completed Warehouse Task backwards.
-   * Repeated timer execution is also treated as idempotent.
-   */
-  if (
-    currentTask.status ===
-      "COMPLETED" ||
-    currentTask.status ===
-      nextStatus
+  /* =====================================================
+     SCHEDULE NOW
+  ===================================================== */
+
+  function setQueueScheduleNow(
+    itemId
   ) {
-    setWarehouseTasks(
-      latestTasks
+
+    const currentTime =
+      new Date()
+        .toISOString();
+
+
+    setDispatchQueue(
+      (current) =>
+        current.map(
+          (item) => {
+
+            if (
+              item.id !==
+                itemId ||
+              isQueueLocked(
+                item
+              )
+            ) {
+
+              return item;
+
+            }
+
+
+            return {
+              ...item,
+
+              scheduledSendAt:
+                currentTime,
+
+              scheduleUpdatedAt:
+                currentTime,
+
+              history:
+                appendHistory(
+                  item.history,
+
+                  createHistoryEvent({
+                    type:
+                      "SCHEDULE_NOW",
+
+                    message:
+                      "Scheduled Send changed to current time.",
+
+                    at:
+                      currentTime,
+
+                    details: {
+                      from:
+                        item.scheduledSendAt ||
+                        null,
+
+                      to:
+                        currentTime,
+                    },
+                  })
+                ),
+            };
+
+          }
+        )
     );
 
-
-    return {
-      ok: true,
-      skipped: true,
-      task: currentTask,
-    };
   }
 
 
-  const nextTasks =
-    latestTasks.map(
-      (task) => {
-        if (
-          task.id !==
+  /* =====================================================
+     RCS -> WAREHOUSE TASK
+  ===================================================== */
+
+  function syncWarehouseTaskFromRcs({
+    warehouseTaskId,
+    nextStatus,
+    at = new Date().toISOString(),
+  }) {
+
+    const latestTasks =
+      loadTasks();
+
+
+    const currentTask =
+      latestTasks.find(
+        (task) =>
+          task.id ===
           warehouseTaskId
-        ) {
-          return task;
-        }
+      );
 
 
-        /*
-         * RCS RUNNING
-         * -> Warehouse Task IN_PROGRESS
-         */
-        if (
-          nextStatus ===
-          "IN_PROGRESS"
-        ) {
+    if (
+      !currentTask
+    ) {
+
+      return {
+        ok:
+          false,
+
+        message:
+          `Warehouse Task ${warehouseTaskId} was not found.`,
+      };
+
+    }
+
+
+    if (
+      currentTask.status ===
+        "COMPLETED" ||
+      currentTask.status ===
+        nextStatus
+    ) {
+
+      setWarehouseTasks(
+        latestTasks
+      );
+
+
+      return {
+        ok:
+          true,
+
+        skipped:
+          true,
+
+        task:
+          currentTask,
+      };
+
+    }
+
+
+    const nextTasks =
+      latestTasks.map(
+        (task) => {
+
+          if (
+            task.id !==
+            warehouseTaskId
+          ) {
+
+            return task;
+
+          }
+
+
+          if (
+            nextStatus ===
+            "IN_PROGRESS"
+          ) {
+
+            return {
+              ...task,
+
+              status:
+                "IN_PROGRESS",
+
+              startedAt:
+                task.startedAt ||
+                at,
+
+              completedAt:
+                "",
+
+              blockedAt:
+                "",
+            };
+
+          }
+
+
+          if (
+            nextStatus ===
+            "COMPLETED"
+          ) {
+
+            return {
+              ...task,
+
+              status:
+                "COMPLETED",
+
+              startedAt:
+                task.startedAt ||
+                at,
+
+              completedAt:
+                at,
+
+              blockedAt:
+                "",
+            };
+
+          }
+
+
           return {
             ...task,
+
             status:
-              "IN_PROGRESS",
-            startedAt:
-              task.startedAt ||
-              at,
-            completedAt:
-              "",
-            blockedAt:
-              "",
+              nextStatus,
           };
+
         }
+      );
 
 
-        /*
-         * RCS COMPLETED
-         * -> Warehouse Task COMPLETED
-         */
-        if (
-          nextStatus ===
-          "COMPLETED"
-        ) {
-          return {
-            ...task,
-            status:
-              "COMPLETED",
-            startedAt:
-              task.startedAt ||
-              at,
-            completedAt:
-              at,
-            blockedAt:
-              "",
-          };
-        }
+    const changedTask =
+      nextTasks.find(
+        (task) =>
+          task.id ===
+          warehouseTaskId
+      );
 
 
-        return {
-          ...task,
-          status:
-            nextStatus,
-        };
-      }
-    );
+    const operationResult =
+      syncTaskStatusToOperations({
+        changedTask,
+
+        allTasks:
+          nextTasks,
+
+        nextStatus,
+
+        now:
+          at,
+      });
 
 
-  const changedTask =
-    nextTasks.find(
-      (task) =>
-        task.id ===
-        warehouseTaskId
-    );
+    if (
+      !operationResult.ok
+    ) {
+
+      return {
+        ok:
+          false,
+
+        message:
+          operationResult.message ||
+          "Could not synchronize the Warehouse Operation.",
+      };
+
+    }
 
 
-  /*
-   * Reuse the same Task -> Operation synchronization logic
-   * already used by Task Management.
-   *
-   * This is important because inventory must be updated only
-   * through the existing operation workflow, not directly by
-   * the RCS simulator.
-   */
-  const operationResult =
-    syncTaskStatusToOperations({
-      changedTask,
-      allTasks:
-        nextTasks,
-      nextStatus,
-      now: at,
-    });
+    const saveResult =
+      saveTasks(
+        nextTasks
+      );
 
 
-  if (!operationResult.ok) {
-    return {
-      ok: false,
-      message:
-        operationResult.message ||
-        "Could not synchronize the Warehouse Operation.",
-    };
-  }
+    if (
+      !saveResult.ok
+    ) {
+
+      return {
+        ok:
+          false,
+
+        message:
+          saveResult.message ||
+          "Could not save Warehouse Tasks.",
+      };
+
+    }
 
 
-  const saveResult =
-    saveTasks(
+    setWarehouseTasks(
       nextTasks
     );
 
 
-  if (!saveResult.ok) {
+    notifyWmsDataChanged([
+      WAREHOUSE_TASK_KEY,
+    ]);
+
+
     return {
-      ok: false,
-      message:
-        saveResult.message ||
-        "Could not save Warehouse Tasks.",
+      ok:
+        true,
+
+      task:
+        changedTask,
     };
+
   }
 
 
-  setWarehouseTasks(
-    nextTasks
-  );
+  /* =====================================================
+     APPLY BRIDGE SNAPSHOT
+  ===================================================== */
 
-
-  /*
-   * localStorage does not emit a storage event in the same tab.
-   * Notify Task Management and other WMS pages explicitly.
-   */
-  notifyWmsDataChanged([
-    WAREHOUSE_TASK_KEY,
-  ]);
-
-
-  return {
-    ok: true,
-    task: changedTask,
-  };
-}
-
-
-/* =====================================================
-   SIMULATE SEND TO RCS
-===================================================== */
-
-function simulateSendToRcs(
-  item
-) {
-  if (
-    item.queueState !== "READY"
+  function applyRcsBridgeSnapshot(
+    queueItem,
+    response
   ) {
-    window.alert(
-      "Only a READY task can be sent."
-    );
-    return;
-  }
 
-  if (isQueueLocked(item)) {
-    return;
-  }
+    const backendTask =
+      response?.task ||
+      null;
 
-  const startedAt =
-    new Date().toISOString();
 
-  /* STEP 1: READY -> SENDING */
-  setDispatchQueue(
-    (current) =>
-      current.map(
-        (entry) =>
-          entry.id === item.id
-            ? {
-                ...entry,
+    if (
+      !backendTask
+    ) {
 
-                // Keep the latest mapping shown in queueRows.
-                sourceRcsPointCode:
-                  item.sourceRcsPointCode ||
-                  entry.sourceRcsPointCode ||
-                  "",
-                destinationRcsPointCode:
-                  item.destinationRcsPointCode ||
-                  entry.destinationRcsPointCode ||
-                  "",
-                sourceRcsMapCode:
-                  item.sourceRcsMapCode ||
-                  entry.sourceRcsMapCode ||
-                  "",
-                destinationRcsMapCode:
-                  item.destinationRcsMapCode ||
-                  entry.destinationRcsMapCode ||
-                  "",
-                sourceRcsTargetType:
-                  item.sourceRcsTargetType ||
-                  entry.sourceRcsTargetType ||
-                  "SITE",
-                destinationRcsTargetType:
-                  item.destinationRcsTargetType ||
-                  entry.destinationRcsTargetType ||
-                  "SITE",
+      markRcsBridgePollError(
+        queueItem.id,
 
-                sendStatus: "SENDING",
-                rcsStatus: "NOT_SENT",
-                sendStartedAt:
-                  startedAt,
-                history: appendHistory(
-                  entry.history,
+        new Error(
+          "RCS Bridge returned no task data."
+        )
+      );
+
+
+      return;
+
+    }
+
+
+    const backendStatus =
+      String(
+        backendTask.rcsStatus ||
+        "CREATED"
+      ).toUpperCase();
+
+
+    if (
+      ![
+        "CREATED",
+        "RUNNING",
+        "COMPLETED",
+      ].includes(
+        backendStatus
+      )
+    ) {
+
+      markRcsBridgePollError(
+        queueItem.id,
+
+        new Error(
+          `Unsupported RCS status from bridge: ${backendStatus}`
+        )
+      );
+
+
+      return;
+
+    }
+
+
+    const currentStatus =
+      String(
+        queueItem.rcsStatus ||
+        "CREATED"
+      ).toUpperCase();
+
+
+    const nowIso =
+      new Date()
+        .toISOString();
+
+
+    const runningAt =
+      backendTask.rcsStartedAt ||
+      nowIso;
+
+
+    const completedAt =
+      backendTask.rcsCompletedAt ||
+      nowIso;
+
+
+    const transitionEvents =
+      [];
+
+
+    /* -----------------------------------------------
+       CREATED → RUNNING
+    ----------------------------------------------- */
+
+    if (
+      backendStatus ===
+        "RUNNING" &&
+      ![
+        "RUNNING",
+        "COMPLETED",
+      ].includes(
+        currentStatus
+      )
+    ) {
+
+      const syncResult =
+        syncWarehouseTaskFromRcs({
+          warehouseTaskId:
+            queueItem.warehouseTaskId,
+
+          nextStatus:
+            "IN_PROGRESS",
+
+          at:
+            runningAt,
+        });
+
+
+      transitionEvents.push({
+        rcsStatus:
+          "RUNNING",
+
+        at:
+          runningAt,
+
+        syncResult,
+
+        taskStatus:
+          "IN_PROGRESS",
+      });
+
+    }
+
+
+    /* -----------------------------------------------
+       → COMPLETED
+    ----------------------------------------------- */
+
+    if (
+      backendStatus ===
+      "COMPLETED"
+    ) {
+
+      /*
+       * ถ้าข้าม RUNNING
+       * ให้ sync IN_PROGRESS ก่อน
+       */
+
+      if (
+        ![
+          "RUNNING",
+          "COMPLETED",
+        ].includes(
+          currentStatus
+        )
+      ) {
+
+        const runningSync =
+          syncWarehouseTaskFromRcs({
+            warehouseTaskId:
+              queueItem.warehouseTaskId,
+
+            nextStatus:
+              "IN_PROGRESS",
+
+            at:
+              runningAt,
+          });
+
+
+        transitionEvents.push({
+          rcsStatus:
+            "RUNNING",
+
+          at:
+            runningAt,
+
+          syncResult:
+            runningSync,
+
+          taskStatus:
+            "IN_PROGRESS",
+        });
+
+      }
+
+
+      if (
+        currentStatus !==
+        "COMPLETED"
+      ) {
+
+        const completedSync =
+          syncWarehouseTaskFromRcs({
+            warehouseTaskId:
+              queueItem.warehouseTaskId,
+
+            nextStatus:
+              "COMPLETED",
+
+            at:
+              completedAt,
+          });
+
+
+        transitionEvents.push({
+          rcsStatus:
+            "COMPLETED",
+
+          at:
+            completedAt,
+
+          syncResult:
+            completedSync,
+
+          taskStatus:
+            "COMPLETED",
+        });
+
+      }
+
+    }
+
+
+    setDispatchQueue(
+      (current) =>
+        current.map(
+          (entry) => {
+
+            if (
+              entry.id !==
+              queueItem.id
+            ) {
+
+              return entry;
+
+            }
+
+
+            const entryCurrentStatus =
+              String(
+                entry.rcsStatus ||
+                "CREATED"
+              ).toUpperCase();
+
+
+            let filteredTransitions =
+              transitionEvents;
+
+
+            if (
+              entryCurrentStatus ===
+              "RUNNING"
+            ) {
+
+              filteredTransitions =
+                transitionEvents.filter(
+                  (transition) =>
+                    transition.rcsStatus !==
+                    "RUNNING"
+                );
+
+            }
+
+
+            if (
+              entryCurrentStatus ===
+              "COMPLETED"
+            ) {
+
+              filteredTransitions =
+                [];
+
+            }
+
+
+            let nextHistory =
+              entry.history;
+
+
+            for (
+              const transition
+              of filteredTransitions
+            ) {
+
+              nextHistory =
+                appendHistory(
+                  nextHistory,
+
                   createHistoryEvent({
                     type:
-                      "SIMULATED_SEND_STARTED",
+                      transition.rcsStatus ===
+                      "RUNNING"
+                        ? "RCS_RUNNING"
+                        : "RCS_COMPLETED",
+
                     message:
-                      "Simulated transmission to HIK RCS started.",
-                    at: startedAt,
+                      transition.rcsStatus ===
+                      "RUNNING"
+                        ? "RCS Bridge reports that the task is running."
+                        : "RCS Bridge reports that the task is completed.",
+
+                    at:
+                      transition.at,
+
                     details: {
-                      mode: "SIMULATION",
+                      bridgeTaskId:
+                        backendTask.bridgeTaskId ||
+                        entry.bridgeTaskId,
+
+                      taskChainCode:
+                        backendTask.rcsTaskChainCode ||
+                        entry.rcsTaskChainCode ||
+                        null,
+
+                      rcsStatus:
+                        transition.rcsStatus,
+
+                      mode:
+                        response?.mode ||
+                        entry.bridgeMode ||
+                        "MOCK",
+                    },
+                  })
+                );
+
+
+              nextHistory =
+                appendHistory(
+                  nextHistory,
+
+                  createHistoryEvent({
+                    type:
+                      transition
+                        .syncResult
+                        ?.ok
+                        ? transition
+                            .taskStatus ===
+                          "IN_PROGRESS"
+                          ? "WAREHOUSE_TASK_IN_PROGRESS"
+                          : "WAREHOUSE_TASK_COMPLETED"
+                        : "WAREHOUSE_TASK_SYNC_FAILED",
+
+                    message:
+                      transition
+                        .syncResult
+                        ?.ok
+                        ? `Warehouse Task ${entry.warehouseTaskId} synchronized to ${transition.taskStatus}.`
+                        : `Could not synchronize Warehouse Task ${entry.warehouseTaskId} to ${transition.taskStatus}: ${
+                            transition
+                              .syncResult
+                              ?.message ||
+                            "Unknown synchronization error."
+                          }`,
+
+                    at:
+                      transition.at,
+
+                    details: {
                       warehouseTaskId:
                         entry.warehouseTaskId,
-                      rcsPriority:
-                        entry.rcsPriority,
-                      source:
-                        item.sourceRcsPointCode ||
-                        entry.sourceRcsPointCode,
-                      destination:
-                        item.destinationRcsPointCode ||
-                        entry.destinationRcsPointCode,
+
+                      warehouseTaskStatus:
+                        transition
+                          .syncResult
+                          ?.ok
+                          ? transition.taskStatus
+                          : null,
+
+                      syncOk:
+                        Boolean(
+                          transition
+                            .syncResult
+                            ?.ok
+                        ),
+                    },
+                  })
+                );
+
+            }
+
+
+            const lastTransition =
+              filteredTransitions[
+                filteredTransitions.length -
+                  1
+              ];
+
+
+            const lastSync =
+              lastTransition
+                ?.syncResult;
+
+
+            const lastTaskStatus =
+              lastTransition
+                ?.taskStatus;
+
+
+            return {
+              ...entry,
+
+              bridgeTaskId:
+                backendTask.bridgeTaskId ||
+                entry.bridgeTaskId ||
+                "",
+
+              bridgeMode:
+                response?.mode ||
+                entry.bridgeMode ||
+                "MOCK",
+
+              bridgeElapsedSeconds:
+                Number(
+                  response
+                    ?.elapsedSeconds ||
+                  0
+                ),
+
+              bridgeLastPolledAt:
+                nowIso,
+
+              backendError:
+                "",
+
+              rcsStatus:
+                backendStatus,
+
+              rcsTaskChainCode:
+                backendTask.rcsTaskChainCode ||
+                entry.rcsTaskChainCode ||
+                "",
+
+              rcsCreatedAt:
+                backendTask.rcsCreatedAt ||
+                entry.rcsCreatedAt ||
+                "",
+
+              rcsStartedAt:
+                backendTask.rcsStartedAt ||
+                entry.rcsStartedAt ||
+                "",
+
+              rcsCompletedAt:
+                backendTask.rcsCompletedAt ||
+                entry.rcsCompletedAt ||
+                "",
+
+              warehouseTaskSyncedAt:
+                lastSync?.ok
+                  ? lastTransition?.at ||
+                    nowIso
+                  : entry.warehouseTaskSyncedAt ||
+                    "",
+
+              warehouseTaskSyncStatus:
+                filteredTransitions.length >
+                0
+                  ? lastSync?.ok
+                    ? lastTaskStatus
+                    : "ERROR"
+                  : entry.warehouseTaskSyncStatus ||
+                    "NOT_SYNCED",
+
+              history:
+                nextHistory,
+            };
+
+          }
+        )
+    );
+
+  }
+
+
+  /* =====================================================
+     BRIDGE POLL ERROR
+  ===================================================== */
+
+  function markRcsBridgePollError(
+    itemId,
+    error
+  ) {
+
+    const message =
+      error?.message ||
+      "Could not read RCS Bridge status.";
+
+
+    const at =
+      new Date()
+        .toISOString();
+
+
+    setDispatchQueue(
+      (current) =>
+        current.map(
+          (entry) => {
+
+            if (
+              entry.id !==
+              itemId
+            ) {
+
+              return entry;
+
+            }
+
+
+            if (
+              entry.backendError ===
+              message
+            ) {
+
+              return {
+                ...entry,
+
+                bridgeLastPolledAt:
+                  at,
+              };
+
+            }
+
+
+            return {
+              ...entry,
+
+              backendError:
+                message,
+
+              bridgeLastPolledAt:
+                at,
+
+              history:
+                appendHistory(
+                  entry.history,
+
+                  createHistoryEvent({
+                    type:
+                      "BRIDGE_POLL_FAILED",
+
+                    message:
+                      `Could not read RCS Bridge status: ${message}`,
+
+                    at,
+
+                    details: {
+                      bridgeTaskId:
+                        entry.bridgeTaskId ||
+                        null,
                     },
                   })
                 ),
-              }
-            : entry
-      )
-  );
+            };
 
-  /* STEP 2: SENDING -> SENT */
-  window.setTimeout(
-    () => {
-      const sentAt =
-        new Date().toISOString();
+          }
+        )
+    );
+
+  }
+
+
+  /* =====================================================
+     SEND TO RCS BRIDGE
+  ===================================================== */
+
+  async function sendToRcsBridge(
+    item
+  ) {
+
+    if (
+      item.queueState !==
+      "READY"
+    ) {
+
+      window.alert(
+        "Only a READY task can be sent."
+      );
+
+
+      return;
+
+    }
+
+
+    if (
+      isQueueLocked(
+        item
+      )
+    ) {
+
+      return;
+
+    }
+
+
+    const startedAt =
+      new Date()
+        .toISOString();
+
+
+    /* -----------------------------------------------
+       READY → SENDING
+    ----------------------------------------------- */
+
+    setDispatchQueue(
+      (current) =>
+        current.map(
+          (entry) =>
+            entry.id ===
+            item.id
+              ? {
+                  ...entry,
+
+                  sourceRcsPointCode:
+                    item.sourceRcsPointCode ||
+                    entry.sourceRcsPointCode ||
+                    "",
+
+                  destinationRcsPointCode:
+                    item.destinationRcsPointCode ||
+                    entry.destinationRcsPointCode ||
+                    "",
+
+                  sourceRcsMapCode:
+                    item.sourceRcsMapCode ||
+                    entry.sourceRcsMapCode ||
+                    "",
+
+                  destinationRcsMapCode:
+                    item.destinationRcsMapCode ||
+                    entry.destinationRcsMapCode ||
+                    "",
+
+                  sourceRcsTargetType:
+                    item.sourceRcsTargetType ||
+                    entry.sourceRcsTargetType ||
+                    "SITE",
+
+                  destinationRcsTargetType:
+                    item.destinationRcsTargetType ||
+                    entry.destinationRcsTargetType ||
+                    "SITE",
+
+                  sendStatus:
+                    "SENDING",
+
+                  rcsStatus:
+                    "NOT_SENT",
+
+                  sendStartedAt:
+                    startedAt,
+
+                  backendError:
+                    "",
+
+                  history:
+                    appendHistory(
+                      entry.history,
+
+                      createHistoryEvent({
+                        type:
+                          "BRIDGE_SEND_STARTED",
+
+                        message:
+                          "Sending command to the WMS RCS Bridge backend.",
+
+                        at:
+                          startedAt,
+
+                        details: {
+                          mode:
+                            "BACKEND_BRIDGE",
+
+                          warehouseTaskId:
+                            entry.warehouseTaskId,
+
+                          rcsPriority:
+                            entry.rcsPriority,
+                        },
+                      })
+                    ),
+                }
+              : entry
+        )
+    );
+
+
+    try {
+
+      /* ---------------------------------------------
+         POST /api/rcs/tasks
+      --------------------------------------------- */
+
+      const response =
+        await createRcsBridgeTask(
+          buildBridgeCommand(
+            item
+          )
+        );
+
+
+      const acceptedAt =
+        response?.receivedAt ||
+        new Date()
+          .toISOString();
+
+
+      const acceptedStatus =
+        String(
+          response?.rcsStatus ||
+          "CREATED"
+        ).toUpperCase();
+
 
       setDispatchQueue(
         (current) =>
           current.map(
             (entry) => {
+
               if (
-                entry.id !== item.id ||
-                entry.sendStatus !==
-                  "SENDING"
+                entry.id !==
+                item.id
               ) {
+
                 return entry;
+
               }
 
-              return {
-                ...entry,
-                sendStatus: "SENT",
-                sentAt,
-                history: appendHistory(
+
+              let nextHistory =
+                appendHistory(
                   entry.history,
+
                   createHistoryEvent({
-                    type: "COMMAND_SENT",
+                    type:
+                      "COMMAND_SENT",
+
                     message:
-                      "Command was simulated as successfully sent to HIK RCS.",
-                    at: sentAt,
+                      "Command was accepted by the WMS RCS Bridge backend.",
+
+                    at:
+                      acceptedAt,
+
                     details: {
-                      mode: "SIMULATION",
+                      mode:
+                        response?.mode ||
+                        "MOCK",
+
+                      bridgeTaskId:
+                        response?.bridgeTaskId ||
+                        null,
+
                       command:
-                        buildCommandDraft(
+                        buildBridgeCommand(
                           entry
                         ),
                     },
                   })
-                ),
-              };
-            }
-          )
-      );
-    },
-    1000
-  );
+                );
 
-  /* STEP 3: simulated RCS creates a task chain */
-  window.setTimeout(
-    () => {
-      const createdAt =
-        new Date().toISOString();
 
-      setDispatchQueue(
-        (current) =>
-          current.map(
-            (entry) => {
               if (
-                entry.id !== item.id ||
-                entry.sendStatus !==
-                  "SENT" ||
-                ![
-                  "NOT_SENT",
+                acceptedStatus ===
+                "CREATED"
+              ) {
+
+                nextHistory =
+                  appendHistory(
+                    nextHistory,
+
+                    createHistoryEvent({
+                      type:
+                        "RCS_CREATED",
+
+                      message:
+                        `RCS Bridge created task ${
+                          response?.rcsTaskChainCode ||
+                          response?.bridgeTaskId ||
+                          entry.warehouseTaskId
+                        }.`,
+
+                      at:
+                        acceptedAt,
+
+                      details: {
+                        bridgeTaskId:
+                          response?.bridgeTaskId ||
+                          null,
+
+                        taskChainCode:
+                          response?.rcsTaskChainCode ||
+                          null,
+
+                        rcsStatus:
+                          acceptedStatus,
+
+                        mode:
+                          response?.mode ||
+                          "MOCK",
+                      },
+                    })
+                  );
+
+              }
+
+
+              return {
+                ...entry,
+
+                sendStatus:
+                  "SENT",
+
+                sentAt:
+                  acceptedAt,
+
+                bridgeTaskId:
+                  response?.bridgeTaskId ||
                   "",
-                ].includes(
-                  String(
-                    entry.rcsStatus ||
-                    "NOT_SENT"
-                  ).toUpperCase()
-                )
-              ) {
-                return entry;
-              }
 
-              const simulatedTaskChainCode =
-                createSimulatedRcsTaskChainCode(
-                  entry
-                );
+                bridgeMode:
+                  response?.mode ||
+                  "MOCK",
 
-              return {
-                ...entry,
-                rcsStatus: "CREATED",
+                bridgeLastPolledAt:
+                  acceptedAt,
+
+                bridgeElapsedSeconds:
+                  0,
+
+                backendError:
+                  "",
+
+                rcsStatus:
+                  acceptedStatus,
+
                 rcsTaskChainCode:
-                  simulatedTaskChainCode,
+                  response?.rcsTaskChainCode ||
+                  "",
+
                 rcsCreatedAt:
-                  createdAt,
-                history: appendHistory(
-                  entry.history,
-                  createHistoryEvent({
-                    type: "RCS_CREATED",
-                    message: `Simulated RCS task created with Task Chain ${simulatedTaskChainCode}.`,
-                    at: createdAt,
-                    details: {
-                      taskChainCode:
-                        simulatedTaskChainCode,
-                      rcsStatus:
-                        "CREATED",
-                      mode: "SIMULATION",
-                    },
-                  })
-                ),
-              };
-            }
-          )
-      );
-    },
-    2000
-  );
-
-
-  /*
-   * =====================================================
-   * STEP 4: CREATED -> RUNNING
-   * =====================================================
-   *
-   * This also mirrors the RCS execution state back to the
-   * Warehouse Task as IN_PROGRESS.
-   */
-  window.setTimeout(
-    () => {
-      const latestEntry =
-        loadDispatchQueue().find(
-          (entry) =>
-            entry.id ===
-            item.id
-        );
-
-
-      if (
-        !latestEntry ||
-        latestEntry.sendStatus !==
-          "SENT" ||
-        latestEntry.rcsStatus !==
-          "CREATED"
-      ) {
-        return;
-      }
-
-
-      const runningAt =
-        new Date().toISOString();
-
-
-      const taskSync =
-        syncWarehouseTaskFromRcs({
-          warehouseTaskId:
-            latestEntry.warehouseTaskId,
-          nextStatus:
-            "IN_PROGRESS",
-          at: runningAt,
-        });
-
-
-      setDispatchQueue(
-        (current) =>
-          current.map(
-            (entry) => {
-              if (
-                entry.id !==
-                  item.id ||
-                entry.sendStatus !==
-                  "SENT" ||
-                entry.rcsStatus !==
+                  acceptedStatus ===
                   "CREATED"
-              ) {
-                return entry;
-              }
-
-
-              let nextHistory =
-                appendHistory(
-                  entry.history,
-                  createHistoryEvent({
-                    type:
-                      "RCS_RUNNING",
-                    message:
-                      "Simulated RCS task started running.",
-                    at: runningAt,
-                    details: {
-                      taskChainCode:
-                        entry.rcsTaskChainCode ||
-                        null,
-                      rcsStatus:
-                        "RUNNING",
-                      mode:
-                        "SIMULATION",
-                    },
-                  })
-                );
-
-
-              nextHistory =
-                appendHistory(
-                  nextHistory,
-                  createHistoryEvent({
-                    type:
-                      taskSync.ok
-                        ? "WAREHOUSE_TASK_IN_PROGRESS"
-                        : "WAREHOUSE_TASK_SYNC_FAILED",
-                    message:
-                      taskSync.ok
-                        ? `Warehouse Task ${entry.warehouseTaskId} synchronized to IN_PROGRESS.`
-                        : `Could not synchronize Warehouse Task ${entry.warehouseTaskId} to IN_PROGRESS: ${taskSync.message}`,
-                    at: runningAt,
-                    details: {
-                      warehouseTaskId:
-                        entry.warehouseTaskId,
-                      warehouseTaskStatus:
-                        taskSync.ok
-                          ? "IN_PROGRESS"
-                          : null,
-                      syncOk:
-                        taskSync.ok,
-                    },
-                  })
-                );
-
-
-              return {
-                ...entry,
-                rcsStatus:
-                  "RUNNING",
-                rcsStartedAt:
-                  runningAt,
-                warehouseTaskSyncedAt:
-                  taskSync.ok
-                    ? runningAt
-                    : entry.warehouseTaskSyncedAt ||
+                    ? acceptedAt
+                    : entry.rcsCreatedAt ||
                       "",
-                warehouseTaskSyncStatus:
-                  taskSync.ok
-                    ? "IN_PROGRESS"
-                    : "ERROR",
+
                 history:
                   nextHistory,
               };
+
             }
           )
       );
 
+    } catch (error) {
 
-      if (!taskSync.ok) {
-        console.error(
-          "RCS RUNNING -> Warehouse Task sync failed:",
-          taskSync.message
-        );
-      }
-    },
-    4000
-  );
+      const failedAt =
+        new Date()
+          .toISOString();
 
 
-  /*
-   * =====================================================
-   * STEP 5: RUNNING -> COMPLETED
-   * =====================================================
-   *
-   * The RCS simulator does NOT edit inventory directly.
-   * It completes the Warehouse Task and then reuses the
-   * existing Task -> Operation synchronization logic.
-   */
-  window.setTimeout(
-    () => {
-      const latestEntry =
-        loadDispatchQueue().find(
-          (entry) =>
-            entry.id ===
-            item.id
-        );
-
-
-      if (
-        !latestEntry ||
-        latestEntry.sendStatus !==
-          "SENT" ||
-        latestEntry.rcsStatus !==
-          "RUNNING"
-      ) {
-        return;
-      }
-
-
-      const completedAt =
-        new Date().toISOString();
-
-
-      const taskSync =
-        syncWarehouseTaskFromRcs({
-          warehouseTaskId:
-            latestEntry.warehouseTaskId,
-          nextStatus:
-            "COMPLETED",
-          at: completedAt,
-        });
+      const message =
+        error?.message ||
+        "Could not send command to the WMS RCS Bridge.";
 
 
       setDispatchQueue(
         (current) =>
           current.map(
-            (entry) => {
-              if (
-                entry.id !==
-                  item.id ||
-                entry.sendStatus !==
-                  "SENT" ||
-                entry.rcsStatus !==
-                  "RUNNING"
-              ) {
-                return entry;
-              }
+            (entry) =>
+              entry.id ===
+              item.id
+                ? {
+                    ...entry,
 
+                    sendStatus:
+                      "NOT_SENT",
 
-              let nextHistory =
-                appendHistory(
-                  entry.history,
-                  createHistoryEvent({
-                    type:
-                      "RCS_COMPLETED",
-                    message:
-                      "Simulated RCS task completed.",
-                    at: completedAt,
-                    details: {
-                      taskChainCode:
-                        entry.rcsTaskChainCode ||
-                        null,
-                      rcsStatus:
-                        "COMPLETED",
-                      mode:
-                        "SIMULATION",
-                    },
-                  })
-                );
+                    rcsStatus:
+                      "NOT_SENT",
 
-
-              nextHistory =
-                appendHistory(
-                  nextHistory,
-                  createHistoryEvent({
-                    type:
-                      taskSync.ok
-                        ? "WAREHOUSE_TASK_COMPLETED"
-                        : "WAREHOUSE_TASK_SYNC_FAILED",
-                    message:
-                      taskSync.ok
-                        ? `Warehouse Task ${entry.warehouseTaskId} synchronized to COMPLETED.`
-                        : `Could not synchronize Warehouse Task ${entry.warehouseTaskId} to COMPLETED: ${taskSync.message}`,
-                    at: completedAt,
-                    details: {
-                      warehouseTaskId:
-                        entry.warehouseTaskId,
-                      warehouseTaskStatus:
-                        taskSync.ok
-                          ? "COMPLETED"
-                          : null,
-                      syncOk:
-                        taskSync.ok,
-                    },
-                  })
-                );
-
-
-              return {
-                ...entry,
-                rcsStatus:
-                  "COMPLETED",
-                rcsCompletedAt:
-                  completedAt,
-                warehouseTaskSyncedAt:
-                  taskSync.ok
-                    ? completedAt
-                    : entry.warehouseTaskSyncedAt ||
+                    sendStartedAt:
                       "",
-                warehouseTaskSyncStatus:
-                  taskSync.ok
-                    ? "COMPLETED"
-                    : "ERROR",
-                history:
-                  nextHistory,
-              };
-            }
+
+                    backendError:
+                      message,
+
+                    history:
+                      appendHistory(
+                        entry.history,
+
+                        createHistoryEvent({
+                          type:
+                            "BRIDGE_SEND_FAILED",
+
+                          message:
+                            `RCS Bridge send failed: ${message}`,
+
+                          at:
+                            failedAt,
+
+                          details: {
+                            mode:
+                              "BACKEND_BRIDGE",
+                          },
+                        })
+                      ),
+                  }
+                : entry
           )
       );
 
 
-      if (!taskSync.ok) {
-        console.error(
-          "RCS COMPLETED -> Warehouse Task sync failed:",
-          taskSync.message
-        );
+      window.alert(
+        `Could not send to RCS Bridge.\n\n${message}`
+      );
 
+    }
 
-        window.alert(
-          `RCS task completed, but WMS synchronization failed: ${taskSync.message}`
-        );
-      }
-    },
-    7000
-  );
-}
-
-/* =====================================================
-   REMOVE QUEUE ITEM
-===================================================== */
-
-function removeQueueItem(
-  item
-) {
-  if (isQueueLocked(item)) {
-    window.alert(
-      "A task that is sending or already sent cannot be removed."
-    );
-    return;
   }
 
-  const confirmed =
-    window.confirm(
-      `Remove ${item.id} from the RCS dispatch queue?`
-    );
 
-  if (!confirmed) {
-    return;
-  }
+  /* =====================================================
+     REMOVE QUEUE
+  ===================================================== */
 
-  setDispatchQueue(
-    (current) =>
-      current.filter(
-        (entry) =>
-          entry.id !== item.id
+  function removeQueueItem(
+    item
+  ) {
+
+    if (
+      isQueueLocked(
+        item
       )
-  );
-}
+    ) {
 
-/* =====================================================
-     RCS NETWORK ROUTE
+      window.alert(
+        "A task that is sending or already sent cannot be removed."
+      );
+
+
+      return;
+
+    }
+
+
+    const confirmed =
+      window.confirm(
+        `Remove ${item.id} from the RCS dispatch queue?`
+      );
+
+
+    if (
+      !confirmed
+    ) {
+
+      return;
+
+    }
+
+
+    setDispatchQueue(
+      (current) =>
+        current.filter(
+          (entry) =>
+            entry.id !==
+            item.id
+        )
+    );
+
+  }
+
+
+  /* =====================================================
+     NETWORK ROUTE
   ===================================================== */
 
   const gatewayValidation =
@@ -1808,10 +2615,13 @@ function removeQueueItem(
 
 
   async function handleCopyRoute() {
+
     if (
       !routeCommand
     ) {
+
       return;
+
     }
 
 
@@ -1829,23 +2639,28 @@ function removeQueueItem(
 
 
     window.setTimeout(
-      () =>
+      () => {
         setCopyMessage(
           ""
-        ),
+        );
+      },
       2000
     );
+
   }
 
 
   /* =====================================================
-     UI
+     RENDER
   ===================================================== */
 
   return (
+
     <div className="dispatcher-page">
 
-      {/* HEADER */}
+      {/* =================================================
+          PAGE HEADER
+      ================================================= */}
 
       <div className="dispatcher-header">
 
@@ -1877,17 +2692,21 @@ function removeQueueItem(
             refreshData
           }
         >
+
           <RefreshCw
             size={16}
           />
 
           Refresh
+
         </button>
 
       </div>
 
 
-      {/* SUMMARY */}
+      {/* =================================================
+          SUMMARY
+      ================================================= */}
 
       <div className="dispatcher-summary-grid">
 
@@ -1963,7 +2782,7 @@ function removeQueueItem(
 
 
       {/* =================================================
-          NETWORK
+          NETWORK PREPARATION
       ================================================= */}
 
       <section className="dispatcher-panel">
@@ -1994,8 +2813,6 @@ function removeQueueItem(
 
         <div className="rcs-prep-grid">
 
-          {/* GATEWAY */}
-
           <div className="rcs-gateway-card">
 
             <label>
@@ -2024,8 +2841,7 @@ function removeQueueItem(
                     event
                   ) =>
                     setGatewayLastOctet(
-                      event.target
-                        .value
+                      event.target.value
                     )
                   }
                 />
@@ -2052,8 +2868,6 @@ function removeQueueItem(
           </div>
 
 
-          {/* CMD */}
-
           <div className="rcs-command-card">
 
             <span>
@@ -2062,8 +2876,10 @@ function removeQueueItem(
 
 
             <code>
-              {routeCommand ||
-                "Enter gateway last number first"}
+              {
+                routeCommand ||
+                "Enter gateway last number first"
+              }
             </code>
 
 
@@ -2076,26 +2892,30 @@ function removeQueueItem(
                 handleCopyRoute
               }
             >
+
               <Copy
                 size={15}
               />
 
               Copy Route Command
+
             </button>
 
 
-            {copyMessage && (
-              <small>
-                {
-                  copyMessage
-                }
-              </small>
-            )}
+            {
+              copyMessage && (
+
+                <small>
+                  {
+                    copyMessage
+                  }
+                </small>
+
+              )
+            }
 
           </div>
 
-
-          {/* LINKS */}
 
           <div className="rcs-links-card">
 
@@ -2114,11 +2934,13 @@ function removeQueueItem(
                 )
               }
             >
+
               <ExternalLink
                 size={15}
               />
 
               Open HIK Web
+
             </button>
 
 
@@ -2132,11 +2954,13 @@ function removeQueueItem(
                 )
               }
             >
+
               <ExternalLink
                 size={15}
               />
 
               Open RCS Home
+
             </button>
 
           </div>
@@ -2218,221 +3042,230 @@ function removeQueueItem(
 
             <tbody>
 
-              {candidates.map(
-                (
-                  candidate
-                ) => (
-                  <tr
-                    key={
-                      candidate.task.id
-                    }
-                  >
+              {
+                candidates.map(
+                  (
+                    candidate
+                  ) => (
 
-                    <td>
+                    <tr
+                      key={
+                        candidate.task.id
+                      }
+                    >
 
-                      <strong>
-                        {
-                          candidate.task.id
-                        }
-                      </strong>
+                      <td>
 
-
-                      <small>
-                        {
-                          candidate.task.type
-                        }
-
-                        {" · "}
-
-                        {
-                          candidate.task
-                            .sourceOrderNo ||
-                          "-"
-                        }
-                      </small>
-
-                    </td>
-
-
-                    {/* WMS ROUTE */}
-
-                    <td>
-
-                      <RouteCell
-                        sourceLabel={
-                          candidate.endpoints
-                            .sourceLabel
-                        }
-                        destinationLabel={
-                          candidate.endpoints
-                            .destinationLabel
-                        }
-                        sourceCode={
-                          candidate.endpoints
-                            .sourceNodeId
-                        }
-                        destinationCode={
-                          candidate.endpoints
-                            .destinationNodeId
-                        }
-                        emptyText="WMS node missing"
-                      />
-
-                    </td>
-
-
-                    {/* RCS ROUTE */}
-
-                    <td>
-
-                      <RouteCell
-                        sourceLabel={
-                          candidate.endpoints
-                            .sourceRcsTargetType
-                        }
-                        destinationLabel={
-                          candidate.endpoints
-                            .destinationRcsTargetType
-                        }
-                        sourceCode={
-                          candidate.endpoints
-                            .sourceRcsPointCode
-                        }
-                        destinationCode={
-                          candidate.endpoints
-                            .destinationRcsPointCode
-                        }
-                        emptyText="RCS point missing"
-                        rcs
-                      />
-
-                    </td>
-
-
-                    {/* PRIORITY */}
-
-                    <td>
-
-                      <PriorityBadge
-                        priority={
-                          candidate.task
-                            .priority
-                        }
-                        rcsPriority={
-                          RCS_PRIORITY[
-                            candidate.task
-                              .priority
-                          ] ||
-                          60
-                        }
-                      />
-
-                    </td>
-
-
-                    {/* SCHEDULE */}
-
-                    <td>
-
-                      <input
-                        className="dispatch-schedule-input"
-                        type="datetime-local"
-                        value={
-                          scheduleDrafts[
+                        <strong>
+                          {
                             candidate.task.id
-                          ] ||
-                          ""
-                        }
-                        onChange={(
-                          event
-                        ) =>
-                          setScheduleDrafts(
-                            (
-                              current
-                            ) => ({
-                              ...current,
-
-                              [candidate.task.id]:
-                                event.target
-                                  .value,
-                            })
-                          )
-                        }
-                      />
+                          }
+                        </strong>
 
 
-                      <small className="schedule-help">
-                        Empty = send when queue sender is available
-                      </small>
+                        <small>
+                          {
+                            candidate.task.type
+                          }
 
-                    </td>
+                          {" · "}
 
+                          {
+                            candidate.task
+                              .sourceOrderNo ||
+                            "-"
+                          }
+                        </small>
 
-                    {/* READINESS */}
-
-                    <td>
-
-                      <MappingReadiness
-                        candidate={
-                          candidate
-                        }
-                      />
-
-                    </td>
+                      </td>
 
 
-                    {/* ADD */}
+                      <td>
 
-                    <td>
-
-                      <button
-                        type="button"
-                        className="prepare-task-button"
-                        disabled={
-                          !candidate.ready
-                        }
-                        onClick={() =>
-                          queueWarehouseTask(
+                        <RouteCell
+                          sourceLabel={
                             candidate
-                          )
-                        }
-                      >
-                        <Send
-                          size={14}
+                              .endpoints
+                              .sourceLabel
+                          }
+                          destinationLabel={
+                            candidate
+                              .endpoints
+                              .destinationLabel
+                          }
+                          sourceCode={
+                            candidate
+                              .endpoints
+                              .sourceNodeId
+                          }
+                          destinationCode={
+                            candidate
+                              .endpoints
+                              .destinationNodeId
+                          }
+                          emptyText="WMS node missing"
                         />
 
-                        Add Queue
-                      </button>
+                      </td>
 
-                    </td>
 
-                  </tr>
+                      <td>
+
+                        <RouteCell
+                          sourceLabel={
+                            candidate
+                              .endpoints
+                              .sourceRcsTargetType
+                          }
+                          destinationLabel={
+                            candidate
+                              .endpoints
+                              .destinationRcsTargetType
+                          }
+                          sourceCode={
+                            candidate
+                              .endpoints
+                              .sourceRcsPointCode
+                          }
+                          destinationCode={
+                            candidate
+                              .endpoints
+                              .destinationRcsPointCode
+                          }
+                          emptyText="RCS point missing"
+                          rcs
+                        />
+
+                      </td>
+
+
+                      <td>
+
+                        <PriorityBadge
+                          priority={
+                            candidate
+                              .task
+                              .priority
+                          }
+                          rcsPriority={
+                            RCS_PRIORITY[
+                              candidate
+                                .task
+                                .priority
+                            ] ||
+                            60
+                          }
+                        />
+
+                      </td>
+
+
+                      <td>
+
+                        <input
+                          className="dispatch-schedule-input"
+                          type="datetime-local"
+                          value={
+                            scheduleDrafts[
+                              candidate.task.id
+                            ] ||
+                            ""
+                          }
+                          onChange={(
+                            event
+                          ) =>
+                            setScheduleDrafts(
+                              (
+                                current
+                              ) => ({
+                                ...current,
+
+                                [candidate.task.id]:
+                                  event.target.value,
+                              })
+                            )
+                          }
+                        />
+
+
+                        <small className="schedule-help">
+                          Empty = send when queue sender is available
+                        </small>
+
+                      </td>
+
+
+                      <td>
+
+                        <MappingReadiness
+                          candidate={
+                            candidate
+                          }
+                        />
+
+                      </td>
+
+
+                      <td>
+
+                        <button
+                          type="button"
+                          className="prepare-task-button"
+                          disabled={
+                            !candidate.ready
+                          }
+                          onClick={() =>
+                            queueWarehouseTask(
+                              candidate
+                            )
+                          }
+                        >
+
+                          <Send
+                            size={14}
+                          />
+
+                          Add Queue
+
+                        </button>
+
+                      </td>
+
+                    </tr>
+
+                  )
                 )
-              )}
+              }
 
             </tbody>
 
           </table>
 
 
-          {candidates.length ===
-            0 && (
-            <div className="dispatcher-empty">
+          {
+            candidates.length ===
+              0 && (
 
-              <CheckCircle2
-                size={30}
-              />
+              <div className="dispatcher-empty">
 
-              <strong>
-                No Pending Warehouse Task
-              </strong>
+                <CheckCircle2
+                  size={30}
+                />
 
-              <span>
-                Pending Putaway/Picking tasks will appear here.
-              </span>
 
-            </div>
-          )}
+                <strong>
+                  No Pending Warehouse Task
+                </strong>
+
+
+                <span>
+                  Pending Putaway/Picking tasks will appear here.
+                </span>
+
+              </div>
+
+            )
+          }
 
         </div>
 
@@ -2440,7 +3273,7 @@ function removeQueueItem(
 
 
       {/* =================================================
-          QUEUE
+          SCHEDULED COMMAND QUEUE
       ================================================= */}
 
       <section className="dispatcher-panel">
@@ -2467,27 +3300,90 @@ function removeQueueItem(
           </div>
 
 
-          <div className="dispatcher-live-time">
+          <div className="queue-header-tools">
 
-            <span>
-              Local time
-            </span>
+            {/* -------------------------------------------
+                VIEW ORDER
+            ------------------------------------------- */}
+
+            <div className="queue-view-order">
+
+              <span>
+                VIEW ORDER
+              </span>
 
 
-            <strong>
-              {
-                new Date(
-                  now
-                ).toLocaleString()
-              }
-            </strong>
+              <div className="queue-view-order-buttons">
+
+                <button
+                  type="button"
+                  className={
+                    queueViewOrder ===
+                    "OLDEST"
+                      ? "active"
+                      : ""
+                  }
+                  onClick={() =>
+                    setQueueViewOrder(
+                      "OLDEST"
+                    )
+                  }
+                >
+                  Oldest
+                  {" → "}
+                  Newest
+                </button>
+
+
+                <button
+                  type="button"
+                  className={
+                    queueViewOrder ===
+                    "NEWEST"
+                      ? "active"
+                      : ""
+                  }
+                  onClick={() =>
+                    setQueueViewOrder(
+                      "NEWEST"
+                    )
+                  }
+                >
+                  Newest
+                  {" → "}
+                  Oldest
+                </button>
+
+              </div>
+
+            </div>
+
+
+            {/* -------------------------------------------
+                LOCAL TIME
+            ------------------------------------------- */}
+
+            <div className="dispatcher-live-time">
+
+              <span>
+                Local time
+              </span>
+
+
+              <strong>
+                {
+                  new Date(
+                    now
+                  ).toLocaleString()
+                }
+              </strong>
+
+            </div>
 
           </div>
 
         </div>
 
-
-        {/* IMPORTANT WARNING */}
 
         <div className="dispatcher-api-warning">
 
@@ -2497,10 +3393,10 @@ function removeQueueItem(
 
 
           <span>
-            Queue and scheduling are active in WMS only.
-            Automatic HIK sending is intentionally disabled until
-            the GenerateTaskOrder endpoint, authentication and exact
-            request/response format are confirmed.
+            RCS Queue now sends through the WMS backend bridge.
+            In MOCK mode the backend simulates CREATED → RUNNING → COMPLETED.
+            Direct HIK sending remains disabled until the exact
+            GenerateTaskOrder endpoint, authentication and payload are confirmed.
           </span>
 
         </div>
@@ -2563,479 +3459,521 @@ function removeQueueItem(
 
             <tbody>
 
-              {queueRows.map(
-                (
-                  item
-                ) => (
-                  <tr
-                    key={
-                      item.id
-                    }
-                  >
+              {
+                displayQueueRows.map(
+                  (
+                    item
+                  ) => (
 
-                    {/* QUEUE */}
+                    <tr
+                      key={
+                        item.id
+                      }
+                    >
 
-                    <td>
+                      {/* QUEUE */}
 
-                      <strong>
-                        {
-                          item.id
-                        }
-                      </strong>
+                      <td>
 
-
-                      <small>
-
-                        {item.queueState ===
-                        "READY"
-                          ? `Ready rank #${readyRankMap.get(
-                              item.id
-                            )}`
-                          : formatDateTime(
-                              item.createdAt
-                            )}
-
-                      </small>
-
-                    </td>
-
-
-                    {/* WAREHOUSE TASK */}
-
-                    <td>
-
-                      <strong>
-                        {
-                          item.warehouseTaskId
-                        }
-                      </strong>
-
-
-                      <small>
-
-                        {
-                          item.type
-                        }
-
-                        {item.sourceOrderNo
-                          ? ` · ${item.sourceOrderNo}`
-                          : ""}
-
-                      </small>
-
-                    </td>
-
-
-                    {/* ROUTE */}
-
-                    <td>
-
-                      <RouteCell
-                        sourceLabel={
-                          item.sourceRcsTargetType
-                        }
-                        destinationLabel={
-                          item.destinationRcsTargetType
-                        }
-                        sourceCode={
-                          item.sourceRcsPointCode
-                        }
-                        destinationCode={
-                          item.destinationRcsPointCode
-                        }
-                        emptyText="RCS point missing"
-                        rcs
-                      />
-
-                    </td>
-
-
-                    {/* PRIORITY */}
-
-                    <td>
-
-                      <div className="queue-priority-editor">
-
-                        <select
-                          value={
-                            item.wmsPriority ||
-                            "NORMAL"
-                          }
-
-                          disabled={
-                            isQueueLocked(item)
-                          }
-
-                          onChange={(
-                            event
-                          ) =>
-                            updateQueuePriority(
-                              item.id,
-                              event.target.value
-                            )
-                          }
-                        >
-
-                          <option value="LOW">
-                            LOW
-                          </option>
-
-
-                          <option value="NORMAL">
-                            NORMAL
-                          </option>
-
-
-                          <option value="HIGH">
-                            HIGH
-                          </option>
-
-
-                          <option value="URGENT">
-                            URGENT
-                          </option>
-
-                        </select>
-
-
-                        <span
-                          className={`queue-priority-value priority-${String(
-                            item.wmsPriority ||
-                            "NORMAL"
-                          ).toLowerCase()}`}
-                        >
-                          RCS
-                          {" "}
+                        <strong>
                           {
-                            item.rcsPriority
+                            item.id
                           }
-                        </span>
-
-                      </div>
-
-                    </td>
+                        </strong>
 
 
-                    {/* TIME */}
-
-                    <td>
-
-                      <div className="queue-schedule-editor">
-
-                        <input
-                          type="datetime-local"
-
-                          value={
-                            formatDateTimeLocalInput(
-                              item.scheduledSendAt
-                            )
+                        <small>
+                          {
+                            item.queueState ===
+                            "READY"
+                              ? `Ready rank #${readyRankMap.get(
+                                  item.id
+                                )}`
+                              : formatDateTime(
+                                  item.createdAt
+                                )
                           }
+                        </small>
 
-                          disabled={
-                            isQueueLocked(item)
+                      </td>
+
+
+                      {/* WAREHOUSE TASK */}
+
+                      <td>
+
+                        <strong>
+                          {
+                            item.warehouseTaskId
                           }
-
-                          onChange={(
-                            event
-                          ) =>
-                            updateQueueSchedule(
-                              item.id,
-                              event.target.value
-                            )
-                          }
-                        />
-
-
-                        <button
-                          type="button"
-
-                          disabled={
-                            isQueueLocked(item)
-                          }
-
-                          onClick={() =>
-                            setQueueScheduleNow(
-                              item.id
-                            )
-                          }
-                        >
-                          Now
-                        </button>
+                        </strong>
 
 
                         <small>
 
-                          {item.queueState ===
-                          "WAITING_TIME"
-                            ? "Waiting until scheduled time"
-                            : item.queueState ===
-                                "READY"
-                              ? "Eligible to send now"
-                              : item.queueState ===
-                                  "SENDING"
-                                ? "Sending command"
-                                : item.queueState ===
-                                    "SENT"
-                                  ? "Command sent"
-                                  : "Schedule saved"}
+                          {
+                            item.type
+                          }
+
+
+                          {
+                            item.sourceOrderNo
+                              ? ` · ${item.sourceOrderNo}`
+                              : ""
+                          }
 
                         </small>
 
-                      </div>
-
-                    </td>
-
-                    <td>
-
-                      <QueueStateBadge
-                        state={
-                          item.queueState
-                        }
-                      />
-
-                    </td>
-
-                    {/* RCS STATUS */}
-
-                    <td>
-
-                      <RcsStatusBadge
-                        status={
-                          item.rcsStatus
-                        }
-                        taskChainCode={
-                          item.rcsTaskChainCode
-                        }
-                      />
-
-                    </td>
+                      </td>
 
 
-                    {/* COMMAND PREVIEW */}
+                      {/* HIK ROUTE */}
 
-                    <td>
+                      <td>
 
-                      <div className="draft-action-buttons">
+                        <RouteCell
+                          sourceLabel={
+                            item.sourceRcsTargetType
+                          }
+                          destinationLabel={
+                            item.destinationRcsTargetType
+                          }
+                          sourceCode={
+                            item.sourceRcsPointCode
+                          }
+                          destinationCode={
+                            item.destinationRcsPointCode
+                          }
+                          emptyText="RCS point missing"
+                          rcs
+                        />
 
-                        {/* VIEW */}
+                      </td>
+
+
+                      {/* PRIORITY */}
+
+                      <td>
+
+                        <div className="queue-priority-editor">
+
+                          <select
+                            value={
+                              item.wmsPriority ||
+                              "NORMAL"
+                            }
+                            disabled={
+                              isQueueLocked(
+                                item
+                              )
+                            }
+                            onChange={(
+                              event
+                            ) =>
+                              updateQueuePriority(
+                                item.id,
+                                event.target.value
+                              )
+                            }
+                          >
+
+                            <option value="LOW">
+                              LOW
+                            </option>
+
+
+                            <option value="NORMAL">
+                              NORMAL
+                            </option>
+
+
+                            <option value="HIGH">
+                              HIGH
+                            </option>
+
+
+                            <option value="URGENT">
+                              URGENT
+                            </option>
+
+                          </select>
+
+
+                          <span
+                            className={`queue-priority-value priority-${String(
+                              item.wmsPriority ||
+                              "NORMAL"
+                            ).toLowerCase()}`}
+                          >
+                            RCS{" "}
+                            {
+                              item.rcsPriority
+                            }
+                          </span>
+
+                        </div>
+
+                      </td>
+
+
+                      {/* SCHEDULE */}
+
+                      <td>
+
+                        <div className="queue-schedule-editor">
+
+                          <input
+                            type="datetime-local"
+                            value={
+                              formatDateTimeLocalInput(
+                                item.scheduledSendAt
+                              )
+                            }
+                            disabled={
+                              isQueueLocked(
+                                item
+                              )
+                            }
+                            onChange={(
+                              event
+                            ) =>
+                              updateQueueSchedule(
+                                item.id,
+                                event.target.value
+                              )
+                            }
+                          />
+
+
+                          <button
+                            type="button"
+                            disabled={
+                              isQueueLocked(
+                                item
+                              )
+                            }
+                            onClick={() =>
+                              setQueueScheduleNow(
+                                item.id
+                              )
+                            }
+                          >
+                            Now
+                          </button>
+
+
+                          <small>
+                            {
+                              item.queueState ===
+                              "WAITING_TIME"
+                                ? "Waiting until scheduled time"
+                                : item.queueState ===
+                                    "READY"
+                                  ? "Eligible to send now"
+                                  : item.queueState ===
+                                      "SENDING"
+                                    ? "Sending command"
+                                    : item.queueState ===
+                                        "SENT"
+                                      ? "Command sent"
+                                      : "Schedule saved"
+                            }
+                          </small>
+
+                        </div>
+
+                      </td>
+
+
+                      {/* QUEUE STATE */}
+
+                      <td>
+
+                        <QueueStateBadge
+                          state={
+                            item.queueState
+                          }
+                        />
+
+                      </td>
+
+
+                      {/* RCS STATUS */}
+
+                      <td>
+
+                        <RcsStatusBadge
+                          status={
+                            item.rcsStatus
+                          }
+                          taskChainCode={
+                            item.rcsTaskChainCode
+                          }
+                          bridgeTaskId={
+                            item.bridgeTaskId
+                          }
+                          backendError={
+                            item.backendError
+                          }
+                        />
+
+                      </td>
+
+
+                      {/* COMMAND */}
+
+                      <td>
+
+                        <div className="draft-action-buttons">
+
+                          <button
+                            type="button"
+                            className="view-draft-button"
+                            onClick={() =>
+                              setSelectedDraft(
+                                item
+                              )
+                            }
+                          >
+
+                            <Eye
+                              size={14}
+                            />
+
+                            View Draft
+
+                          </button>
+
+
+                          <button
+                            type="button"
+                            className="payload-button"
+                            onClick={() =>
+                              copyText(
+                                JSON.stringify(
+                                  item.commandDraft,
+                                  null,
+                                  2
+                                )
+                              )
+                            }
+                          >
+
+                            <Copy
+                              size={14}
+                            />
+
+                            Copy Draft
+
+                          </button>
+
+                        </div>
+
+                      </td>
+
+
+                      {/* HISTORY */}
+
+                      <td>
 
                         <button
                           type="button"
-                          className="view-draft-button"
+                          className="history-button"
                           onClick={() =>
-                            setSelectedDraft(
+                            setSelectedHistoryItem(
                               item
                             )
                           }
                         >
-                          <Eye
+
+                          <History
                             size={14}
                           />
 
-                          View Draft
+                          History
+
+                          <span>
+                            {
+                              item.history?.length ||
+                              0
+                            }
+                          </span>
+
                         </button>
 
+                      </td>
 
-                        {/* COPY */}
+
+                      {/* SEND */}
+
+                      <td>
 
                         <button
                           type="button"
-                          className="payload-button"
+                          className="simulate-send-button"
+                          disabled={
+                            item.queueState !==
+                              "READY" ||
+                            isQueueLocked(
+                              item
+                            )
+                          }
                           onClick={() =>
-                            copyText(
-                              JSON.stringify(
-                                item.commandDraft,
-                                null,
-                                2
-                              )
-                           )
+                            sendToRcsBridge(
+                              item
+                            )
                           }
                         >
-                          <Copy
+
+                          <Play
                             size={14}
                           />
 
-                          Copy Draft
+
+                          {
+                            item.sendStatus ===
+                            "SENDING"
+                              ? "Sending..."
+                              : item.sendStatus ===
+                                  "SENT"
+                                ? "Sent"
+                                : "Send to Bridge"
+                          }
+
                         </button>
 
-                      </div>
+                      </td>
 
-                    </td>
 
-                    <td>
+                      {/* DELETE */}
 
-                      <button
-                        type="button"
-                        className="history-button"
-                        onClick={() =>
-                          setSelectedHistoryItem(
-                            item
-                          )
-                        }
-                      >
-                        <History
-                          size={14}
-                        />
+                      <td>
 
-                        History
-
-                        <span>
-                          {
-                            item.history
-                              ?.length ||
-                            0
+                        <button
+                          type="button"
+                          className="robot-remove-button"
+                          disabled={
+                            isQueueLocked(
+                              item
+                            )
                           }
-                        </span>
+                          title={
+                            isQueueLocked(
+                              item
+                            )
+                              ? "Locked after RCS sending starts"
+                              : "Remove this unsent dispatch from the RCS Queue"
+                          }
+                          onClick={() =>
+                            removeQueueItem(
+                              item
+                            )
+                          }
+                        >
 
-                      </button>
+                          <Trash2
+                            size={14}
+                          />
 
-                    </td>
+                        </button>
 
-                    
+                      </td>
 
+                    </tr>
 
-                    {/* SIMULATE SEND */}
-
-                    <td>
-
-                      <button
-                        type="button"
-                        className="simulate-send-button"
-                        disabled={
-                          item.queueState !==
-                            "READY" ||
-                          isQueueLocked(item)
-                        }
-                        onClick={() =>
-                          simulateSendToRcs(
-                            item
-                          )
-                        }
-                      >
-                        <Play
-                          size={14}
-                        />
-
-                        {item.sendStatus ===
-                        "SENDING"
-                          ? "Sending..."
-                          : item.sendStatus ===
-                              "SENT"
-                            ? "Sent"
-                            : "Simulate Send"}
-                      </button>
-
-                    </td>
-
-
-                    {/* REMOVE */}
-
-                    <td>
-
-                      <button
-                        type="button"
-                        className="robot-remove-button"
-
-                        disabled={
-                          isQueueLocked(
-                            item
-                          )
-                        }   
-
-                        title={
-                          isQueueLocked(
-                            item
-                          )
-                            ? "Locked after RCS sending starts"
-                            : "Remove this unsent dispatch from the RCS Queue"
-                        }
-
-                        onClick={() =>
-                          removeQueueItem(
-                            item
-                          )
-                        }
-                      >
-                        <Trash2
-                          size={14}
-                        />
-
-                      </button>
-
-                    </td>
-
-                  </tr>
+                  )
                 )
-              )}
+              }
 
             </tbody>
 
           </table>
 
 
-          {queueRows.length ===
-            0 && (
-            <div className="dispatcher-empty">
+          {
+            displayQueueRows.length ===
+              0 && (
 
-              <Send
-                size={30}
-              />
+              <div className="dispatcher-empty">
 
-              <strong>
-                RCS Queue is Empty
-              </strong>
+                <Send
+                  size={30}
+                />
 
-              <span>
-                Add a mapped Warehouse Task to start scheduling.
-              </span>
 
-            </div>
-          )}
+                <strong>
+                  RCS Queue is Empty
+                </strong>
+
+
+                <span>
+                  Add a mapped Warehouse Task to start scheduling.
+                </span>
+
+              </div>
+
+            )
+          }
 
         </div>
 
-            </section>
+      </section>
 
 
       {/* =================================================
           COMMAND DRAFT MODAL
       ================================================= */}
 
-      {selectedDraft && (
-        <CommandDraftModal
-          item={
-            selectedDraft
-          }
-          onClose={() =>
-            setSelectedDraft(
-              null
-            )
-          }
-        />
-      )}
+      {
+        selectedDraft && (
 
-      {selectedHistoryItem && (
-        <QueueHistoryModal
-          item={
-            queueRows.find(
-              (row) =>
-                row.id ===
-                selectedHistoryItem.id
-            ) ||
-            selectedHistoryItem
-          }
+          <CommandDraftModal
+            item={
+              selectedDraft
+            }
+            onClose={() =>
+              setSelectedDraft(
+                null
+              )
+            }
+          />
 
-          onClose={() =>
-            setSelectedHistoryItem(
-              null
-            )
-          }
-        />
-      )}
+        )
+      }
+
+
+      {/* =================================================
+          HISTORY MODAL
+      ================================================= */}
+
+      {
+        selectedHistoryItem && (
+
+          <QueueHistoryModal
+            item={
+              queueRows.find(
+                (row) =>
+                  row.id ===
+                  selectedHistoryItem.id
+              ) ||
+              selectedHistoryItem
+            }
+            onClose={() =>
+              setSelectedHistoryItem(
+                null
+              )
+            }
+          />
+
+        )
+      }
 
     </div>
+
   );
+
 }
+
 
 /* =========================================================
    COMMAND DRAFT MODAL
@@ -3045,10 +3983,13 @@ function CommandDraftModal({
   item,
   onClose,
 }) {
+
   const [
     copied,
     setCopied,
-  ] = useState(false);
+  ] = useState(
+    false
+  );
 
 
   const jsonText =
@@ -3060,18 +4001,25 @@ function CommandDraftModal({
 
 
   async function handleCopy() {
+
     const success =
       await copyText(
         jsonText
       );
 
 
-    if (!success) {
+    if (
+      !success
+    ) {
+
       return;
+
     }
 
 
-    setCopied(true);
+    setCopied(
+      true
+    );
 
 
     window.setTimeout(
@@ -3081,32 +4029,31 @@ function CommandDraftModal({
         ),
       1800
     );
+
   }
 
 
   return (
+
     <div
       className="draft-modal-backdrop"
       onMouseDown={(
         event
       ) => {
-        /*
-         * คลิกพื้นที่ดำด้านนอก
-         * = ปิด Modal
-         */
 
         if (
           event.target ===
           event.currentTarget
         ) {
+
           onClose();
+
         }
+
       }}
     >
 
       <div className="draft-modal">
-
-        {/* HEADER */}
 
         <div className="draft-modal-header">
 
@@ -3138,15 +4085,15 @@ function CommandDraftModal({
             }
             aria-label="Close"
           >
+
             <X
               size={18}
             />
+
           </button>
 
         </div>
 
-
-        {/* TASK INFORMATION */}
 
         <div className="draft-info-grid">
 
@@ -3224,8 +4171,6 @@ function CommandDraftModal({
         </div>
 
 
-        {/* ROUTE */}
-
         <div className="draft-route-preview">
 
           <div>
@@ -3249,9 +4194,11 @@ function CommandDraftModal({
                 "SITE"
               }
 
-              {item.sourceRcsMapCode
-                ? ` · Map ${item.sourceRcsMapCode}`
-                : ""}
+              {
+                item.sourceRcsMapCode
+                  ? ` · Map ${item.sourceRcsMapCode}`
+                  : ""
+              }
             </small>
 
           </div>
@@ -3283,17 +4230,17 @@ function CommandDraftModal({
                 "SITE"
               }
 
-              {item.destinationRcsMapCode
-                ? ` · Map ${item.destinationRcsMapCode}`
-                : ""}
+              {
+                item.destinationRcsMapCode
+                  ? ` · Map ${item.destinationRcsMapCode}`
+                  : ""
+              }
             </small>
 
           </div>
 
         </div>
 
-
-        {/* WARNING */}
 
         <div className="draft-notice">
 
@@ -3311,8 +4258,6 @@ function CommandDraftModal({
         </div>
 
 
-        {/* JSON */}
-
         <div className="draft-json-section">
 
           <div className="draft-json-header">
@@ -3328,13 +4273,18 @@ function CommandDraftModal({
                 handleCopy
               }
             >
+
               <Copy
                 size={14}
               />
 
-              {copied
-                ? "Copied"
-                : "Copy JSON"}
+
+              {
+                copied
+                  ? "Copied"
+                  : "Copy JSON"
+              }
+
             </button>
 
           </div>
@@ -3342,14 +4292,14 @@ function CommandDraftModal({
 
           <pre>
             <code>
-              {jsonText}
+              {
+                jsonText
+              }
             </code>
           </pre>
 
         </div>
 
-
-        {/* FOOTER */}
 
         <div className="draft-modal-footer">
 
@@ -3368,8 +4318,11 @@ function CommandDraftModal({
       </div>
 
     </div>
+
   );
+
 }
+
 
 /* =========================================================
    QUEUE HISTORY MODAL
@@ -3379,48 +4332,86 @@ function QueueHistoryModal({
   item,
   onClose,
 }) {
+
+  const [
+    historyOrder,
+    setHistoryOrder,
+  ] = useState(
+    "NEWEST"
+  );
+
+
   const history =
     Array.isArray(
       item.history
     )
-      ? [...item.history]
+      ? [
+          ...item.history,
+        ]
       : [];
 
 
-  /*
-   * ล่าสุดอยู่ด้านบน
-   */
-
   history.sort(
-    (a, b) =>
-      getTime(
-        b.at
-      ) -
-      getTime(
-        a.at
-      )
+    (
+      a,
+      b
+    ) => {
+
+      const timeA =
+        getTime(
+          a.at
+        );
+
+
+      const timeB =
+        getTime(
+          b.at
+        );
+
+
+      if (
+        historyOrder ===
+        "OLDEST"
+      ) {
+
+        return (
+          timeA -
+          timeB
+        );
+
+      }
+
+
+      return (
+        timeB -
+        timeA
+      );
+
+    }
   );
 
 
   return (
+
     <div
       className="history-modal-backdrop"
-
       onMouseDown={(
         event
       ) => {
+
         if (
           event.target ===
           event.currentTarget
         ) {
+
           onClose();
+
         }
+
       }}
     >
 
       <div className="history-modal">
-
-        {/* HEADER */}
 
         <div className="history-modal-header">
 
@@ -3457,15 +4448,15 @@ function QueueHistoryModal({
               onClose
             }
           >
+
             <X
               size={18}
             />
+
           </button>
 
         </div>
 
-
-        {/* CURRENT STATE */}
 
         <div className="history-current-state">
 
@@ -3529,112 +4520,201 @@ function QueueHistoryModal({
         </div>
 
 
-        {/* TIMELINE */}
+        {/* ===============================================
+            HISTORY SORT
+        =============================================== */}
 
-        <div className="history-timeline">
+        <div className="history-sort-bar">
 
-          {history.map(
-            (
-              event,
-              index
-            ) => (
-              <div
-                className="history-event"
-                key={
-                  event.id ||
-                  `${event.at}-${index}`
-                }
-              >
+          <div className="history-sort-info">
 
-                <div className="history-event-marker">
-
-                  <span />
-
-                </div>
+            <span>
+              TIMELINE ORDER
+            </span>
 
 
-                <div className="history-event-content">
-
-                  <div className="history-event-top">
-
-                    <strong>
-                      {
-                        formatHistoryType(
-                          event.type
-                        )
-                      }
-                    </strong>
+            <strong>
+              {
+                historyOrder ===
+                "OLDEST"
+                  ? "Oldest → Newest"
+                  : "Newest → Oldest"
+              }
+            </strong>
 
 
-                    <time>
-                      {
-                        formatDateTime(
-                          event.at
-                        )
-                      }
-                    </time>
+            <small>
+              {
+                historyOrder ===
+                "OLDEST"
+                  ? "Showing the first event at the top."
+                  : "Showing the latest event at the top."
+              }
+            </small>
 
-                  </div>
-
-
-                  <p>
-                    {
-                      event.message
-                    }
-                  </p>
+          </div>
 
 
-                  {event.details && (
-                    <details>
+          <div className="history-sort-buttons">
 
-                      <summary>
-                        Details
-                      </summary>
-
-
-                      <pre>
-                        {JSON.stringify(
-                          event.details,
-                          null,
-                          2
-                        )}
-                      </pre>
-
-                    </details>
-                  )}
-
-                </div>
-
-              </div>
-            )
-          )}
+            <button
+              type="button"
+              className={
+                historyOrder ===
+                "OLDEST"
+                  ? "active"
+                  : ""
+              }
+              onClick={() =>
+                setHistoryOrder(
+                  "OLDEST"
+                )
+              }
+            >
+              Oldest
+              {" → "}
+              Newest
+            </button>
 
 
-          {history.length ===
-            0 && (
-            <div className="history-empty">
+            <button
+              type="button"
+              className={
+                historyOrder ===
+                "NEWEST"
+                  ? "active"
+                  : ""
+              }
+              onClick={() =>
+                setHistoryOrder(
+                  "NEWEST"
+                )
+              }
+            >
+              Newest
+              {" → "}
+              Oldest
+            </button>
 
-              <History
-                size={26}
-              />
-
-
-              <strong>
-                No History Yet
-              </strong>
-
-
-              <span>
-                New queue events will appear here.
-              </span>
-
-            </div>
-          )}
+          </div>
 
         </div>
 
 
-        {/* FOOTER */}
+        <div className="history-timeline">
+
+          {
+            history.map(
+              (
+                event,
+                index
+              ) => (
+
+                <div
+                  className="history-event"
+                  key={
+                    event.id ||
+                    `${event.at}-${index}`
+                  }
+                >
+
+                  <div className="history-event-marker">
+                    <span />
+                  </div>
+
+
+                  <div className="history-event-content">
+
+                    <div className="history-event-top">
+
+                      <strong>
+                        {
+                          formatHistoryType(
+                            event.type
+                          )
+                        }
+                      </strong>
+
+
+                      <time>
+                        {
+                          formatDateTime(
+                            event.at
+                          )
+                        }
+                      </time>
+
+                    </div>
+
+
+                    <p>
+                      {
+                        event.message
+                      }
+                    </p>
+
+
+                    {
+                      event.details && (
+
+                        <details>
+
+                          <summary>
+                            Details
+                          </summary>
+
+
+                          <pre>
+                            {
+                              JSON.stringify(
+                                event.details,
+                                null,
+                                2
+                              )
+                            }
+                          </pre>
+
+                        </details>
+
+                      )
+                    }
+
+                  </div>
+
+                </div>
+
+              )
+            )
+          }
+
+
+          {
+            history.length ===
+              0 && (
+
+              <div className="history-empty">
+
+                <History
+                  size={26}
+                />
+
+
+                <strong>
+                  No History Yet
+                </strong>
+
+
+                <span>
+                  New queue events will appear here.
+                </span>
+
+              </div>
+
+            )
+          }
+
+        </div>
+
 
         <div className="history-modal-footer">
 
@@ -3652,33 +4732,9 @@ function QueueHistoryModal({
       </div>
 
     </div>
+
   );
-}
 
-
-/* =========================================================
-   FORMAT HISTORY TYPE
-========================================================= */
-
-function formatHistoryType(
-  value
-) {
-  return String(
-    value ||
-    "EVENT"
-  )
-    .replaceAll(
-      "_",
-      " "
-    )
-    .toLowerCase()
-    .replace(
-      /\b\w/g,
-      (
-        character
-      ) =>
-        character.toUpperCase()
-    );
 }
 
 
@@ -3691,7 +4747,9 @@ function DraftInfo({
   value,
   wide = false,
 }) {
+
   return (
+
     <div
       className={`draft-info-item ${
         wide
@@ -3701,17 +4759,24 @@ function DraftInfo({
     >
 
       <span>
-        {label}
+        {
+          label
+        }
       </span>
 
 
       <strong>
-        {value}
+        {
+          value
+        }
       </strong>
 
     </div>
+
   );
+
 }
+
 
 /* =========================================================
    SUMMARY CARD
@@ -3723,31 +4788,41 @@ function SummaryCard({
   icon,
   tone = "default",
 }) {
+
   return (
+
     <div
       className={`dispatcher-summary-card tone-${tone}`}
     >
 
       <div className="dispatcher-summary-icon">
-        {icon}
+        {
+          icon
+        }
       </div>
 
 
       <div>
 
         <span>
-          {title}
+          {
+            title
+          }
         </span>
 
 
         <strong>
-          {value}
+          {
+            value
+          }
         </strong>
 
       </div>
 
     </div>
+
   );
+
 }
 
 
@@ -3763,7 +4838,9 @@ function RouteCell({
   emptyText,
   rcs = false,
 }) {
+
   return (
+
     <div
       className={`dispatcher-route-cell ${
         rcs
@@ -3772,13 +4849,13 @@ function RouteCell({
       }`}
     >
 
-      {/* SOURCE */}
-
       <div>
 
         <span>
-          {sourceLabel ||
-            "Source"}
+          {
+            sourceLabel ||
+            "Source"
+          }
         </span>
 
 
@@ -3789,12 +4866,17 @@ function RouteCell({
               : "missing"
           }
         >
+
           <MapPin
             size={11}
           />
 
-          {sourceCode ||
-            emptyText}
+
+          {
+            sourceCode ||
+            emptyText
+          }
+
         </strong>
 
       </div>
@@ -3805,13 +4887,13 @@ function RouteCell({
       />
 
 
-      {/* DESTINATION */}
-
       <div>
 
         <span>
-          {destinationLabel ||
-            "Destination"}
+          {
+            destinationLabel ||
+            "Destination"
+          }
         </span>
 
 
@@ -3822,29 +4904,37 @@ function RouteCell({
               : "missing"
           }
         >
+
           <MapPin
             size={11}
           />
 
-          {destinationCode ||
-            emptyText}
+
+          {
+            destinationCode ||
+            emptyText
+          }
+
         </strong>
 
       </div>
 
     </div>
+
   );
+
 }
 
 
 /* =========================================================
-   PRIORITY
+   PRIORITY BADGE
 ========================================================= */
 
 function PriorityBadge({
   priority,
   rcsPriority,
 }) {
+
   const normalized =
     String(
       priority ||
@@ -3853,6 +4943,7 @@ function PriorityBadge({
 
 
   return (
+
     <div className="dispatcher-priority-wrap">
 
       <span
@@ -3865,8 +4956,7 @@ function PriorityBadge({
 
 
       <small>
-        RCS
-        {" "}
+        RCS{" "}
         {
           Number(
             rcsPriority ||
@@ -3876,18 +4966,22 @@ function PriorityBadge({
       </small>
 
     </div>
+
   );
+
 }
 
 
 /* =========================================================
-   QUEUE STATE
+   QUEUE STATE BADGE
 ========================================================= */
 
 function QueueStateBadge({
   state,
 }) {
+
   const labels = {
+
     READY:
       "READY",
 
@@ -3906,6 +5000,7 @@ function QueueStateBadge({
 
 
   return (
+
     <span
       className={`queue-state queue-${String(
         state
@@ -3917,21 +5012,29 @@ function QueueStateBadge({
         )}`}
     >
       {
-        labels[state] ||
+        labels[
+          state
+        ] ||
         state
       }
     </span>
+
   );
+
 }
 
+
 /* =========================================================
-   RCS STATUS BADGE
+   RCS STATUS
 ========================================================= */
 
 function RcsStatusBadge({
   status,
   taskChainCode,
+  bridgeTaskId,
+  backendError,
 }) {
+
   const normalized =
     String(
       status ||
@@ -3940,6 +5043,7 @@ function RcsStatusBadge({
 
 
   return (
+
     <div className="rcs-status-wrap">
 
       <span
@@ -3959,21 +5063,61 @@ function RcsStatusBadge({
       </span>
 
 
-      {taskChainCode && (
-        <small
-          title={
-            taskChainCode
-          }
-        >
-          {
-            taskChainCode
-          }
-        </small>
-      )}
+      {
+        taskChainCode && (
+
+          <small
+            title={
+              taskChainCode
+            }
+          >
+            {
+              taskChainCode
+            }
+          </small>
+
+        )
+      }
+
+
+      {
+        bridgeTaskId && (
+
+          <small
+            title={
+              bridgeTaskId
+            }
+          >
+            Bridge{" "}
+            {
+              bridgeTaskId
+            }
+          </small>
+
+        )
+      }
+
+
+      {
+        backendError && (
+
+          <small
+            title={
+              backendError
+            }
+          >
+            Bridge error
+          </small>
+
+        )
+      }
 
     </div>
+
   );
+
 }
+
 
 /* =========================================================
    MAPPING READINESS
@@ -3982,14 +5126,13 @@ function RcsStatusBadge({
 function MappingReadiness({
   candidate,
 }) {
-  /*
-   * Task เข้า Queue แล้ว
-   */
 
   if (
     candidate.existingQueueItem
   ) {
+
     return (
+
       <div className="mapping-readiness">
 
         <span className="readiness queued">
@@ -4003,7 +5146,9 @@ function MappingReadiness({
         </span>
 
       </div>
+
     );
+
   }
 
 
@@ -4019,17 +5164,13 @@ function MappingReadiness({
     [];
 
 
-  /*
-   * =====================================================
-   * ERROR
-   * =====================================================
-   */
-
   if (
     errors.length >
     0
   ) {
+
     return (
+
       <div className="mapping-readiness">
 
         <span className="readiness not-ready">
@@ -4045,37 +5186,41 @@ function MappingReadiness({
 
         <div className="mapping-message-list error">
 
-          {errors.map(
-            (
-              message,
-              index
-            ) => (
-              <small
-                key={`${message}-${index}`}
-              >
-                • {message}
-              </small>
+          {
+            errors.map(
+              (
+                message,
+                index
+              ) => (
+
+                <small
+                  key={`${message}-${index}`}
+                >
+                  • {
+                    message
+                  }
+                </small>
+
+              )
             )
-          )}
+          }
 
         </div>
 
       </div>
+
     );
+
   }
 
-
-  /*
-   * =====================================================
-   * WARNING
-   * =====================================================
-   */
 
   if (
     warnings.length >
     0
   ) {
+
     return (
+
       <div className="mapping-readiness">
 
         <span className="readiness warning">
@@ -4091,33 +5236,36 @@ function MappingReadiness({
 
         <div className="mapping-message-list warning">
 
-          {warnings.map(
-            (
-              message,
-              index
-            ) => (
-              <small
-                key={`${message}-${index}`}
-              >
-                • {message}
-              </small>
+          {
+            warnings.map(
+              (
+                message,
+                index
+              ) => (
+
+                <small
+                  key={`${message}-${index}`}
+                >
+                  • {
+                    message
+                  }
+                </small>
+
+              )
             )
-          )}
+          }
 
         </div>
 
       </div>
+
     );
+
   }
 
 
-  /*
-   * =====================================================
-   * READY
-   * =====================================================
-   */
-
   return (
+
     <div className="mapping-readiness">
 
       <span className="readiness ready">
@@ -4136,11 +5284,42 @@ function MappingReadiness({
       </small>
 
     </div>
+
   );
+
 }
 
+
 /* =========================================================
-   RESOLVE SOURCE / DESTINATION
+   HISTORY TYPE FORMAT
+========================================================= */
+
+function formatHistoryType(
+  value
+) {
+
+  return String(
+    value ||
+    "EVENT"
+  )
+    .replaceAll(
+      "_",
+      " "
+    )
+    .toLowerCase()
+    .replace(
+      /\b\w/g,
+      (
+        character
+      ) =>
+        character.toUpperCase()
+    );
+
+}
+
+
+/* =========================================================
+   RESOLVE TASK ENDPOINTS
 ========================================================= */
 
 function resolveTaskEndpoints({
@@ -4149,23 +5328,20 @@ function resolveTaskEndpoints({
   receivingLocation,
   shippingLocation,
 }) {
+
   let sourceLocation =
     null;
+
 
   let destinationLocation =
     null;
 
 
-  /*
-   * PUTAWAY
-   *
-   * Receiving -> Storage
-   */
-
   if (
     task.type ===
     "PUTAWAY"
   ) {
+
     sourceLocation =
       task.sourceLocationId
         ? locationMap.get(
@@ -4179,16 +5355,9 @@ function resolveTaskEndpoints({
         task.destinationLocationId
       ) ||
       null;
-  }
 
+  } else {
 
-  /*
-   * PICKING
-   *
-   * Storage -> Shipping
-   */
-
-  else {
     sourceLocation =
       locationMap.get(
         task.sourceLocationId
@@ -4202,10 +5371,12 @@ function resolveTaskEndpoints({
             task.destinationLocationId
           )
         : shippingLocation;
+
   }
 
 
   return {
+
     sourceLocationId:
       sourceLocation?.id ||
       task.sourceLocationId ||
@@ -4215,7 +5386,6 @@ function resolveTaskEndpoints({
       destinationLocation?.id ||
       task.destinationLocationId ||
       "",
-
 
     sourceLabel:
       sourceLocation?.code ||
@@ -4227,7 +5397,6 @@ function resolveTaskEndpoints({
       task.destinationLabel ||
       "DESTINATION",
 
-
     sourceNodeId:
       sourceLocation?.mapNodeId ||
       task.sourceNodeId ||
@@ -4238,11 +5407,6 @@ function resolveTaskEndpoints({
       task.destinationNodeId ||
       "",
 
-
-    /*
-     * HIK POINT
-     */
-
     sourceRcsPointCode:
       sourceLocation?.rcsPointCode ||
       "",
@@ -4250,7 +5414,6 @@ function resolveTaskEndpoints({
     destinationRcsPointCode:
       destinationLocation?.rcsPointCode ||
       "",
-
 
     sourceRcsMapCode:
       sourceLocation?.rcsMapCode ||
@@ -4260,7 +5423,6 @@ function resolveTaskEndpoints({
       destinationLocation?.rcsMapCode ||
       "",
 
-
     sourceRcsTargetType:
       sourceLocation?.rcsTargetType ||
       "SITE",
@@ -4269,17 +5431,19 @@ function resolveTaskEndpoints({
       destinationLocation?.rcsTargetType ||
       "SITE",
   };
+
 }
 
 
 /* =========================================================
-   REFRESH RCS POINTS FOR QUEUED TASK
+   ENRICH QUEUED ENDPOINTS
 ========================================================= */
 
 function enrichQueuedEndpoints(
   item,
   locationMap
 ) {
+
   const sourceLocation =
     locationMap.get(
       item.sourceLocationId
@@ -4293,6 +5457,7 @@ function enrichQueuedEndpoints(
 
 
   return {
+
     sourceRcsPointCode:
       sourceLocation?.rcsPointCode ||
       item.sourceRcsPointCode ||
@@ -4302,7 +5467,6 @@ function enrichQueuedEndpoints(
       destinationLocation?.rcsPointCode ||
       item.destinationRcsPointCode ||
       "",
-
 
     sourceRcsMapCode:
       sourceLocation?.rcsMapCode ||
@@ -4314,7 +5478,6 @@ function enrichQueuedEndpoints(
       item.destinationRcsMapCode ||
       "",
 
-
     sourceRcsTargetType:
       sourceLocation?.rcsTargetType ||
       item.sourceRcsTargetType ||
@@ -4325,54 +5488,47 @@ function enrichQueuedEndpoints(
       item.destinationRcsTargetType ||
       "SITE",
   };
+
 }
 
 
 /* =========================================================
-   RCS ENDPOINT VALIDATION
+   ENDPOINT READINESS
 ========================================================= */
 
 function getEndpointReadiness(
   endpoints
 ) {
-  const errors = [];
-  const warnings = [];
 
-  /*
-   * =====================================================
-   * SOURCE WMS LOCATION
-   * =====================================================
-   */
+  const errors =
+    [];
+
+
+  const warnings =
+    [];
+
 
   if (
     !endpoints.sourceLocationId
   ) {
+
     errors.push(
       "Source WMS location missing"
     );
+
   }
 
-
-  /*
-   * =====================================================
-   * DESTINATION WMS LOCATION
-   * =====================================================
-   */
 
   if (
     !endpoints.destinationLocationId
   ) {
+
     errors.push(
       "Destination WMS location missing"
     );
+
   }
 
-
-  /*
-   * =====================================================
-   * SOURCE HIK RCS POINT
-   * =====================================================
-   */
 
   if (
     !String(
@@ -4380,17 +5536,13 @@ function getEndpointReadiness(
       ""
     ).trim()
   ) {
+
     errors.push(
       "Source HIK RCS point missing"
     );
+
   }
 
-
-  /*
-   * =====================================================
-   * DESTINATION HIK RCS POINT
-   * =====================================================
-   */
 
   if (
     !String(
@@ -4398,22 +5550,13 @@ function getEndpointReadiness(
       ""
     ).trim()
   ) {
+
     errors.push(
       "Destination HIK RCS point missing"
     );
+
   }
 
-
-  /*
-   * =====================================================
-   * TARGET TYPES
-   *
-   * ตอนนี้ WMS รองรับเฉพาะ:
-   *
-   * SITE
-   * STORAGE
-   * =====================================================
-   */
 
   const sourceType =
     String(
@@ -4429,10 +5572,11 @@ function getEndpointReadiness(
     ).toUpperCase();
 
 
-  const supportedTypes = [
-    "SITE",
-    "STORAGE",
-  ];
+  const supportedTypes =
+    [
+      "SITE",
+      "STORAGE",
+    ];
 
 
   if (
@@ -4440,9 +5584,11 @@ function getEndpointReadiness(
       sourceType
     )
   ) {
+
     errors.push(
       `Unsupported source RCS target type: ${sourceType}`
     );
+
   }
 
 
@@ -4451,22 +5597,13 @@ function getEndpointReadiness(
       destinationType
     )
   ) {
+
     errors.push(
       `Unsupported destination RCS target type: ${destinationType}`
     );
+
   }
 
-
-  /*
-   * =====================================================
-   * WMS MAP NODE
-   *
-   * ไม่ block
-   *
-   * เพราะการส่ง RCS ใช้ RCS Point
-   * ไม่ใช่ WMS Node โดยตรง
-   * =====================================================
-   */
 
   if (
     !String(
@@ -4474,9 +5611,11 @@ function getEndpointReadiness(
       ""
     ).trim()
   ) {
+
     warnings.push(
       "Source WMS map node missing"
     );
+
   }
 
 
@@ -4486,22 +5625,13 @@ function getEndpointReadiness(
       ""
     ).trim()
   ) {
+
     warnings.push(
       "Destination WMS map node missing"
     );
+
   }
 
-
-  /*
-   * =====================================================
-   * RCS MAP CODE
-   *
-   * ตอนนี้ยังไม่บังคับ
-   *
-   * เพราะ exact GenerateTaskOrder
-   * request ยังไม่ยืนยัน
-   * =====================================================
-   */
 
   if (
     !String(
@@ -4509,9 +5639,11 @@ function getEndpointReadiness(
       ""
     ).trim()
   ) {
+
     warnings.push(
       "Source RCS Map Code not set"
     );
+
   }
 
 
@@ -4521,22 +5653,13 @@ function getEndpointReadiness(
       ""
     ).trim()
   ) {
+
     warnings.push(
       "Destination RCS Map Code not set"
     );
+
   }
 
-
-  /*
-   * =====================================================
-   * SAME POINT
-   *
-   * ไม่ block
-   *
-   * แค่เตือน เพราะบาง Process
-   * อาจมี use case พิเศษ
-   * =====================================================
-   */
 
   if (
     endpoints.sourceRcsPointCode &&
@@ -4548,21 +5671,13 @@ function getEndpointReadiness(
         endpoints.destinationRcsPointCode
       ).trim()
   ) {
+
     warnings.push(
       "Source and destination use the same RCS point"
     );
+
   }
 
-
-  /*
-   * =====================================================
-   * CROSS MAP
-   *
-   * HIK รองรับ cross-map process ได้
-   *
-   * เพราะฉะนั้นไม่ถือเป็น error
-   * =====================================================
-   */
 
   if (
     endpoints.sourceRcsMapCode &&
@@ -4574,17 +5689,13 @@ function getEndpointReadiness(
         endpoints.destinationRcsMapCode
       ).trim()
   ) {
+
     warnings.push(
       "Source and destination are on different RCS maps"
     );
+
   }
 
-
-  /*
-   * =====================================================
-   * FINAL RESULT
-   * =====================================================
-   */
 
   return {
     ok:
@@ -4598,56 +5709,61 @@ function getEndpointReadiness(
     message:
       errors[0] ||
       (
-        warnings.length > 0
+        warnings.length >
+        0
           ? "Ready with warning"
           : "Ready"
       ),
   };
+
 }
 
+
 /* =========================================================
-   RECEIVING / SHIPPING
+   FIND OPERATION LOCATION
 ========================================================= */
 
 function findOperationalLocation(
   locations,
   type
 ) {
-  return (
-    locations
 
-      .filter(
-        (location) =>
-          location.type ===
-            type &&
-          ![
-            "BLOCKED",
-            "MAINTENANCE",
-          ].includes(
-            location.status
-          )
-      )
+  return locations
 
-      .sort(
-        (a, b) =>
+    .filter(
+      (location) =>
+        location.type ===
+          type &&
+        ![
+          "BLOCKED",
+          "MAINTENANCE",
+        ].includes(
+          location.status
+        )
+    )
+
+    .sort(
+      (
+        a,
+        b
+      ) =>
+        String(
+          a.code ||
+          ""
+        ).localeCompare(
           String(
-            a.code ||
+            b.code ||
             ""
-          ).localeCompare(
-            String(
-              b.code ||
-              ""
-            )
           )
-      )[0] ||
+        )
+    )[0] ||
+    null;
 
-    null
-  );
 }
 
 
 /* =========================================================
-   CREATE QUEUE RECORD
+   CREATE DISPATCH RECORD
 ========================================================= */
 
 function createDispatchRecord({
@@ -4656,8 +5772,10 @@ function createDispatchRecord({
   scheduledSendAt,
   id,
 }) {
+
   const createdAt =
-    new Date().toISOString();
+    new Date()
+      .toISOString();
 
 
   const wmsPriority =
@@ -4667,12 +5785,8 @@ function createDispatchRecord({
 
 
   return {
+
     id,
-
-
-    /*
-     * WMS reference
-     */
 
     warehouseTaskId:
       warehouseTask.id,
@@ -4684,11 +5798,6 @@ function createDispatchRecord({
     sourceOrderNo:
       warehouseTask.sourceOrderNo ||
       "",
-
-
-    /*
-     * Task information
-     */
 
     type:
       warehouseTask.type,
@@ -4707,32 +5816,17 @@ function createDispatchRecord({
         0
       ),
 
-
-    /*
-     * WMS locations
-     */
-
     sourceLocationId:
       endpoints.sourceLocationId,
 
     destinationLocationId:
       endpoints.destinationLocationId,
 
-
-    /*
-     * WMS Map Nodes
-     */
-
     sourceNodeId:
       endpoints.sourceNodeId,
 
     destinationNodeId:
       endpoints.destinationNodeId,
-
-
-    /*
-     * HIK RCS mapping
-     */
 
     sourceRcsPointCode:
       endpoints.sourceRcsPointCode,
@@ -4752,11 +5846,6 @@ function createDispatchRecord({
     destinationRcsTargetType:
       endpoints.destinationRcsTargetType,
 
-
-    /*
-     * Priority
-     */
-
     wmsPriority,
 
     rcsPriority:
@@ -4765,19 +5854,7 @@ function createDispatchRecord({
       ] ||
       60,
 
-
-    /*
-     * Schedule
-     */
-
     scheduledSendAt,
-
-
-    /*
-     * RCS connection state
-     *
-     * ยังไม่ได้ส่งจริง
-     */
 
     sendStatus:
       "NOT_SENT",
@@ -4787,6 +5864,21 @@ function createDispatchRecord({
 
     rcsStatus:
       "NOT_SENT",
+
+    bridgeTaskId:
+      "",
+
+    bridgeMode:
+      "",
+
+    bridgeLastPolledAt:
+      "",
+
+    bridgeElapsedSeconds:
+      0,
+
+    backendError:
+      "",
 
     rcsStartedAt:
       "",
@@ -4800,20 +5892,8 @@ function createDispatchRecord({
     warehouseTaskSyncStatus:
       "NOT_SYNCED",
 
-
-    /*
-    * Queue state ล่าสุด
-    *
-    * จะถูก update โดย state watcher
-    */
-
     lastQueueState:
       "",
-
-
-    /*
-    * Event History
-    */
 
     history: [
       createHistoryEvent({
@@ -4828,23 +5908,20 @@ function createDispatchRecord({
       }),
     ],
 
-
     createdAt,
   };
+
 }
 
 
 /* =========================================================
-   LOAD OLD V6 / NORMALIZE
+   NORMALIZE DISPATCH RECORD
 ========================================================= */
 
 function normalizeDispatchRecord(
   item,
   index
 ) {
-  /*
-   * รองรับข้อมูล V6 เดิม
-   */
 
   const wmsPriority =
     normalizeWmsPriority(
@@ -4854,6 +5931,7 @@ function normalizeDispatchRecord(
 
 
   return {
+
     id:
       String(
         item.id ||
@@ -4865,13 +5943,11 @@ function normalizeDispatchRecord(
         )}`
       ),
 
-
     warehouseTaskId:
       String(
         item.warehouseTaskId ||
         ""
       ),
-
 
     sourceOrderId:
       String(
@@ -4879,13 +5955,11 @@ function normalizeDispatchRecord(
         ""
       ),
 
-
     sourceOrderNo:
       String(
         item.sourceOrderNo ||
         ""
       ),
-
 
     type:
       String(
@@ -4894,13 +5968,11 @@ function normalizeDispatchRecord(
         "TRANSPORT"
       ).toUpperCase(),
 
-
     sku:
       String(
         item.sku ||
         ""
       ),
-
 
     itemName:
       String(
@@ -4908,13 +5980,11 @@ function normalizeDispatchRecord(
         ""
       ),
 
-
     quantity:
       Number(
         item.quantity ||
         0
       ),
-
 
     sourceLocationId:
       String(
@@ -4922,13 +5992,11 @@ function normalizeDispatchRecord(
         ""
       ),
 
-
     destinationLocationId:
       String(
         item.destinationLocationId ||
         ""
       ),
-
 
     sourceNodeId:
       String(
@@ -4936,13 +6004,11 @@ function normalizeDispatchRecord(
         ""
       ),
 
-
     destinationNodeId:
       String(
         item.destinationNodeId ||
         ""
       ),
-
 
     sourceRcsPointCode:
       String(
@@ -4951,7 +6017,6 @@ function normalizeDispatchRecord(
         ""
       ),
 
-
     destinationRcsPointCode:
       String(
         item.destinationRcsPointCode ||
@@ -4959,13 +6024,11 @@ function normalizeDispatchRecord(
         ""
       ),
 
-
     sourceRcsMapCode:
       String(
         item.sourceRcsMapCode ||
         ""
       ),
-
 
     destinationRcsMapCode:
       String(
@@ -4973,13 +6036,11 @@ function normalizeDispatchRecord(
         ""
       ),
 
-
     sourceRcsTargetType:
       String(
         item.sourceRcsTargetType ||
         "SITE"
       ).toUpperCase(),
-
 
     destinationRcsTargetType:
       String(
@@ -4987,9 +6048,7 @@ function normalizeDispatchRecord(
         "SITE"
       ).toUpperCase(),
 
-
     wmsPriority,
-
 
     rcsPriority:
       clampRcsPriority(
@@ -4999,19 +6058,21 @@ function normalizeDispatchRecord(
         ]
       ),
 
-
     scheduledSendAt:
       item.scheduledSendAt ||
       item.createdAt ||
-      new Date().toISOString(),
-
+      new Date()
+        .toISOString(),
 
     sendStatus:
       String(
         item.sendStatus ||
-          (item.status === "SENT"
+        (
+          item.status ===
+          "SENT"
             ? "SENT"
-            : "NOT_SENT")
+            : "NOT_SENT"
+        )
       ).toUpperCase(),
 
     rcsTaskChainCode:
@@ -5036,6 +6097,28 @@ function normalizeDispatchRecord(
 
     rcsCreatedAt:
       item.rcsCreatedAt ||
+      "",
+
+    bridgeTaskId:
+      item.bridgeTaskId ||
+      "",
+
+    bridgeMode:
+      item.bridgeMode ||
+      "",
+
+    bridgeLastPolledAt:
+      item.bridgeLastPolledAt ||
+      "",
+
+    bridgeElapsedSeconds:
+      Number(
+        item.bridgeElapsedSeconds ||
+        0
+      ),
+
+    backendError:
+      item.backendError ||
       "",
 
     rcsStartedAt:
@@ -5079,48 +6162,37 @@ function normalizeDispatchRecord(
 
     createdAt:
       item.createdAt ||
-      new Date().toISOString(),
+      new Date()
+        .toISOString(),
   };
+
 }
 
 
 /* =========================================================
-   COMMAND DRAFT
+   BRIDGE COMMAND
 ========================================================= */
 
-function buildCommandDraft(
+function buildBridgeCommand(
   item
 ) {
+
   return {
-    _note:
-      "Internal WMS command draft only. Exact HIK GenerateTaskOrder endpoint/body is not configured yet.",
-
-
-    /*
-     * External Task ID
-     */
 
     robotTaskCode:
       item.warehouseTaskId,
 
-
     taskType:
       "TRANSPORT",
-
 
     initPriority:
       clampRcsPriority(
         item.rcsPriority
       ),
 
-
     scheduledSendAt:
-      item.scheduledSendAt,
-
-
-    /*
-     * SOURCE
-     */
+      item.scheduledSendAt ||
+      null,
 
     source: {
       type:
@@ -5136,11 +6208,6 @@ function buildCommandDraft(
         "",
     },
 
-
-    /*
-     * DESTINATION
-     */
-
     destination: {
       type:
         item.destinationRcsTargetType ||
@@ -5155,6 +6222,28 @@ function buildCommandDraft(
         "",
     },
   };
+
+}
+
+
+/* =========================================================
+   COMMAND DRAFT
+========================================================= */
+
+function buildCommandDraft(
+  item
+) {
+
+  return {
+
+    _note:
+      "Internal WMS command sent to the WMS RCS Bridge. The bridge will map this to the exact HIK GenerateTaskOrder contract only after that external API is confirmed.",
+
+    ...buildBridgeCommand(
+      item
+    ),
+  };
+
 }
 
 
@@ -5167,101 +6256,70 @@ function getQueueState({
   endpoints,
   now,
 }) {
-  /*
-   * =====================================================
-   * SENDING
-   * =====================================================
-   */
 
   if (
     item.sendStatus ===
     "SENDING"
   ) {
+
     return "SENDING";
+
   }
 
-
-  /*
-   * =====================================================
-   * SENT
-   * =====================================================
-   */
 
   if (
     item.sendStatus ===
     "SENT"
   ) {
+
     return "SENT";
+
   }
 
-  /*
-   * ตรวจ RCS mapping
-   */
 
   const readiness =
-  getEndpointReadiness({
-    sourceLocationId:
-      item.sourceLocationId,
+    getEndpointReadiness({
 
-    destinationLocationId:
-      item.destinationLocationId,
+      sourceLocationId:
+        item.sourceLocationId,
 
+      destinationLocationId:
+        item.destinationLocationId,
 
-    /*
-     * WMS Map Node
-     */
+      sourceNodeId:
+        item.sourceNodeId,
 
-    sourceNodeId:
-      item.sourceNodeId,
+      destinationNodeId:
+        item.destinationNodeId,
 
-    destinationNodeId:
-      item.destinationNodeId,
+      sourceRcsPointCode:
+        endpoints.sourceRcsPointCode,
 
+      destinationRcsPointCode:
+        endpoints.destinationRcsPointCode,
 
-    /*
-     * RCS Point
-     */
+      sourceRcsMapCode:
+        endpoints.sourceRcsMapCode,
 
-    sourceRcsPointCode:
-      endpoints.sourceRcsPointCode,
+      destinationRcsMapCode:
+        endpoints.destinationRcsMapCode,
 
-    destinationRcsPointCode:
-      endpoints.destinationRcsPointCode,
+      sourceRcsTargetType:
+        endpoints.sourceRcsTargetType,
 
-
-    /*
-     * RCS Map
-     */
-
-    sourceRcsMapCode:
-      endpoints.sourceRcsMapCode,
-
-    destinationRcsMapCode:
-      endpoints.destinationRcsMapCode,
-
-
-    /*
-     * RCS Target Type
-     */
-
-    sourceRcsTargetType:
-      endpoints.sourceRcsTargetType,
-
-    destinationRcsTargetType:
-      endpoints.destinationRcsTargetType,
-  });
+      destinationRcsTargetType:
+        endpoints.destinationRcsTargetType,
+    });
 
 
   if (
     !readiness.ok
   ) {
+
     return "MAPPING_REQUIRED";
+
   }
 
-
-  /*
-   * ตรวจเวลา
-   */
 
   const scheduledTime =
     getTime(
@@ -5273,33 +6331,34 @@ function getQueueState({
     scheduledTime >
     now
   ) {
+
     return "WAITING_TIME";
+
   }
 
 
-  /*
-   * ถึงเวลาแล้ว
-   */
-
   return "READY";
+
 }
 
 
 /* =========================================================
-   WAREHOUSE TASK SORT
+   CANDIDATE SORT
 ========================================================= */
 
 function compareWarehouseCandidates(
   a,
   b
 ) {
+
   const priorityCompare =
     (
       PRIORITY_ORDER[
         a.task.priority
       ] ??
       99
-    ) -
+    )
+    -
     (
       PRIORITY_ORDER[
         b.task.priority
@@ -5312,45 +6371,52 @@ function compareWarehouseCandidates(
     priorityCompare !==
     0
   ) {
+
     return priorityCompare;
+
   }
 
-
-  /*
-   * Priority เท่ากัน
-   *
-   * Task เก่าก่อน
-   */
 
   return (
     getTime(
       a.task.createdAt
-    ) -
+    )
+    -
     getTime(
       b.task.createdAt
     )
   );
+
 }
 
 
 /* =========================================================
-   RCS QUEUE SORT
+   REAL RCS QUEUE SORT
+
+   ใช้สำหรับ READY ranking จริง
 ========================================================= */
 
 function compareQueueRows(
   a,
   b
 ) {
-  /*
-   * READY อยู่บนสุด
-   */
 
   const stateRank = {
-    READY: 0,
-    SENDING: 1,
-    WAITING_TIME: 2,
-    MAPPING_REQUIRED: 3,
-    SENT: 4,
+
+    READY:
+      0,
+
+    SENDING:
+      1,
+
+    WAITING_TIME:
+      2,
+
+    MAPPING_REQUIRED:
+      3,
+
+    SENT:
+      4,
   };
 
 
@@ -5360,7 +6426,8 @@ function compareQueueRows(
         a.queueState
       ] ??
       99
-    ) -
+    )
+    -
     (
       stateRank[
         b.queueState
@@ -5373,33 +6440,27 @@ function compareQueueRows(
     stateCompare !==
     0
   ) {
+
     return stateCompare;
+
   }
 
 
-  /*
-   * ==========================
-   * READY
-   * ==========================
-   *
-   * Priority สูงก่อน
-   *
-   * ถ้า Priority เท่ากัน
-   * scheduled time ก่อน
-   *
-   * ถ้ายังเท่ากัน
-   * FIFO
-   */
+  /* -----------------------------------------------
+     READY
+  ----------------------------------------------- */
 
   if (
     a.queueState ===
     "READY"
   ) {
+
     const priorityCompare =
       Number(
         b.rcsPriority ||
         0
-      ) -
+      )
+      -
       Number(
         a.rcsPriority ||
         0
@@ -5410,14 +6471,17 @@ function compareQueueRows(
       priorityCompare !==
       0
     ) {
+
       return priorityCompare;
+
     }
 
 
     const scheduleCompare =
       getTime(
         a.scheduledSendAt
-      ) -
+      )
+      -
       getTime(
         b.scheduledSendAt
       );
@@ -5427,38 +6491,39 @@ function compareQueueRows(
       scheduleCompare !==
       0
     ) {
+
       return scheduleCompare;
+
     }
 
 
     return (
       getTime(
         a.createdAt
-      ) -
+      )
+      -
       getTime(
         b.createdAt
       )
     );
+
   }
 
 
-  /*
-   * ==========================
-   * WAITING TIME
-   * ==========================
-   *
-   * งานที่ถึงเวลาก่อน
-   * แสดงก่อน
-   */
+  /* -----------------------------------------------
+     WAITING TIME
+  ----------------------------------------------- */
 
   if (
     a.queueState ===
     "WAITING_TIME"
   ) {
+
     const scheduleCompare =
       getTime(
         a.scheduledSendAt
-      ) -
+      )
+      -
       getTime(
         b.scheduledSendAt
       );
@@ -5468,7 +6533,9 @@ function compareQueueRows(
       scheduleCompare !==
       0
     ) {
+
       return scheduleCompare;
+
     }
 
 
@@ -5476,39 +6543,45 @@ function compareQueueRows(
       Number(
         b.rcsPriority ||
         0
-      ) -
+      )
+      -
       Number(
         a.rcsPriority ||
         0
       )
     );
+
   }
 
 
   return (
     getTime(
       a.createdAt
-    ) -
+    )
+    -
     getTime(
       b.createdAt
     )
   );
+
 }
 
 
 /* =========================================================
-   QUEUE ID
+   NEXT QUEUE ID
 ========================================================= */
 
 function getNextQueueId(
   items
 ) {
+
   let highest =
     0;
 
 
   items.forEach(
     (item) => {
+
       const match =
         /^RCSQ-(\d+)$/i.exec(
           String(
@@ -5521,6 +6594,7 @@ function getNextQueueId(
       if (
         match
       ) {
+
         highest =
           Math.max(
             highest,
@@ -5528,7 +6602,9 @@ function getNextQueueId(
               match[1]
             )
           );
+
       }
+
     }
   );
 
@@ -5539,6 +6615,7 @@ function getNextQueueId(
     3,
     "0"
   )}`;
+
 }
 
 
@@ -5549,6 +6626,7 @@ function getNextQueueId(
 function normalizeWmsPriority(
   value
 ) {
+
   const priority =
     String(
       value ||
@@ -5566,12 +6644,14 @@ function normalizeWmsPriority(
   )
     ? priority
     : "NORMAL";
+
 }
 
 
 function clampRcsPriority(
   value
 ) {
+
   const number =
     Number(
       value
@@ -5583,7 +6663,9 @@ function clampRcsPriority(
       number
     )
   ) {
+
     return 60;
+
   }
 
 
@@ -5598,6 +6680,7 @@ function clampRcsPriority(
       )
     )
   );
+
 }
 
 
@@ -5608,16 +6691,14 @@ function clampRcsPriority(
 function parseScheduleInput(
   value
 ) {
-  /*
-   * Empty
-   *
-   * = พร้อมทันที
-   */
 
   if (
     !value
   ) {
-    return new Date().toISOString();
+
+    return new Date()
+      .toISOString();
+
   }
 
 
@@ -5632,30 +6713,39 @@ function parseScheduleInput(
       date.getTime()
     )
   ) {
-    return new Date().toISOString();
+
+    return new Date()
+      .toISOString();
+
   }
 
 
-  return date.toISOString();
+  return date
+    .toISOString();
+
 }
 
 
 /* =========================================================
-   GATEWAY
+   GATEWAY VALIDATION
 ========================================================= */
 
 function validateGatewayOctet(
   value
 ) {
+
   if (
     String(
       value
     ).trim() ===
     ""
   ) {
+
     return {
-      ok: false,
+      ok:
+        false,
     };
+
   }
 
 
@@ -5674,18 +6764,23 @@ function validateGatewayOctet(
     number >
       254
   ) {
+
     return {
-      ok: false,
+      ok:
+        false,
     };
+
   }
 
 
   return {
-    ok: true,
+    ok:
+      true,
 
     value:
       number,
   };
+
 }
 
 
@@ -5696,17 +6791,21 @@ function validateGatewayOctet(
 async function copyText(
   text
 ) {
+
   try {
+
     if (
       navigator.clipboard &&
       window.isSecureContext
     ) {
+
       await navigator.clipboard.writeText(
         text
       );
 
 
       return true;
+
     }
 
 
@@ -5750,7 +6849,9 @@ async function copyText(
 
 
     return copied;
+
   } catch (error) {
+
     console.error(
       "Copy failed.",
       error
@@ -5758,8 +6859,11 @@ async function copyText(
 
 
     return false;
+
   }
+
 }
+
 
 /* =========================================================
    QUEUE LOCK
@@ -5768,6 +6872,7 @@ async function copyText(
 function isQueueLocked(
   item
 ) {
+
   return [
     "SENDING",
     "SENT",
@@ -5777,39 +6882,12 @@ function isQueueLocked(
       "NOT_SENT"
     ).toUpperCase()
   );
+
 }
 
 
 /* =========================================================
-   SIMULATED RCS TASK CHAIN
-========================================================= */
-
-function createSimulatedRcsTaskChainCode(
-  item
-) {
-  const taskPart =
-    String(
-      item.warehouseTaskId ||
-      "TASK"
-    )
-      .replace(
-        /[^A-Za-z0-9]/g,
-        ""
-      )
-      .toUpperCase();
-
-
-  const timePart =
-    Date.now()
-      .toString()
-      .slice(-6);
-
-
-  return `SIM-RCS-${taskPart}-${timePart}`;
-}
-
-/* =========================================================
-   HISTORY
+   HISTORY EVENT
 ========================================================= */
 
 function createHistoryEvent({
@@ -5818,16 +6896,21 @@ function createHistoryEvent({
   at,
   details = null,
 }) {
+
   const timestamp =
     at ||
-    new Date().toISOString();
+    new Date()
+      .toISOString();
 
 
   return {
     id:
       `EVT-${Date.now()}-${Math.random()
         .toString(36)
-        .slice(2, 8)}`,
+        .slice(
+          2,
+          8
+        )}`,
 
     type,
 
@@ -5838,6 +6921,7 @@ function createHistoryEvent({
 
     details,
   };
+
 }
 
 
@@ -5845,6 +6929,7 @@ function appendHistory(
   history,
   event
 ) {
+
   const current =
     Array.isArray(
       history
@@ -5857,15 +6942,18 @@ function appendHistory(
     ...current,
     event,
   ];
+
 }
 
+
 /* =========================================================
-   DATE
+   TIME
 ========================================================= */
 
 function getTime(
   value
 ) {
+
   const time =
     new Date(
       value ||
@@ -5878,16 +6966,59 @@ function getTime(
   )
     ? time
     : 0;
+
 }
 
+
+/* =========================================================
+   QUEUE NUMBER
+
+   RCSQ-004 → 4
+========================================================= */
+
+function getQueueNumber(
+  queueId
+) {
+
+  const match =
+    String(
+      queueId ||
+      ""
+    ).match(
+      /(\d+)$/
+    );
+
+
+  if (
+    !match
+  ) {
+
+    return 0;
+
+  }
+
+
+  return Number(
+    match[1]
+  );
+
+}
+
+
+/* =========================================================
+   DATE FORMAT
+========================================================= */
 
 function formatDateTime(
   value
 ) {
+
   if (
     !value
   ) {
+
     return "-";
+
   }
 
 
@@ -5902,22 +7033,31 @@ function formatDateTime(
   )
     ? "-"
     : date.toLocaleString();
+
 }
 
+
 /* =========================================================
-   DATETIME LOCAL INPUT
+   DATETIME LOCAL FORMAT
 ========================================================= */
 
 function formatDateTimeLocalInput(
   value
 ) {
-  if (!value) {
+
+  if (
+    !value
+  ) {
+
     return "";
+
   }
 
 
   const date =
-    new Date(value);
+    new Date(
+      value
+    );
 
 
   if (
@@ -5925,38 +7065,33 @@ function formatDateTimeLocalInput(
       date.getTime()
     )
   ) {
+
     return "";
+
   }
 
 
-  /*
-   * datetime-local ต้องการรูปแบบ:
-   *
-   * YYYY-MM-DDTHH:mm
-   *
-   * และต้องใช้เวลาท้องถิ่น
-   * ไม่ใช่ UTC
-   */
-
-  const pad = (
-    number
-  ) =>
-    String(
+  const pad =
+    (
       number
-    ).padStart(
-      2,
-      "0"
-    );
+    ) =>
+      String(
+        number
+      ).padStart(
+        2,
+        "0"
+      );
 
 
   return [
+
     date.getFullYear(),
 
     "-",
 
     pad(
       date.getMonth() +
-        1
+      1
     ),
 
     "-",
@@ -5976,40 +7111,53 @@ function formatDateTimeLocalInput(
     pad(
       date.getMinutes()
     ),
-  ].join("");
+
+  ].join(
+    ""
+  );
+
 }
 
+
 /* =========================================================
-   LOAD LOCAL STORAGE
+   STORAGE LOADERS
 ========================================================= */
 
 function loadWarehouseTasks() {
+
   return loadArray(
     WAREHOUSE_TASK_KEY
   );
+
 }
 
 
 function loadLocations() {
+
   return loadArray(
     LOCATION_STORAGE_KEY
   );
+
 }
 
 
 function loadDispatchQueue() {
+
   return loadArray(
     RCS_QUEUE_KEY
   ).map(
     normalizeDispatchRecord
   );
+
 }
 
 
 function loadArray(
   key
 ) {
+
   try {
+
     const saved =
       localStorage.getItem(
         key
@@ -6019,7 +7167,9 @@ function loadArray(
     if (
       !saved
     ) {
+
       return [];
+
     }
 
 
@@ -6034,7 +7184,9 @@ function loadArray(
     )
       ? parsed
       : [];
+
   } catch (error) {
+
     console.warn(
       `Could not load ${key}.`,
       error
@@ -6042,5 +7194,7 @@ function loadArray(
 
 
     return [];
+
   }
+
 }
