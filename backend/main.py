@@ -1,7 +1,9 @@
 from datetime import datetime, timezone
-from typing import Dict, Literal, Optional
+from typing import Literal, Optional
 
+import json
 import os
+import sqlite3
 import time
 import uuid
 
@@ -11,13 +13,16 @@ from pydantic import BaseModel, Field
 
 
 # =========================================================
-# FASTAPI APP
+# APP
 # =========================================================
 
 app = FastAPI(
     title="IWOE WMS - RCS Bridge",
-    version="1.0.0",
-    description="WMS backend bridge for External RCS Integration",
+    version="1.1.0",
+    description=(
+        "Backend bridge between the WMS frontend "
+        "and an external Robot Control System."
+    ),
 )
 
 
@@ -54,7 +59,7 @@ HIK_RCS_BASE_URL = os.getenv(
 
 
 # =========================================================
-# MOCK LIFECYCLE TIME
+# MOCK LIFECYCLE
 # =========================================================
 #
 # 0 - 10 sec
@@ -73,20 +78,24 @@ MOCK_RUNNING_SECONDS = 10
 
 
 # =========================================================
-# MOCK STORAGE
-# =========================================================
-#
-# ตอนนี้เก็บใน RAM
-#
-# Restart backend
-# -> Mock Tasks หาย
+# DATABASE
 # =========================================================
 
-mock_rcs_tasks: Dict[str, dict] = {}
+BASE_DIR = os.path.dirname(
+    os.path.abspath(
+        __file__
+    )
+)
+
+
+DATABASE_PATH = os.path.join(
+    BASE_DIR,
+    "rcs_bridge.db",
+)
 
 
 # =========================================================
-# PYDANTIC MODELS
+# MODELS
 # =========================================================
 
 
@@ -143,7 +152,7 @@ class RcsTaskResponse(BaseModel):
 
 
 # =========================================================
-# TIME HELPER
+# TIME
 # =========================================================
 
 
@@ -152,6 +161,119 @@ def utc_now_iso() -> str:
     return datetime.now(
         timezone.utc
     ).isoformat()
+
+
+# =========================================================
+# DATABASE CONNECTION
+# =========================================================
+
+
+def get_db_connection():
+
+    connection = sqlite3.connect(
+        DATABASE_PATH
+    )
+
+    connection.row_factory = (
+        sqlite3.Row
+    )
+
+    return connection
+
+
+# =========================================================
+# INIT DATABASE
+# =========================================================
+
+
+def init_database():
+
+    connection = (
+        get_db_connection()
+    )
+
+
+    try:
+
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS rcs_tasks (
+                bridge_task_id TEXT PRIMARY KEY,
+
+                robot_task_code TEXT NOT NULL,
+
+                task_type TEXT NOT NULL,
+
+                init_priority INTEGER NOT NULL,
+
+                scheduled_send_at TEXT,
+
+                source_json TEXT NOT NULL,
+
+                destination_json TEXT NOT NULL,
+
+                rcs_task_chain_code TEXT NOT NULL,
+
+                rcs_status TEXT NOT NULL,
+
+                rcs_created_at TEXT NOT NULL,
+
+                rcs_started_at TEXT,
+
+                rcs_completed_at TEXT,
+
+                received_at TEXT NOT NULL,
+
+                updated_at TEXT NOT NULL,
+
+                created_timestamp REAL NOT NULL
+            )
+            """
+        )
+
+
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS
+            idx_rcs_tasks_robot_task_code
+
+            ON rcs_tasks (
+                robot_task_code
+            )
+            """
+        )
+
+
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS
+            idx_rcs_tasks_status
+
+            ON rcs_tasks (
+                rcs_status
+            )
+            """
+        )
+
+
+        connection.commit()
+
+    finally:
+
+        connection.close()
+
+
+# =========================================================
+# STARTUP
+# =========================================================
+
+
+@app.on_event(
+    "startup"
+)
+def startup_event():
+
+    init_database()
 
 
 # =========================================================
@@ -206,6 +328,388 @@ def create_mock_task_chain_code(
 
 
 # =========================================================
+# DB ROW -> DICT
+# =========================================================
+
+
+def row_to_record(
+    row,
+) -> Optional[dict]:
+
+    if row is None:
+        return None
+
+
+    return {
+
+        "bridgeTaskId":
+            row[
+                "bridge_task_id"
+            ],
+
+        "robotTaskCode":
+            row[
+                "robot_task_code"
+            ],
+
+        "taskType":
+            row[
+                "task_type"
+            ],
+
+        "initPriority":
+            row[
+                "init_priority"
+            ],
+
+        "scheduledSendAt":
+            row[
+                "scheduled_send_at"
+            ],
+
+        "source":
+            json.loads(
+                row[
+                    "source_json"
+                ]
+            ),
+
+        "destination":
+            json.loads(
+                row[
+                    "destination_json"
+                ]
+            ),
+
+        "rcsTaskChainCode":
+            row[
+                "rcs_task_chain_code"
+            ],
+
+        "rcsStatus":
+            row[
+                "rcs_status"
+            ],
+
+        "rcsCreatedAt":
+            row[
+                "rcs_created_at"
+            ],
+
+        "rcsStartedAt":
+            row[
+                "rcs_started_at"
+            ] or "",
+
+        "rcsCompletedAt":
+            row[
+                "rcs_completed_at"
+            ] or "",
+
+        "receivedAt":
+            row[
+                "received_at"
+            ],
+
+        "updatedAt":
+            row[
+                "updated_at"
+            ],
+
+        "createdTimestamp":
+            row[
+                "created_timestamp"
+            ],
+    }
+
+
+# =========================================================
+# GET RECORD
+# =========================================================
+
+
+def get_task_record(
+    bridge_task_id: str,
+) -> Optional[dict]:
+
+    connection = (
+        get_db_connection()
+    )
+
+
+    try:
+
+        row = connection.execute(
+            """
+            SELECT *
+            FROM rcs_tasks
+            WHERE bridge_task_id = ?
+            """,
+            (
+                bridge_task_id,
+            ),
+        ).fetchone()
+
+
+        return row_to_record(
+            row
+        )
+
+    finally:
+
+        connection.close()
+
+
+# =========================================================
+# GET ALL RECORDS
+# =========================================================
+
+
+def get_all_task_records():
+
+    connection = (
+        get_db_connection()
+    )
+
+
+    try:
+
+        rows = connection.execute(
+            """
+            SELECT *
+            FROM rcs_tasks
+            ORDER BY created_timestamp DESC
+            """
+        ).fetchall()
+
+
+        return [
+            row_to_record(
+                row
+            )
+            for row in rows
+        ]
+
+    finally:
+
+        connection.close()
+
+
+# =========================================================
+# FIND ACTIVE WMS TASK
+# =========================================================
+
+
+def find_tasks_by_robot_code(
+    robot_task_code: str,
+):
+
+    connection = (
+        get_db_connection()
+    )
+
+
+    try:
+
+        rows = connection.execute(
+            """
+            SELECT *
+            FROM rcs_tasks
+            WHERE robot_task_code = ?
+            ORDER BY created_timestamp DESC
+            """,
+            (
+                robot_task_code,
+            ),
+        ).fetchall()
+
+
+        return [
+            row_to_record(
+                row
+            )
+            for row in rows
+        ]
+
+    finally:
+
+        connection.close()
+
+
+# =========================================================
+# INSERT RECORD
+# =========================================================
+
+
+def insert_task_record(
+    record: dict,
+):
+
+    connection = (
+        get_db_connection()
+    )
+
+
+    try:
+
+        connection.execute(
+            """
+            INSERT INTO rcs_tasks (
+                bridge_task_id,
+                robot_task_code,
+                task_type,
+                init_priority,
+                scheduled_send_at,
+                source_json,
+                destination_json,
+                rcs_task_chain_code,
+                rcs_status,
+                rcs_created_at,
+                rcs_started_at,
+                rcs_completed_at,
+                received_at,
+                updated_at,
+                created_timestamp
+            )
+            VALUES (
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+            )
+            """,
+            (
+                record[
+                    "bridgeTaskId"
+                ],
+
+                record[
+                    "robotTaskCode"
+                ],
+
+                record[
+                    "taskType"
+                ],
+
+                record[
+                    "initPriority"
+                ],
+
+                record[
+                    "scheduledSendAt"
+                ],
+
+                json.dumps(
+                    record[
+                        "source"
+                    ]
+                ),
+
+                json.dumps(
+                    record[
+                        "destination"
+                    ]
+                ),
+
+                record[
+                    "rcsTaskChainCode"
+                ],
+
+                record[
+                    "rcsStatus"
+                ],
+
+                record[
+                    "rcsCreatedAt"
+                ],
+
+                record.get(
+                    "rcsStartedAt"
+                ) or "",
+
+                record.get(
+                    "rcsCompletedAt"
+                ) or "",
+
+                record[
+                    "receivedAt"
+                ],
+
+                record[
+                    "updatedAt"
+                ],
+
+                record[
+                    "createdTimestamp"
+                ],
+            ),
+        )
+
+
+        connection.commit()
+
+    finally:
+
+        connection.close()
+
+
+# =========================================================
+# UPDATE LIFECYCLE
+# =========================================================
+
+
+def update_task_lifecycle(
+    record: dict,
+):
+
+    connection = (
+        get_db_connection()
+    )
+
+
+    try:
+
+        connection.execute(
+            """
+            UPDATE rcs_tasks
+
+            SET
+                rcs_status = ?,
+                rcs_started_at = ?,
+                rcs_completed_at = ?,
+                updated_at = ?
+
+            WHERE bridge_task_id = ?
+            """,
+            (
+                record[
+                    "rcsStatus"
+                ],
+
+                record.get(
+                    "rcsStartedAt"
+                ) or "",
+
+                record.get(
+                    "rcsCompletedAt"
+                ) or "",
+
+                record[
+                    "updatedAt"
+                ],
+
+                record[
+                    "bridgeTaskId"
+                ],
+            ),
+        )
+
+
+        connection.commit()
+
+    finally:
+
+        connection.close()
+
+
+# =========================================================
 # ELAPSED TIME
 # =========================================================
 
@@ -221,19 +725,25 @@ def get_elapsed_seconds(
     )
 
 
-    if not created_timestamp:
+    if (
+        created_timestamp is None
+    ):
+
         return 0.0
 
 
     return max(
         0.0,
         time.time()
-        - created_timestamp,
+        -
+        float(
+            created_timestamp
+        ),
     )
 
 
 # =========================================================
-# CALCULATE MOCK STATUS
+# MOCK STATUS
 # =========================================================
 
 
@@ -248,7 +758,6 @@ def calculate_mock_status(
     )
 
 
-    # CREATED
     if (
         elapsed
         <
@@ -258,7 +767,6 @@ def calculate_mock_status(
         return "CREATED"
 
 
-    # RUNNING
     if (
         elapsed
         <
@@ -311,6 +819,10 @@ def refresh_mock_record(
     now = utc_now_iso()
 
 
+    # -----------------------------------------------------
+    # RUNNING
+    # -----------------------------------------------------
+
     if (
         next_status
         ==
@@ -326,6 +838,10 @@ def refresh_mock_record(
             or now
         )
 
+
+    # -----------------------------------------------------
+    # COMPLETED
+    # -----------------------------------------------------
 
     if (
         next_status
@@ -363,11 +879,16 @@ def refresh_mock_record(
     ] = now
 
 
+    update_task_lifecycle(
+        record
+    )
+
+
     return record
 
 
 # =========================================================
-# REMOVE INTERNAL FIELDS
+# PUBLIC TASK
 # =========================================================
 
 
@@ -395,9 +916,21 @@ def root():
 
     return {
         "ok": True,
-        "service": "IWOE WMS RCS Bridge",
-        "mode": RCS_MODE,
-        "docs": "/docs",
+
+        "service":
+            "IWOE WMS RCS Bridge",
+
+        "version":
+            "1.1.0",
+
+        "mode":
+            RCS_MODE,
+
+        "database":
+            "SQLite",
+
+        "docs":
+            "/docs",
     }
 
 
@@ -413,13 +946,23 @@ def health():
 
     return {
         "ok": True,
-        "service": "IWOE WMS RCS Bridge",
-        "time": utc_now_iso(),
+
+        "service":
+            "IWOE WMS RCS Bridge",
+
+        "mode":
+            RCS_MODE,
+
+        "database":
+            "SQLite",
+
+        "time":
+            utc_now_iso(),
     }
 
 
 # =========================================================
-# RCS BRIDGE STATUS
+# RCS STATUS
 # =========================================================
 
 
@@ -427,6 +970,32 @@ def health():
     "/api/rcs/status"
 )
 def rcs_bridge_status():
+
+    tasks = (
+        get_all_task_records()
+    )
+
+
+    active_count = 0
+
+
+    for record in tasks:
+
+        refresh_mock_record(
+            record
+        )
+
+
+        if (
+            record[
+                "rcsStatus"
+            ]
+            !=
+            "COMPLETED"
+        ):
+
+            active_count += 1
+
 
     return {
         "ok": True,
@@ -439,10 +1008,16 @@ def rcs_bridge_status():
                 HIK_RCS_BASE_URL
             ),
 
-        "mockTaskCount":
+        "database":
+            "SQLite",
+
+        "taskCount":
             len(
-                mock_rcs_tasks
+                tasks
             ),
+
+        "activeTaskCount":
+            active_count,
 
         "mockLifecycle": {
 
@@ -475,6 +1050,10 @@ def create_rcs_task(
     command: RcsTaskRequest,
 ):
 
+    # -----------------------------------------------------
+    # ROUTE VALIDATION
+    # -----------------------------------------------------
+
     if (
         command.source.code
         ==
@@ -483,12 +1062,17 @@ def create_rcs_task(
 
         raise HTTPException(
             status_code=400,
+
             detail=(
                 "Source and destination "
                 "cannot be the same."
             ),
         )
 
+
+    # -----------------------------------------------------
+    # REAL HIK MODE
+    # -----------------------------------------------------
 
     if (
         RCS_MODE
@@ -507,30 +1091,30 @@ def create_rcs_task(
         )
 
 
+    # -----------------------------------------------------
+    # DUPLICATE ACTIVE TASK
+    # -----------------------------------------------------
+
+    existing_tasks = (
+        find_tasks_by_robot_code(
+            command.robotTaskCode
+        )
+    )
+
+
     for existing in (
-        mock_rcs_tasks.values()
+        existing_tasks
     ):
 
-        if (
-            existing.get(
-                "robotTaskCode"
-            )
-            !=
-            command.robotTaskCode
-        ):
-
-            continue
-
-
-        existing_status = (
-            calculate_mock_status(
-                existing
-            )
+        refresh_mock_record(
+            existing
         )
 
 
         if (
-            existing_status
+            existing[
+                "rcsStatus"
+            ]
             !=
             "COMPLETED"
         ):
@@ -545,6 +1129,10 @@ def create_rcs_task(
                 ),
             )
 
+
+    # -----------------------------------------------------
+    # CREATE IDS
+    # -----------------------------------------------------
 
     bridge_task_id = (
         "BRIDGE-"
@@ -566,6 +1154,15 @@ def create_rcs_task(
         utc_now_iso()
     )
 
+
+    created_timestamp = (
+        time.time()
+    )
+
+
+    # -----------------------------------------------------
+    # CREATE RECORD
+    # -----------------------------------------------------
 
     record = {
 
@@ -616,17 +1213,20 @@ def create_rcs_task(
             received_at,
 
         "createdTimestamp":
-            time.time(),
+            created_timestamp,
     }
 
 
-    mock_rcs_tasks[
-        bridge_task_id
-    ] = record
+    # -----------------------------------------------------
+    # SAVE SQLITE
+    # -----------------------------------------------------
+
+    insert_task_record(
+        record
+    )
 
 
     return {
-
         "ok":
             True,
 
@@ -651,7 +1251,7 @@ def create_rcs_task(
 
 
 # =========================================================
-# GET ALL RCS TASKS
+# GET ALL TASKS
 # =========================================================
 
 
@@ -660,11 +1260,16 @@ def create_rcs_task(
 )
 def get_all_rcs_tasks():
 
+    records = (
+        get_all_task_records()
+    )
+
+
     tasks = []
 
 
     for record in (
-        mock_rcs_tasks.values()
+        records
     ):
 
         refresh_mock_record(
@@ -695,7 +1300,6 @@ def get_all_rcs_tasks():
 
 
     return {
-
         "ok":
             True,
 
@@ -713,7 +1317,7 @@ def get_all_rcs_tasks():
 
 
 # =========================================================
-# GET ONE RCS TASK
+# GET ONE TASK
 # =========================================================
 
 
@@ -725,20 +1329,21 @@ def get_rcs_task(
 ):
 
     record = (
-        mock_rcs_tasks.get(
+        get_task_record(
             bridge_task_id
         )
     )
 
 
-    if not record:
+    if (
+        not record
+    ):
 
         raise HTTPException(
             status_code=404,
 
             detail=(
-                "RCS bridge task "
-                "not found."
+                "RCS bridge task not found."
             ),
         )
 
@@ -757,7 +1362,6 @@ def get_rcs_task(
 
 
     return {
-
         "ok":
             True,
 

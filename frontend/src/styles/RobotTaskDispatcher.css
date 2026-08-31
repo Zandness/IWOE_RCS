@@ -2249,3 +2249,238 @@
   }
 
 }
+/* =========================================================
+   RCS BRIDGE CONNECTION STATUS
+========================================================= */
+
+.bridge-connection-panel {
+  display: grid;
+  grid-template-columns:
+    minmax(230px, 0.9fr)
+    minmax(420px, 1.8fr)
+    auto;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 18px;
+  padding: 14px 16px;
+  border: 1px solid #334155;
+  border-radius: 10px;
+  background: #0f172a;
+}
+
+.bridge-connection-panel.online {
+  border-color: #14532d;
+  background:
+    linear-gradient(
+      90deg,
+      rgba(20, 83, 45, 0.16),
+      rgba(15, 23, 42, 1) 32%
+    );
+}
+
+.bridge-connection-panel.offline {
+  border-color: #7f1d1d;
+  background:
+    linear-gradient(
+      90deg,
+      rgba(127, 29, 29, 0.14),
+      rgba(15, 23, 42, 1) 32%
+    );
+}
+
+.bridge-connection-panel.checking {
+  border-color: #155e75;
+}
+
+.bridge-connection-main {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
+}
+
+.bridge-connection-dot {
+  width: 11px;
+  height: 11px;
+  flex: 0 0 11px;
+  border-radius: 50%;
+  background: #64748b;
+  box-shadow: 0 0 0 4px rgba(100, 116, 139, 0.12);
+}
+
+.bridge-connection-panel.online .bridge-connection-dot {
+  background: #22c55e;
+  box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.12);
+}
+
+.bridge-connection-panel.offline .bridge-connection-dot {
+  background: #ef4444;
+  box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.12);
+}
+
+.bridge-connection-panel.checking .bridge-connection-dot {
+  background: #22d3ee;
+  box-shadow: 0 0 0 4px rgba(34, 211, 238, 0.12);
+}
+
+.bridge-connection-main > div {
+  min-width: 0;
+}
+
+.bridge-connection-main > div > span {
+  display: block;
+  margin-bottom: 3px;
+  color: #64748b;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+}
+
+.bridge-connection-main > div > strong {
+  display: block;
+  margin-bottom: 4px;
+  color: #e2e8f0;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+}
+
+.bridge-connection-panel.online
+.bridge-connection-main > div > strong {
+  color: #4ade80;
+}
+
+.bridge-connection-panel.offline
+.bridge-connection-main > div > strong {
+  color: #f87171;
+}
+
+.bridge-connection-panel.checking
+.bridge-connection-main > div > strong {
+  color: #67e8f9;
+}
+
+.bridge-connection-main small {
+  display: block;
+  max-width: 320px;
+  overflow: hidden;
+  color: #94a3b8;
+  font-size: 8px;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bridge-connection-panel.offline
+.bridge-connection-main small {
+  color: #fca5a5;
+}
+
+.bridge-connection-metrics {
+  display: grid;
+  grid-template-columns:
+    repeat(5, minmax(70px, 1fr));
+  gap: 7px;
+  min-width: 0;
+}
+
+.bridge-connection-metric {
+  min-width: 0;
+  padding: 8px 9px;
+  border: 1px solid #1e293b;
+  border-radius: 7px;
+  background: rgba(2, 6, 23, 0.72);
+}
+
+.bridge-connection-metric span {
+  display: block;
+  margin-bottom: 3px;
+  color: #64748b;
+  font-size: 7px;
+}
+
+.bridge-connection-metric strong {
+  display: block;
+  overflow: hidden;
+  color: #e2e8f0;
+  font-size: 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bridge-connection-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  min-width: 122px;
+}
+
+.bridge-connection-actions small {
+  color: #64748b;
+  font-size: 7px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.bridge-connection-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 112px;
+  padding: 7px 9px;
+  border: 1px solid #155e75;
+  border-radius: 6px;
+  background: #083344;
+  color: #67e8f9;
+  font-size: 8px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.bridge-connection-actions button:hover:not(:disabled) {
+  border-color: #22d3ee;
+  background: #164e63;
+}
+
+.bridge-connection-actions button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+@media (max-width: 1180px) {
+  .bridge-connection-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .bridge-connection-metrics {
+    grid-template-columns:
+      repeat(5, minmax(0, 1fr));
+  }
+
+  .bridge-connection-actions {
+    align-items: flex-start;
+    flex-direction: row;
+    justify-content: space-between;
+  }
+}
+
+@media (max-width: 700px) {
+  .bridge-connection-metrics {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+  }
+
+  .bridge-connection-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .bridge-connection-actions small {
+    text-align: left;
+  }
+
+  .bridge-connection-actions button {
+    width: 100%;
+  }
+}

@@ -31,6 +31,7 @@ import {
 
 import {
   createRcsBridgeTask,
+  getRcsBridgeStatus,
   getRcsBridgeTask,
 } from "../services/rcs";
 
@@ -132,6 +133,26 @@ export default function RobotTaskDispatcher() {
 
 
   /* =====================================================
+     RCS BRIDGE CONNECTION
+  ===================================================== */
+
+  const [
+    bridgeConnection,
+    setBridgeConnection,
+  ] = useState(() => ({
+    online: false,
+    checking: true,
+    mode: "",
+    database: "",
+    taskCount: 0,
+    activeTaskCount: 0,
+    hikConfigured: false,
+    lastCheckedAt: "",
+    error: "",
+  }));
+
+
+  /* =====================================================
      LIVE CLOCK
 
      IMPORTANT:
@@ -149,6 +170,12 @@ export default function RobotTaskDispatcher() {
   const rcsPollInFlightRef =
     useRef(
       new Set()
+    );
+
+
+  const bridgeStatusPollInFlightRef =
+    useRef(
+      false
     );
 
 
@@ -173,6 +200,141 @@ export default function RobotTaskDispatcher() {
       window.clearInterval(
         timer
       );
+    };
+
+  }, []);
+
+
+  /* =====================================================
+     RCS BRIDGE CONNECTION STATUS
+  ===================================================== */
+
+  async function refreshBridgeStatus() {
+
+    if (
+      bridgeStatusPollInFlightRef
+        .current
+    ) {
+      return;
+    }
+
+
+    bridgeStatusPollInFlightRef
+      .current =
+      true;
+
+
+    setBridgeConnection(
+      (current) => ({
+        ...current,
+        checking: true,
+      })
+    );
+
+
+    try {
+
+      const response =
+        await getRcsBridgeStatus();
+
+
+      setBridgeConnection({
+        online:
+          Boolean(
+            response?.ok
+          ),
+
+        checking:
+          false,
+
+        mode:
+          String(
+            response?.bridgeMode ||
+            ""
+          ).toUpperCase(),
+
+        database:
+          String(
+            response?.database ||
+            ""
+          ),
+
+        taskCount:
+          Number(
+            response?.taskCount ||
+            0
+          ),
+
+        activeTaskCount:
+          Number(
+            response?.activeTaskCount ||
+            0
+          ),
+
+        hikConfigured:
+          Boolean(
+            response?.hikConfigured
+          ),
+
+        lastCheckedAt:
+          new Date()
+            .toISOString(),
+
+        error:
+          "",
+      });
+
+    } catch (error) {
+
+      setBridgeConnection(
+        (current) => ({
+          ...current,
+
+          online:
+            false,
+
+          checking:
+            false,
+
+          lastCheckedAt:
+            new Date()
+              .toISOString(),
+
+          error:
+            error?.message ||
+            "WMS RCS Bridge backend is unavailable.",
+        })
+      );
+
+    } finally {
+
+      bridgeStatusPollInFlightRef
+        .current =
+        false;
+
+    }
+
+  }
+
+
+  useEffect(() => {
+
+    refreshBridgeStatus();
+
+
+    const bridgeStatusTimer =
+      window.setInterval(
+        refreshBridgeStatus,
+        3000
+      );
+
+
+    return () => {
+
+      window.clearInterval(
+        bridgeStatusTimer
+      );
+
     };
 
   }, []);
@@ -2210,6 +2372,23 @@ export default function RobotTaskDispatcher() {
 
 
     if (
+      !bridgeConnection.online
+    ) {
+
+      window.alert(
+        "WMS RCS Bridge is offline. Start the FastAPI backend and wait for the status to become ONLINE before sending."
+      );
+
+
+      refreshBridgeStatus();
+
+
+      return;
+
+    }
+
+
+    if (
       isQueueLocked(
         item
       )
@@ -2702,6 +2881,20 @@ export default function RobotTaskDispatcher() {
         </button>
 
       </div>
+
+
+      {/* =================================================
+          RCS BRIDGE CONNECTION
+      ================================================= */}
+
+      <BridgeConnectionStatus
+        connection={
+          bridgeConnection
+        }
+        onRefresh={
+          refreshBridgeStatus
+        }
+      />
 
 
       {/* =================================================
@@ -3816,7 +4009,16 @@ export default function RobotTaskDispatcher() {
                               "READY" ||
                             isQueueLocked(
                               item
+                            ) ||
+                            !bridgeConnection.online
+                          }
+                          title={
+                            !bridgeConnection.online &&
+                            !isQueueLocked(
+                              item
                             )
+                              ? "WMS RCS Bridge backend is offline."
+                              : undefined
                           }
                           onClick={() =>
                             sendToRcsBridge(
@@ -3837,7 +4039,12 @@ export default function RobotTaskDispatcher() {
                               : item.sendStatus ===
                                   "SENT"
                                 ? "Sent"
-                                : "Send to Bridge"
+                                : bridgeConnection.checking &&
+                                    !bridgeConnection.lastCheckedAt
+                                  ? "Checking Bridge..."
+                                  : !bridgeConnection.online
+                                    ? "Bridge Offline"
+                                    : "Send to Bridge"
                           }
 
                         </button>
@@ -4757,6 +4964,207 @@ function DraftInfo({
           : ""
       }`}
     >
+
+      <span>
+        {
+          label
+        }
+      </span>
+
+
+      <strong>
+        {
+          value
+        }
+      </strong>
+
+    </div>
+
+  );
+
+}
+
+
+/* =========================================================
+   BRIDGE CONNECTION STATUS
+========================================================= */
+
+function BridgeConnectionStatus({
+  connection,
+  onRefresh,
+}) {
+
+  const initialChecking =
+    connection.checking &&
+    !connection.lastCheckedAt;
+
+
+  const statusLabel =
+    initialChecking
+      ? "CHECKING"
+      : connection.online
+        ? "ONLINE"
+        : "OFFLINE";
+
+
+  return (
+
+    <section
+      className={`bridge-connection-panel ${
+        connection.online
+          ? "online"
+          : "offline"
+      } ${
+        initialChecking
+          ? "checking"
+          : ""
+      }`}
+    >
+
+      <div className="bridge-connection-main">
+
+        <span
+          className="bridge-connection-dot"
+          aria-hidden="true"
+        />
+
+
+        <div>
+
+          <span>
+            RCS BRIDGE
+          </span>
+
+
+          <strong>
+            {
+              statusLabel
+            }
+          </strong>
+
+
+          <small>
+            {
+              connection.online
+                ? "Frontend is connected to the WMS RCS Bridge backend."
+                : initialChecking
+                  ? "Checking backend connection..."
+                  : connection.error ||
+                    "Backend unavailable."
+            }
+          </small>
+
+        </div>
+
+      </div>
+
+
+      <div className="bridge-connection-metrics">
+
+        <BridgeMetric
+          label="Mode"
+          value={
+            connection.mode ||
+            "-"
+          }
+        />
+
+
+        <BridgeMetric
+          label="Database"
+          value={
+            connection.database ||
+            "-"
+          }
+        />
+
+
+        <BridgeMetric
+          label="Tasks"
+          value={
+            connection.online
+              ? connection.taskCount
+              : "-"
+          }
+        />
+
+
+        <BridgeMetric
+          label="Active"
+          value={
+            connection.online
+              ? connection.activeTaskCount
+              : "-"
+          }
+        />
+
+
+        <BridgeMetric
+          label="HIK API"
+          value={
+            connection.hikConfigured
+              ? "CONFIGURED"
+              : "NOT CONFIGURED"
+          }
+        />
+
+      </div>
+
+
+      <div className="bridge-connection-actions">
+
+        <small>
+          Last checked
+          {" "}
+          {
+            connection.lastCheckedAt
+              ? formatDateTime(
+                  connection.lastCheckedAt
+                )
+              : "-"
+          }
+        </small>
+
+
+        <button
+          type="button"
+          onClick={
+            onRefresh
+          }
+          disabled={
+            connection.checking
+          }
+        >
+
+          <RefreshCw
+            size={14}
+          />
+
+          {
+            connection.checking
+              ? "Checking..."
+              : "Check Bridge"
+          }
+
+        </button>
+
+      </div>
+
+    </section>
+
+  );
+
+}
+
+
+function BridgeMetric({
+  label,
+  value,
+}) {
+
+  return (
+
+    <div className="bridge-connection-metric">
 
       <span>
         {
@@ -6883,7 +7291,7 @@ function isQueueLocked(
     ).toUpperCase()
   );
 
-}
+}  
 
 
 /* =========================================================
