@@ -34,7 +34,7 @@ export default function Sidebar() {
 
     {
       name:
-        "Warehouse Map",
+        "Warehouse Monitor",
 
       path:
         "/warehouse",

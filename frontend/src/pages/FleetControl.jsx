@@ -1,7 +1,19 @@
 import { useState } from "react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+} from "lucide-react";
 
 import RobotCard from "../components/RobotCard";
 import RobotControlPanel from "../components/RobotControlPanel";
+
+const ABNORMAL_STATUSES = new Set([
+  "ERROR",
+  "FAULT",
+  "E-STOP",
+  "OFFLINE",
+  "ABNORMAL",
+]);
 
 const initialRobots = [
   {
@@ -88,58 +100,18 @@ export default function FleetControl() {
             return {
               ...robot,
               status: "MOVING",
-              task: "Manual Operation",
-              speed: "1.0 m/s",
+              task:
+                robot.task === "Paused"
+                  ? "Manual Operation"
+                  : robot.task,
+              speed: robot.speed === "0.0 m/s" ? "1.0 m/s" : robot.speed,
             };
 
           case "PAUSE":
             return {
               ...robot,
               status: "PAUSED",
-              speed: "0.0 m/s",
-            };
-
-          case "STOP":
-            return {
-              ...robot,
-              status: "IDLE",
-              task: "Stopped",
-              speed: "0.0 m/s",
-              destination: "-",
-            };
-
-          case "HOME":
-            return {
-              ...robot,
-              status: "MOVING",
-              task: "Returning Home",
-              destination: "Home Station",
-              speed: "1.0 m/s",
-            };
-
-          case "CHARGE":
-            return {
-              ...robot,
-              status: "CHARGING",
-              task: "Charging",
-              destination: "Charging Station",
-              speed: "0.0 m/s",
-            };
-
-          case "DISPATCH":
-            return {
-              ...robot,
-              status: "MOVING",
-              task: "Manual Dispatch",
-              destination: "Target Location",
-              speed: "1.0 m/s",
-            };
-
-          case "EMERGENCY_STOP":
-            return {
-              ...robot,
-              status: "E-STOP",
-              task: "Emergency Stop",
+              task: "Paused",
               speed: "0.0 m/s",
             };
 
@@ -150,7 +122,7 @@ export default function FleetControl() {
     );
 
     addLog(
-      command === "EMERGENCY_STOP" ? "ALERT" : "COMMAND",
+      "COMMAND",
       `${command} command sent to ${selectedRobot.id}`
     );
   };
@@ -166,8 +138,7 @@ export default function FleetControl() {
           <h2>Fleet Control</h2>
 
           <p>
-            Monitor and simulate AMR / AGV operations
-            before external RCS integration.
+            Monitor fleet condition and use only Start / Pause commands.
           </p>
         </div>
 
@@ -197,16 +168,13 @@ export default function FleetControl() {
           </div>
         </section>
 
-        <section className="panel">
+        <section className="panel fleet-status-panel">
           <div className="panel-header">
-            <h3>Live Warehouse Map</h3>
-            <span className="badge">SIMULATION</span>
+            <h3>Robot Status</h3>
+            <RobotConditionBadge robot={selectedRobot} />
           </div>
 
-          <WarehouseSimulation
-            robots={robots}
-            selectedId={selectedId}
-          />
+          <RobotStatusVisual robot={selectedRobot} />
         </section>
 
         <section className="panel">
@@ -236,38 +204,22 @@ function FleetSummary({ robots }) {
     (robot) => robot.status === "IDLE"
   ).length;
 
-  const charging = robots.filter(
-    (robot) => robot.status === "CHARGING"
+  const paused = robots.filter(
+    (robot) => robot.status === "PAUSED"
   ).length;
 
-  const alerts = robots.filter(
-    (robot) => robot.status === "E-STOP"
+  const alerts = robots.filter((robot) =>
+    isAbnormalRobot(robot)
   ).length;
 
   return (
     <div className="fleet-summary">
+      <SummaryCard label="Total Robots" value={robots.length} />
+      <SummaryCard label="Moving" value={moving} />
+      <SummaryCard label="Idle" value={idle} />
+      <SummaryCard label="Paused" value={paused} />
       <SummaryCard
-        label="Total Robots"
-        value={robots.length}
-      />
-
-      <SummaryCard
-        label="Moving"
-        value={moving}
-      />
-
-      <SummaryCard
-        label="Idle"
-        value={idle}
-      />
-
-      <SummaryCard
-        label="Charging"
-        value={charging}
-      />
-
-      <SummaryCard
-        label="Alerts"
+        label="Abnormal"
         value={alerts}
         danger={alerts > 0}
       />
@@ -292,48 +244,77 @@ function SummaryCard({
   );
 }
 
-function WarehouseSimulation({
-  robots,
-  selectedId,
-}) {
-  const robotPositions = {
-    "AMR-01": 12,
-    "AMR-02": 25,
-    "AGV-01": 45,
-    "AGV-02": 34,
-  };
+function RobotStatusVisual({ robot }) {
+  if (!robot) {
+    return (
+      <div className="robot-status-visual empty">
+        Select a robot to view its condition.
+      </div>
+    );
+  }
+
+  const abnormal = isAbnormalRobot(robot);
+  const imageSrc = abnormal
+    ? "/images/robot-abnormal.svg"
+    : "/images/robot-normal.svg";
 
   return (
-    <div className="warehouse-map">
-      {Array.from({ length: 54 }, (_, index) => {
-        const robot = robots.find(
-          (item) =>
-            robotPositions[item.id] === index
-        );
+    <div
+      className={`robot-status-visual ${
+        abnormal ? "abnormal" : "normal"
+      }`}
+    >
+      <img
+        src={imageSrc}
+        alt={`${robot.id} ${abnormal ? "abnormal" : "normal"} status`}
+      />
 
-        const isSelected =
-          robot?.id === selectedId;
+      <div className="robot-status-visual-copy">
+        {abnormal ? (
+          <AlertTriangle size={20} />
+        ) : (
+          <CheckCircle2 size={20} />
+        )}
 
-        return (
-          <div
-            key={index}
-            className={`map-cell ${
-              isSelected
-                ? "map-cell-selected"
-                : ""
-            }`}
-          >
-            {robot && (
-              <div
-                className={`map-robot ${robot.status.toLowerCase()}`}
-              >
-                <span>{robot.id}</span>
-              </div>
-            )}
-          </div>
-        );
-      })}
+        <div>
+          <strong>
+            {abnormal ? "ABNORMAL" : "NORMAL"}
+          </strong>
+          <span>
+            {robot.id} · RCS status: {robot.status}
+          </span>
+        </div>
+      </div>
+
+      <small>
+        Replace the SVG files in public/images later if a real robot status image is available.
+      </small>
     </div>
+  );
+}
+
+function RobotConditionBadge({ robot }) {
+  if (!robot) return null;
+
+  const abnormal = isAbnormalRobot(robot);
+
+  return (
+    <span
+      className={`robot-condition-badge ${
+        abnormal ? "abnormal" : "normal"
+      }`}
+    >
+      {abnormal ? "ABNORMAL" : "NORMAL"}
+    </span>
+  );
+}
+
+function isAbnormalRobot(robot) {
+  return Boolean(
+    robot &&
+      ABNORMAL_STATUSES.has(
+        String(robot.status || "").toUpperCase()
+      )
   );
 }
 
@@ -342,7 +323,6 @@ function FleetLogs({ logs }) {
     <section className="panel telemetry-panel">
       <div className="panel-header">
         <h3>Fleet Event Log</h3>
-
         <span>{logs.length} events</span>
       </div>
 
@@ -359,10 +339,12 @@ function FleetLogs({ logs }) {
             <span
               className={`terminal-type ${log.type.toLowerCase()}`}
             >
-              [{log.type}]
+              {log.type}
             </span>
 
-            <span>{log.message}</span>
+            <span className="terminal-message">
+              {log.message}
+            </span>
           </div>
         ))}
       </div>

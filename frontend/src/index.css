@@ -1447,3 +1447,103 @@ body {
       repeat(2, 1fr);
   }
 }
+/* =========================
+   FLEET STATUS VISUAL
+========================= */
+
+.command-grid-two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.fleet-status-panel {
+  min-width: 0;
+}
+
+.robot-condition-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 8px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+
+.robot-condition-badge.normal {
+  border: 1px solid #166534;
+  background: #052e16;
+  color: #86efac;
+}
+
+.robot-condition-badge.abnormal {
+  border: 1px solid #7f1d1d;
+  background: #450a0a;
+  color: #fda4af;
+}
+
+.robot-status-visual {
+  min-height: 405px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 18px;
+}
+
+.robot-status-visual.empty {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.robot-status-visual img {
+  width: min(100%, 520px);
+  max-height: 275px;
+  object-fit: contain;
+  border-radius: 14px;
+  border: 1px solid #1e293b;
+  background: #07111f;
+}
+
+.robot-status-visual-copy {
+  width: min(100%, 520px);
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 12px 14px;
+  border-radius: 9px;
+}
+
+.robot-status-visual.normal .robot-status-visual-copy {
+  border: 1px solid #166534;
+  background: #052e16;
+  color: #86efac;
+}
+
+.robot-status-visual.abnormal .robot-status-visual-copy {
+  border: 1px solid #7f1d1d;
+  background: #450a0a;
+  color: #fda4af;
+}
+
+.robot-status-visual-copy strong,
+.robot-status-visual-copy span {
+  display: block;
+}
+
+.robot-status-visual-copy strong {
+  font-size: 13px;
+}
+
+.robot-status-visual-copy span {
+  margin-top: 3px;
+  color: #94a3b8;
+  font-size: 10px;
+}
+
+.robot-status-visual small {
+  width: min(100%, 520px);
+  color: #64748b;
+  font-size: 9px;
+  text-align: center;
+}
