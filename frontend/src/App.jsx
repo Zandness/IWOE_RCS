@@ -10,8 +10,7 @@ import Sidebar from "./components/Sidebar";
 
 import Dashboard from "./pages/Dashboard";
 import WarehouseMap from "./pages/WarehouseMap";
-import StorageLocations from "./pages/StorageLocations";
-import Inventory from "./pages/Inventory";
+import WarehouseData from "./pages/WarehouseData";
 import WarehouseOperations from "./pages/WarehouseOperations";
 import TaskManagement from "./pages/TaskManagement";
 import RobotTaskDispatcher from "./pages/RobotTaskDispatcher";
@@ -54,9 +53,20 @@ function App() {
 
 
               <Route
+                path="/warehouse-data"
+                element={
+                  <WarehouseData />
+                }
+              />
+
+
+              <Route
                 path="/locations"
                 element={
-                  <StorageLocations />
+                  <Navigate
+                    to="/warehouse-data"
+                    replace
+                  />
                 }
               />
 
@@ -64,7 +74,10 @@ function App() {
               <Route
                 path="/inventory"
                 element={
-                  <Inventory />
+                  <Navigate
+                    to="/warehouse-data"
+                    replace
+                  />
                 }
               />
 

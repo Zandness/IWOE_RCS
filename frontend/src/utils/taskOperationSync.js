@@ -13,6 +13,9 @@ export const LOCATION_STORAGE_KEY =
 export const INVENTORY_STORAGE_KEY =
   "wms-inventory-items-v1";
 
+export const SKU_MASTER_STORAGE_KEY =
+  "wms-sku-masters-v1";
+
 
 export function loadTasks() {
   return loadArray(
