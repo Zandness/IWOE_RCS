@@ -13,7 +13,12 @@ import urllib.request
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
+from dotenv import load_dotenv
+from urllib.parse import urlparse
+from hik_api import create_hik_router
+
+load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"), override=False)
 
 
 # =========================================================
@@ -76,6 +81,18 @@ HIK_RCS_TIMEOUT_SECONDS = float(
 )
 
 
+# WMS generic task names must map to an installed HIK task template.
+HIK_TASK_TYPE = os.getenv("HIK_TASK_TYPE", "").strip()
+if RCS_MODE not in {"MOCK", "HIK"}:
+    raise ValueError("RCS_MODE must be MOCK or HIK")
+if HIK_RCS_BASE_URL:
+    parsed_url = urlparse(HIK_RCS_BASE_URL)
+    if parsed_url.scheme not in {"http", "https"} or not parsed_url.netloc or parsed_url.query or parsed_url.fragment:
+        raise ValueError("HIK_RCS_BASE_URL must be an HTTP(S) controller base URL")
+    if parsed_url.path in {"", "/"}:
+        HIK_RCS_BASE_URL += "/rcs/rtas/api/robot/controller"
+
+
 # =========================================================
 # MOCK LIFECYCLE
 # =========================================================
@@ -118,6 +135,8 @@ DATABASE_PATH = os.path.join(
 
 
 class RcsTarget(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+    autoStart: Optional[int] = Field(default=None, ge=0, le=1)
 
     type: Literal[
         "SITE",
@@ -132,12 +151,19 @@ class RcsTarget(BaseModel):
 
 
 class RcsTaskRequest(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+    robotType: Optional[str] = None
+    robotCode: Optional[str] = None
+    groupCode: Optional[str] = None
+    deadlineTime: Optional[str] = None
+    interrupt: Optional[bool] = None
+    extra: Optional[dict] = None
 
     robotTaskCode: str = Field(
         min_length=1
     )
 
-    taskType: str = "TRANSPORT"
+    taskType: str = Field(default="TRANSPORT", min_length=1)
 
     initPriority: int = Field(
         default=60,
@@ -450,7 +476,7 @@ def hik_post(
             status_code=503,
             detail={
                 "message":
-                    "Cannot connect to HIK RCS.",
+                    "Cannot get a response from HIK RCS. For submit/cancel/bind, the outcome may be unknown; check RCS before retrying.",
 
                 "target":
                     url,
@@ -485,32 +511,14 @@ def hik_post(
             },
         )
 
+    if not isinstance(data, dict):
+        raise HTTPException(502, "HIK RCS returned an invalid response object.")
     return data
 
 
-def hik_success(
-    response: dict,
-) -> bool:
-
-    code = str(
-        response.get(
-            "code",
-            "",
-        )
-    ).upper()
-
-    success = response.get(
-        "success"
-    )
-
-    return (
-        code in {
-            "SUCCESS",
-            "0",
-        }
-        or
-        success is True
-    )
+def hik_success(response: dict) -> bool:
+    # WASNA4.3 uses this exact business code; HTTP 200 alone is not success.
+    return isinstance(response, dict) and response.get("code") == "SUCCESS"
 
 
 def extract_hik_robot_task_code(
@@ -561,24 +569,29 @@ def extract_hik_robot_task_code(
     )
 
 
-def build_hik_target_route(
-    command: RcsTaskRequest,
-) -> list:
+def build_hik_target_route(command: RcsTaskRequest) -> list:
+    route = []
+    for seq, target in enumerate((command.source, command.destination)):
+        point = {"seq": seq, "type": target.type, "code": target.code}
+        if target.autoStart is not None:
+            point["autoStart"] = target.autoStart
+        route.append(point)
+    return route
 
-    return [
-        {
-            "seq": 0,
-            "type": command.source.type,
-            "code": command.source.code,
-            "autoStart": 1,
-        },
-        {
-            "seq": 1,
-            "type": command.destination.type,
-            "code": command.destination.code,
-            "autoStart": 1,
-        },
-    ]
+
+def build_hik_task_payload(command: RcsTaskRequest) -> dict:
+    task_type = command.taskType
+    if task_type.upper() == "TRANSPORT":
+        if not HIK_TASK_TYPE:
+            raise HTTPException(422, "Set HIK_TASK_TYPE to the installed RCS task template (e.g. F05 for the reference LMR), or send an explicit taskType.")
+        task_type = HIK_TASK_TYPE
+    payload = {"taskType": task_type, "targetRoute": build_hik_target_route(command),
+               "initPriority": command.initPriority}
+    for name in ("robotType", "robotCode", "groupCode", "deadlineTime", "interrupt", "extra"):
+        value = getattr(command, name)
+        if value is not None:
+            payload[name] = value
+    return payload
 
 
 def find_status_value(
@@ -692,9 +705,12 @@ def normalize_hik_status(
 
         return "COMPLETED"
 
-    return str(
-        fallback or "CREATED"
-    ).upper()
+    if status in {"CANCELLED", "CANCELED"}:
+        return "CANCELLED"
+    if status in {"FAILED", "FAILURE", "ERROR", "ABORTED"}:
+        return "FAILED"
+    # Numeric/vendor-specific status values require a verified mapping.
+    return str(fallback or "CREATED").upper()
 
 
 # =========================================================
@@ -1326,11 +1342,8 @@ def refresh_hik_record(
         },
     )
 
-    if not hik_success(
-        response
-    ):
-
-        return record
+    if not hik_success(response):
+        raise HTTPException(502, {"message": "HIK RCS rejected task query.", "rcsResponse": response})
 
     raw_status = find_status_value(
         response.get(
@@ -1409,19 +1422,11 @@ def refresh_hik_record(
     return record
 
 
-def refresh_task_record(
-    record: dict,
-) -> dict:
-
-    if RCS_MODE == "HIK":
-
-        return refresh_hik_record(
-            record
-        )
-
-    return refresh_mock_record(
-        record
-    )
+def refresh_task_record(record: dict) -> dict:
+    simulated = str(record.get("rcsTaskChainCode", "")).startswith("SIM-RCS-")
+    if simulated:
+        return refresh_mock_record(record) if RCS_MODE == "MOCK" else record
+    return refresh_hik_record(record) if RCS_MODE == "HIK" else record
 
 
 # =========================================================
@@ -1507,84 +1512,18 @@ def health():
     "/api/rcs/status"
 )
 def rcs_bridge_status():
-
-    tasks = (
-        get_all_task_records()
-    )
-
-
-    active_count = 0
-
-
-    for record in tasks:
-
-        try:
-
-            refresh_task_record(
-                record
-            )
-
-        except HTTPException:
-
-            # Keep bridge status readable even when the
-            # external RCS is temporarily unavailable.
-            pass
-
-
-        if (
-            record[
-                "rcsStatus"
-            ]
-            !=
-            "COMPLETED"
-        ):
-
-            active_count += 1
-
-
+    # Local readiness only. Use /api/rcs/connection/check for a live robot query.
+    tasks = get_all_task_records()
     return {
-        "ok": True,
-
-        "bridgeMode":
-            RCS_MODE,
-
-        "hikConfigured":
-            bool(
-                HIK_RCS_BASE_URL
-            ),
-
-        "hikBaseUrl":
-            HIK_RCS_BASE_URL
-            if RCS_MODE == "HIK"
-            else
-            "",
-
-        "database":
-            "SQLite",
-
-        "taskCount":
-            len(
-                tasks
-            ),
-
-        "activeTaskCount":
-            active_count,
-
-        "mockLifecycle": {
-
-            "createdSeconds":
-                MOCK_CREATED_SECONDS,
-
-            "runningSeconds":
-                MOCK_RUNNING_SECONDS,
-
-            "completedAfterSeconds":
-                (
-                    MOCK_CREATED_SECONDS
-                    +
-                    MOCK_RUNNING_SECONDS
-                ),
-        },
+        "ok": True, "bridgeMode": RCS_MODE,
+        "hikConfigured": bool(HIK_RCS_BASE_URL),
+        "hikBaseUrl": HIK_RCS_BASE_URL if RCS_MODE == "HIK" else "",
+        "hikTaskType": HIK_TASK_TYPE,
+        "connectionStatus": "NOT_CHECKED" if RCS_MODE == "HIK" else "SIMULATION",
+        "database": "SQLite", "taskCount": len(tasks),
+        "activeTaskCount": sum(t["rcsStatus"] not in {"COMPLETED", "CANCELLED", "FAILED"} for t in tasks),
+        "mockLifecycle": {"createdSeconds": MOCK_CREATED_SECONDS, "runningSeconds": MOCK_RUNNING_SECONDS,
+                          "completedAfterSeconds": MOCK_CREATED_SECONDS + MOCK_RUNNING_SECONDS},
     }
 
 
@@ -1697,18 +1636,7 @@ def create_rcs_task(
 
     if RCS_MODE == "HIK":
 
-        hik_payload = {
-            "taskType":
-                command.taskType,
-
-            "targetRoute":
-                build_hik_target_route(
-                    command
-                ),
-
-            "initPriority":
-                command.initPriority,
-        }
+        hik_payload = build_hik_task_payload(command)
 
         hik_response = hik_post(
             "/task/submit",
@@ -1742,7 +1670,7 @@ def create_rcs_task(
                 status_code=502,
                 detail={
                     "message":
-                        "HIK RCS accepted the request but did not return robotTaskCode.",
+                        "HIK RCS accepted the request but did not return robotTaskCode. Check RCS before retrying; the task may already exist.",
 
                     "rcsResponse":
                         hik_response,
@@ -1796,7 +1724,7 @@ def create_rcs_task(
             command.robotTaskCode,
 
         "taskType":
-            command.taskType,
+            hik_payload["taskType"] if RCS_MODE == "HIK" else command.taskType,
 
         "initPriority":
             command.initPriority,
@@ -1999,3 +1927,5 @@ def get_rcs_task(
                 record
             ),
     }
+
+app.include_router(create_hik_router(hik_post, lambda: RCS_MODE))
