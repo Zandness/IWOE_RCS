@@ -7,6 +7,7 @@ import { useState } from "react";
 
 import InboundOperations from "../components/operations/InboundOperations";
 import OutboundOperations from "../components/operations/OutboundOperations";
+import StockOutboundOperations from "../components/operations/StockOutboundOperations";
 
 import "../styles/WarehouseOperations.css";
 
@@ -28,9 +29,9 @@ export default function WarehouseOperations() {
 
           <p>
             Manage receiving, putaway,
-            stock allocation, picking
-            and dispatch from one
-            workspace.
+            stock allocation, picking,
+            dispatch and direct stock
+            outbound from one workspace.
           </p>
         </div>
       </div>
@@ -99,15 +100,53 @@ export default function WarehouseOperations() {
             </span>
           </div>
         </button>
+
+        <button
+          type="button"
+          role="tab"
+          aria-selected={
+            activeTab === "STOCK_OUTBOUND"
+          }
+          className={
+            activeTab === "STOCK_OUTBOUND"
+              ? "active"
+              : ""
+          }
+          onClick={() =>
+            setActiveTab("STOCK_OUTBOUND")
+          }
+        >
+          <ArrowUpFromLine
+            size={18}
+          />
+
+          <div>
+            <strong>
+              Stock Outbound
+            </strong>
+
+            <span>
+              Direct Stock Deduction
+            </span>
+          </div>
+        </button>
       </div>
 
       <div className="warehouse-operations-content">
-        {activeTab === "INBOUND" ? (
+        {activeTab === "INBOUND" && (
           <InboundOperations
             embedded
           />
-        ) : (
+        )}
+
+        {activeTab === "OUTBOUND" && (
           <OutboundOperations
+            embedded
+          />
+        )}
+
+        {activeTab === "STOCK_OUTBOUND" && (
+          <StockOutboundOperations
             embedded
           />
         )}

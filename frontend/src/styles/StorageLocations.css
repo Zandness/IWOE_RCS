@@ -1131,3 +1131,26 @@ option:disabled {
 
   font-size: 8px;
 }
+/* =========================================================
+   TEMPORARY RCS MAPPING NOTE
+   Map-node pinning is intentionally disabled for now.
+========================================================= */
+.location-rcs-section-title {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 11px 12px;
+  border: 1px solid #164e63;
+  border-radius: 8px;
+  background: #082f49;
+}
+
+.location-rcs-section-title strong {
+  color: #e2e8f0;
+  font-size: 12px;
+}
+
+.location-rcs-section-title span {
+  color: #67e8f9;
+  font-size: 10px;
+}

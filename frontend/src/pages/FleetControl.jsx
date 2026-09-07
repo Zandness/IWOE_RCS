@@ -107,12 +107,26 @@ export default function FleetControl() {
               speed: robot.speed === "0.0 m/s" ? "1.0 m/s" : robot.speed,
             };
 
-          case "PAUSE":
+          case "STOP":
             return {
               ...robot,
               status: "PAUSED",
               task: "Paused",
               speed: "0.0 m/s",
+            };
+
+          case "RESUME":
+            return {
+              ...robot,
+              status: "MOVING",
+              task:
+                robot.task === "Paused"
+                  ? "Manual Operation"
+                  : robot.task,
+              speed:
+                robot.speed === "0.0 m/s"
+                  ? "1.0 m/s"
+                  : robot.speed,
             };
 
           default:
@@ -138,7 +152,7 @@ export default function FleetControl() {
           <h2>Fleet Control</h2>
 
           <p>
-            Monitor fleet condition and use only Start / Pause commands.
+            Monitor fleet condition and use Start / Stop commands. After Stop, the button changes to Resume.
           </p>
         </div>
 

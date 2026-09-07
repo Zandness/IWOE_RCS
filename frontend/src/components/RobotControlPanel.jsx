@@ -1,11 +1,6 @@
 import {
   Play,
-  Pause,
   Square,
-  Home,
-  Zap,
-  MapPin,
-  AlertTriangle,
   RotateCcw,
 } from "lucide-react";
 
@@ -15,42 +10,26 @@ export default function RobotControlPanel({
 }) {
   if (!robot) return null;
 
+  const isPaused =
+    String(robot.status || "").toUpperCase() === "PAUSED";
+
   const commands = [
     {
       name: "Start",
       command: "START",
       icon: Play,
     },
-    {
-      name: "Pause",
-      command: "PAUSE",
-      icon: Pause,
-    },
-    {
-      name: "Resume",
-      command: "START",
-      icon: RotateCcw,
-    },
-    {
-      name: "Stop",
-      command: "STOP",
-      icon: Square,
-    },
-    {
-      name: "Return Home",
-      command: "HOME",
-      icon: Home,
-    },
-    {
-      name: "Charge",
-      command: "CHARGE",
-      icon: Zap,
-    },
-    {
-      name: "Dispatch",
-      command: "DISPATCH",
-      icon: MapPin,
-    },
+    isPaused
+      ? {
+          name: "Resume",
+          command: "RESUME",
+          icon: RotateCcw,
+        }
+      : {
+          name: "Stop",
+          command: "STOP",
+          icon: Square,
+        },
   ];
 
   return (
@@ -61,23 +40,13 @@ export default function RobotControlPanel({
         </div>
 
         <h3>{robot.id}</h3>
-
         <span>{robot.type}</span>
       </div>
 
       <Info label="Status" value={robot.status} />
-      <Info
-        label="Battery"
-        value={`${robot.battery}%`}
-      />
-      <Info
-        label="Position"
-        value={robot.position}
-      />
-      <Info
-        label="Destination"
-        value={robot.destination}
-      />
+      <Info label="Battery" value={`${robot.battery}%`} />
+      <Info label="Position" value={robot.position} />
+      <Info label="Destination" value={robot.destination} />
       <Info label="Task" value={robot.task} />
       <Info label="Speed" value={robot.speed} />
 
@@ -86,37 +55,26 @@ export default function RobotControlPanel({
           ROBOT COMMANDS
         </span>
 
-        <div className="command-grid">
+        <div className="command-grid command-grid-two">
           {commands.map((item) => {
             const Icon = item.icon;
 
             return (
               <button
                 key={item.name}
+                type="button"
                 className="command-button"
                 onClick={() =>
                   onCommand(item.command)
                 }
               >
                 <Icon size={17} />
-
                 {item.name}
               </button>
             );
           })}
         </div>
       </div>
-
-      <button
-        className="emergency-button"
-        onClick={() =>
-          onCommand("EMERGENCY_STOP")
-        }
-      >
-        <AlertTriangle size={20} />
-
-        EMERGENCY STOP
-      </button>
     </div>
   );
 }
