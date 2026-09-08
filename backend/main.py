@@ -517,7 +517,7 @@ def hik_post(
 
 
 def hik_success(response: dict) -> bool:
-    # WASNA4.3 uses this exact business code; HTTP 200 alone is not success.
+    # Check the RCS business code; HTTP 200 alone is not success.
     return isinstance(response, dict) and response.get("code") == "SUCCESS"
 
 
@@ -583,7 +583,7 @@ def build_hik_task_payload(command: RcsTaskRequest) -> dict:
     task_type = command.taskType
     if task_type.upper() == "TRANSPORT":
         if not HIK_TASK_TYPE:
-            raise HTTPException(422, "Set HIK_TASK_TYPE to the installed RCS task template (e.g. F05 for the reference LMR), or send an explicit taskType.")
+            raise HTTPException(422, "Set HIK_TASK_TYPE to the installed RCS task template (e.g. F05 for an installed LMR workflow), or send an explicit taskType.")
         task_type = HIK_TASK_TYPE
     payload = {"taskType": task_type, "targetRoute": build_hik_target_route(command),
                "initPriority": command.initPriority}

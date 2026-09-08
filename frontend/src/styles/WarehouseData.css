@@ -45,7 +45,7 @@
   margin: 0;
   color: #f8fafc;
   font-size: 28px;
-  font-weight: 700;
+  font-weight: 400;
 }
 
 .warehouse-data-header p {
@@ -391,3 +391,4 @@
     width: auto;
   }
 }
+

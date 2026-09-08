@@ -1,4 +1,4 @@
-"""HIK RCS 4.3 proxies based on the supplied WASNA4.3/server.js.
+"""HIK RCS 4.3 API proxies.
 
 These direct APIs preserve the upstream payload. WMS-tracked tasks should use
 /api/rcs/tasks instead. No direct endpoint simulates a successful HIK response.
@@ -22,9 +22,10 @@ class TaskQuery(Payload):
 
 class Target(Payload):
     seq: int = Field(ge=0)
-    type: Literal["SITE", "STORAGE"]
+    type: Literal["SITE", "STORAGE", "CARRIER"]
     code: str = Field(min_length=1)
     autoStart: int | None = Field(default=None, ge=0, le=1)
+    operation: Literal["COLLECT", "DELIVERY"] | None = None
 
 
 class Submit(Payload):
@@ -89,7 +90,7 @@ DEFAULT_TASK_TYPES = {"ctu": "CTUW", "lmr": "F05", "fmr": "F115", "qf": "F116"}
 
 
 def create_hik_router(post, get_mode):
-    router = APIRouter(tags=["HIK 4.3 / WASNA reference"])
+    router = APIRouter(tags=["HIK RCS 4.3"])
 
     def forward(path, payload):
         if get_mode() != "HIK":
