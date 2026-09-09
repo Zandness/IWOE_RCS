@@ -24,7 +24,7 @@ import "../styles/RackMonitor.css";
 const MONITOR_STORAGE_KEY = "wms-monitor-master-v2";
 const LEGACY_MONITOR_STORAGE_KEYS = ["wms-monitor-master-v1"];
 const CURRENT_LAYOUT_VERSION = 4;
-const SHELF_COUNT = 5;
+const SHELF_COUNT = 8;
 
 const DEFAULT_SKUS = [
   {
@@ -430,82 +430,263 @@ function WarehouseFloorPlan({
   selectedRackId,
   onSelectRack,
 }) {
-  const [zoom, setZoom] = useState(1);
-  const [mapWidth, setMapWidth] = useState(760);
+  // เพิ่มพื้นที่ระหว่าง Rack โดยใช้ตำแหน่งเปอร์เซ็นต์เดิม
+  const MAP_WIDTH = 1000;
+  const MAP_HEIGHT = 1300;
+  const MIN_ZOOM = 0.25;
+  const MAX_ZOOM = 3;
+
   const viewportRef = useRef(null);
-  const mapHeight = mapWidth * 729 / 745;
+  const dragRef = useRef(null);
+  const cameraRef = useRef({ x: 0, y: 0, zoom: 1 });
 
-  useEffect(() => {
-    const viewport = viewportRef.current;
-    const observer = new ResizeObserver(() => {
-      setMapWidth(Math.max(240, Math.min(760, viewport.clientWidth - 36)));
-    });
-    observer.observe(viewport);
-    return () => observer.disconnect();
-  }, []);
-
-  function changeZoom(value) {
-    setZoom(Math.max(0.5, Math.min(3, Math.round(value * 100) / 100)));
-  }
+  const [camera, setCamera] = useState(cameraRef.current);
+  const [dragging, setDragging] = useState(false);
 
   const waypointMap = useMemo(
-    () => new Map(waypoints.map((waypoint) => [waypoint.id, waypoint])),
+    () => new Map(waypoints.map((point) => [point.id, point])),
     [waypoints]
   );
 
+  function updateCamera(next) {
+    cameraRef.current = next;
+    setCamera(next);
+  }
+
+  function resetView() {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+
+    const zoom = Math.max(
+      MIN_ZOOM,
+      Math.min(1, (viewport.clientWidth - 32) / MAP_WIDTH)
+    );
+
+    updateCamera({
+      x: (viewport.clientWidth - MAP_WIDTH * zoom) / 2,
+      y: 16,
+      zoom,
+    });
+  }
+
+  function zoomAt(value, pointerX, pointerY) {
+    const current = cameraRef.current;
+    const zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, value));
+    const ratio = zoom / current.zoom;
+
+    updateCamera({
+      x: pointerX - (pointerX - current.x) * ratio,
+      y: pointerY - (pointerY - current.y) * ratio,
+      zoom,
+    });
+  }
+
+  function zoomFromButton(factor) {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+
+    zoomAt(
+      cameraRef.current.zoom * factor,
+      viewport.clientWidth / 2,
+      viewport.clientHeight / 2
+    );
+  }
+
+  useEffect(() => {
+    resetView();
+
+    const viewport = viewportRef.current;
+
+    function handleWheel(event) {
+      event.preventDefault();
+
+      // ป้องกันกล้องกระโดดถ้าหมุนล้อขณะกำลังลาก
+      if (dragRef.current) return;
+
+      const bounds = viewport.getBoundingClientRect();
+      const unit =
+        event.deltaMode === 1
+          ? 16
+          : event.deltaMode === 2
+            ? viewport.clientHeight
+            : 1;
+
+      const delta = Math.max(-200, Math.min(200, event.deltaY * unit));
+
+      zoomAt(
+        cameraRef.current.zoom * Math.exp(-delta * 0.002),
+        event.clientX - bounds.left - viewport.clientLeft,
+        event.clientY - bounds.top - viewport.clientTop
+      );
+    }
+
+    viewport.addEventListener("wheel", handleWheel, { passive: false });
+
+    return () => {
+      viewport.removeEventListener("wheel", handleWheel);
+    };
+  }, []);
+
+  function startDrag(event) {
+    if (event.button !== 0 || dragRef.current) return;
+
+    // คลิก Rack ยังเปิดรายละเอียดได้ตามปกติ
+    if (event.target.closest("button, input, select, textarea, a")) return;
+
+    event.preventDefault();
+
+    dragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      cameraX: cameraRef.current.x,
+      cameraY: cameraRef.current.y,
+    };
+
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setDragging(true);
+  }
+
+  function moveDrag(event) {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+
+    updateCamera({
+      ...cameraRef.current,
+      x: drag.cameraX + event.clientX - drag.startX,
+      y: drag.cameraY + event.clientY - drag.startY,
+    });
+  }
+
+  function stopDrag(event) {
+    if (dragRef.current?.pointerId !== event.pointerId) return;
+
+    dragRef.current = null;
+    setDragging(false);
+
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  }
+
   return (
     <div style={{ minWidth: 0, background: "#0a1626" }}>
-      <div role="group" aria-label="Map zoom" style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 18px", color: "#e2e8f0" }}>
-        <button type="button" aria-label="Zoom out" disabled={zoom <= 0.5} onClick={() => changeZoom(zoom - 0.25)}>−</button>
-        <output aria-live="polite">{Math.round(zoom * 100)}%</output>
-        <button type="button" aria-label="Zoom in" disabled={zoom >= 3} onClick={() => changeZoom(zoom + 0.25)}>+</button>
-        <button type="button" onClick={() => {
-          setZoom(1);
-          viewportRef.current.scrollTo({ top: 0, left: 0 });
-        }}>Reset</button>
-        <span style={{ fontSize: 12 }}>Scroll to explore the map</span>
+      <div
+        role="group"
+        aria-label="Map zoom"
+        style={{
+          display: "flex",
+          alignItems: "center",
+          flexWrap: "wrap",
+          gap: 12,
+          padding: "12px 18px",
+          color: "#e2e8f0",
+        }}
+      >
+        <button
+          type="button"
+          aria-label="Zoom out"
+          disabled={camera.zoom <= MIN_ZOOM}
+          onClick={() => zoomFromButton(1 / 1.2)}
+        >
+          −
+        </button>
+
+        <output>{Math.round(camera.zoom * 100)}%</output>
+
+        <button
+          type="button"
+          aria-label="Zoom in"
+          disabled={camera.zoom >= MAX_ZOOM}
+          onClick={() => zoomFromButton(1.2)}
+        >
+          +
+        </button>
+
+        <button type="button" onClick={resetView}>
+          Reset
+        </button>
+
+        <span style={{ fontSize: 12 }}>
+          Scroll to zoom · Drag empty space to pan
+        </span>
       </div>
-      <div ref={viewportRef} className="warehouse-floor-stage-wrap" tabIndex={0} aria-label="Warehouse map. Use arrow keys or scroll to pan."
-        style={{ display: "block", height: "clamp(400px, 70vh, 800px)", boxSizing: "border-box" }}>
-      <div style={{ position: "relative", width: mapWidth * zoom, height: mapHeight * zoom, margin: "0 auto" }}>
-      <div className="warehouse-floor-stage" style={{ width: mapWidth, minWidth: 0, height: mapHeight, boxSizing: "border-box", transform: `scale(${zoom})`, transformOrigin: "top left" }}>
-        <div className="floor-route-layer" aria-hidden="true">
-          {routeEdges.map(([fromId, toId]) => {
-            const from = waypointMap.get(fromId);
-            const to = waypointMap.get(toId);
-            if (!from || !to) return null;
 
-            return (
-              <FloorRoute
-                key={`${fromId}-${toId}`}
-                from={from}
-                to={to}
-              />
-            );
-          })}
-        </div>
+      <div
+        ref={viewportRef}
+        className="warehouse-floor-stage-wrap"
+        onPointerDown={startDrag}
+        onPointerMove={moveDrag}
+        onPointerUp={stopDrag}
+        onPointerCancel={stopDrag}
+        onLostPointerCapture={stopDrag}
+        style={{
+          position: "relative",
+          display: "block",
+          height: "clamp(400px, 70vh, 800px)",
+          padding: 0,
+          overflow: "hidden",
+          boxSizing: "border-box",
+          background: "#cbd5e1",
+          cursor: dragging ? "grabbing" : "grab",
+          touchAction: "none",
+          userSelect: "none",
+        }}
+      >
+        <div
+          className="warehouse-floor-stage"
+          style={{
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: MAP_WIDTH,
+            minWidth: 0,
+            height: MAP_HEIGHT,
+            margin: 0,
+            boxSizing: "border-box",
+            transformOrigin: "0 0",
+            transform:
+              `translate(${camera.x}px, ${camera.y}px) ` +
+              `scale(${camera.zoom})`,
+          }}
+        >
+          <div className="floor-route-layer" aria-hidden="true">
+            {routeEdges.map(([fromId, toId]) => {
+              const from = waypointMap.get(fromId);
+              const to = waypointMap.get(toId);
 
-        <StorageWaypointLinks
-          racks={racks}
-          waypointMap={waypointMap}
-          storageLinks={storageLinks}
-        />
+              if (!from || !to) return null;
 
-        {waypoints.map((waypoint) => (
-          <FloorNode key={waypoint.id} waypoint={waypoint} />
-        ))}
+              return (
+                <FloorRoute
+                  key={`${fromId}-${toId}`}
+                  from={from}
+                  to={to}
+                />
+              );
+            })}
+          </div>
 
-        {racks.map((rack) => (
-          <FloorRack
-            key={rack.id}
-            rack={rack}
-            visible={visibleRackIds.has(rack.id)}
-            active={selectedRackId === rack.id}
-            onClick={() => onSelectRack(rack.id)}
+          <StorageWaypointLinks
+            racks={racks}
+            waypointMap={waypointMap}
+            storageLinks={storageLinks}
           />
-        ))}
-      </div>
-      </div>
+
+          {waypoints.map((waypoint) => (
+            <FloorNode key={waypoint.id} waypoint={waypoint} />
+          ))}
+
+          {racks.map((rack) => (
+            <FloorRack
+              key={rack.id}
+              rack={rack}
+              visible={visibleRackIds.has(rack.id)}
+              active={selectedRackId === rack.id}
+              onClick={() => onSelectRack(rack.id)}
+            />
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -611,7 +792,7 @@ function RackFrontPanel({ rack, onShelfClick }) {
       <aside className="rack-front-side-panel empty">
         <Warehouse size={30} />
         <strong>Select a storage rack</strong>
-        <span>Five shelf blocks will appear here.</span>
+        <span>{SHELF_COUNT} shelf blocks will appear here.</span>
       </aside>
     );
   }
@@ -635,7 +816,7 @@ function RackFrontPanel({ rack, onShelfClick }) {
         <div>
           <span>{rack.zone}</span>
           <h3>Rack {rack.id}</h3>
-          <p>Monitor master data · 5 shelf levels</p>
+          <p>Monitor master data · {SHELF_COUNT} shelf levels</p>
         </div>
 
         <div className="rack-side-total">

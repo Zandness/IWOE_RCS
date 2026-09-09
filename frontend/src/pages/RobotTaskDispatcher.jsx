@@ -1,3 +1,4 @@
+import MonitorRcsDispatch from "../components/MonitorRcsDispatch";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -2836,6 +2837,7 @@ export default function RobotTaskDispatcher() {
   return (
 
     <div className="dispatcher-page">
+      <MonitorRcsDispatch />
 
       {/* =================================================
           PAGE HEADER
