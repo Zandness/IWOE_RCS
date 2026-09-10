@@ -3,6 +3,7 @@ import {
   Navigate,
   Route,
   Routes,
+  useLocation,
 } from "react-router-dom";
 
 import Navbar from "./components/Navbar";
@@ -17,143 +18,103 @@ import RobotTaskDispatcher from "./pages/RobotTaskDispatcher";
 import FleetControl from "./pages/FleetControl";
 import Settings from "./pages/Settings";
 
+function AppContent() {
+  const { pathname } = useLocation();
 
-function App() {
   return (
-    <BrowserRouter>
+    <div className="app">
+      <Navbar />
 
-      <div className="app">
+      <div className="app-body">
+        <Sidebar />
 
-        <Navbar />
+        <main className="main-content">
+          {/* คิวอยู่ตลอด เปลี่ยนเฉพาะการแสดงหน้า */}
+          <div
+            style={{
+              display:
+                pathname === "/dispatcher"
+                  ? "block"
+                  : "none",
+            }}
+          >
+            <RobotTaskDispatcher />
+          </div>
 
+          <Routes>
+            <Route path="/" element={<Dashboard />} />
 
-        <div className="app-body">
+            <Route
+              path="/warehouse"
+              element={<WarehouseMap />}
+            />
 
-          <Sidebar />
+            <Route
+              path="/warehouse-data"
+              element={<WarehouseData />}
+            />
 
+            <Route
+              path="/inventory"
+              element={
+                <Navigate to="/warehouse-data" replace />
+              }
+            />
 
-          <main className="main-content">
+            <Route
+              path="/locations"
+              element={
+                <Navigate to="/warehouse-data" replace />
+              }
+            />
 
-            <Routes>
+            <Route
+              path="/operations"
+              element={<WarehouseOperations />}
+            />
 
-              <Route
-                path="/"
-                element={
-                  <Dashboard />
-                }
-              />
+            <Route
+              path="/inbound"
+              element={
+                <Navigate to="/operations" replace />
+              }
+            />
 
+            <Route
+              path="/outbound"
+              element={
+                <Navigate to="/operations" replace />
+              }
+            />
 
-              <Route
-                path="/warehouse"
-                element={
-                  <WarehouseMap />
-                }
-              />
+            <Route
+              path="/tasks"
+              element={<TaskManagement />}
+            />
 
+            {/* แสดง Dispatcher จากด้านบนแล้ว */}
+            <Route path="/dispatcher" element={null} />
 
-              <Route
-                path="/warehouse-data"
-                element={
-                  <WarehouseData />
-                }
-              />
+            <Route
+              path="/fleet"
+              element={<FleetControl />}
+            />
 
-
-              <Route
-                path="/locations"
-                element={
-                  <Navigate
-                    to="/warehouse-data"
-                    replace
-                  />
-                }
-              />
-
-
-              <Route
-                path="/inventory"
-                element={
-                  <Navigate
-                    to="/warehouse-data"
-                    replace
-                  />
-                }
-              />
-
-
-              <Route
-                path="/operations"
-                element={
-                  <WarehouseOperations />
-                }
-              />
-
-
-              <Route
-                path="/tasks"
-                element={
-                  <TaskManagement />
-                }
-              />
-
-
-              <Route
-                path="/dispatcher"
-                element={
-                  <RobotTaskDispatcher />
-                }
-              />
-
-
-              <Route
-                path="/inbound"
-                element={
-                  <Navigate
-                    to="/operations"
-                    replace
-                  />
-                }
-              />
-
-
-              <Route
-                path="/outbound"
-                element={
-                  <Navigate
-                    to="/operations"
-                    replace
-                  />
-                }
-              />
-
-
-              <Route
-                path="/fleet"
-                element={
-                  <FleetControl />
-                }
-              />
-
-
-              <Route
-                path="/settings"
-                element={
-                  <Settings />
-                }
-              />
-
-            </Routes>
-
-          </main>
-
-        </div>
-
+            <Route
+              path="/settings"
+              element={<Settings />}
+            />
+          </Routes>
+        </main>
       </div>
-
-    </BrowserRouter>
+    </div>
   );
 }
 
-
-export default App;
+export default function App() {
+  return (
+    <BrowserRouter>
+      <AppContent />
+    </BrowserRouter>
+  );
+}

@@ -1,225 +1,354 @@
 import {
-  Activity,
-  Bot,
-  ClipboardList,
-  Server,
-} from "lucide-react";
+  useEffect,
+  useState,
+} from "react";
 
-import ExecutiveStats from "../components/ExecutiveStats";
-import WarehouseGrid from "../components/WarehouseGrid";
+import { Link } from "react-router-dom";
 
-const recentOrders = [
-  {
-    id: "ORD-1024",
-    status: "Picking",
-    items: 5,
-  },
-  {
-    id: "ORD-1025",
-    status: "Queued",
-    items: 3,
-  },
-  {
-    id: "ORD-1026",
-    status: "Completed",
-    items: 8,
-  },
-  {
-    id: "ORD-1027",
-    status: "Picking",
-    items: 2,
-  },
-];
+import {
+  basketOf,
+  MONITOR_KEY,
+} from "../utils/basketStore";
 
-const robotActivity = [
-  {
-    robot: "AMR-01",
-    activity: "Picking Order ORD-1024",
-    status: "MOVING",
-  },
-  {
-    robot: "AMR-02",
-    activity: "Waiting at Zone B",
-    status: "IDLE",
-  },
-  {
-    robot: "AGV-01",
-    activity: "Charging",
-    status: "CHARGING",
-  },
-];
+import {
+  loadPreferences,
+  summarizeWarehouse,
+} from "../utils/dashboardData";
+
+import "../styles/OverviewSettings.css";
+
+function readSnapshot() {
+  try {
+    const monitor = JSON.parse(
+      localStorage.getItem(
+        MONITOR_KEY
+      ) || "null"
+    );
+
+    const queue = JSON.parse(
+      localStorage.getItem(
+        "wms-robot-tasks-v1"
+      ) || "[]"
+    );
+
+    if (
+      !Array.isArray(queue) ||
+      (
+        monitor &&
+        !Array.isArray(monitor.racks)
+      )
+    ) {
+      throw new Error(
+        "Invalid warehouse data."
+      );
+    }
+
+    return {
+      summary: summarizeWarehouse(
+        monitor,
+        queue
+      ),
+
+      initialized: Boolean(monitor),
+      preferences: loadPreferences(),
+      error: "",
+    };
+  } catch (error) {
+    return {
+      summary: summarizeWarehouse(
+        null,
+        []
+      ),
+
+      error: error.message,
+      preferences: loadPreferences(),
+    };
+  }
+}
 
 export default function Dashboard() {
+  const [snapshot, setSnapshot] = useState(
+    readSnapshot
+  );
+
+  useEffect(() => {
+    function refresh() {
+      setSnapshot(readSnapshot());
+    }
+
+    const events = [
+      "storage",
+      "focus",
+      "wms-data-changed",
+      "wms-monitor-data-changed",
+      "wms-preferences-changed",
+    ];
+
+    events.forEach((eventName) =>
+      window.addEventListener(
+        eventName,
+        refresh
+      )
+    );
+
+    const timer = window.setInterval(
+      refresh,
+      1000
+    );
+
+    return () => {
+      window.clearInterval(timer);
+
+      events.forEach((eventName) =>
+        window.removeEventListener(
+          eventName,
+          refresh
+        )
+      );
+    };
+  }, []);
+
+  const {
+    summary,
+    preferences,
+    error,
+    initialized,
+  } = snapshot;
+
+  const cards = [
+    ["Baskets", summary.baskets],
+    ["Empty available points", summary.empty],
+    ["SKU types in stock", summary.skuCount],
+    ["Total item quantity", summary.quantity],
+  ];
+
+  const queueSummary = [
+    ["Pending", summary.pending],
+    ["Scheduled for later", summary.scheduled],
+    ["Submitted / running", summary.active],
+    ["Completed", summary.completed],
+    ["Needs attention", summary.attention],
+  ];
+
   return (
-    <div className="page">
+    <div className="page wms-overview">
       <div className="page-header">
         <div>
           <span className="page-label">
-            WAREHOUSE MANAGEMENT
+            WAREHOUSE OVERVIEW
           </span>
 
           <h2>Dashboard</h2>
 
           <p>
-            Overview of warehouse operations,
-            inventory, orders and mobile robots.
+            {preferences.warehouseName}
+            {" · "}
+            Monitor inventory and dispatch
+            records in this browser.
           </p>
         </div>
       </div>
 
-      <ExecutiveStats />
+      {error ? (
+        <p role="alert">
+          Cannot read warehouse data: {error}
+        </p>
+      ) : (
+        <>
+          {!initialized && (
+            <p className="overview-notice">
+              Open{" "}
+              <Link to="/warehouse">
+                Warehouse Monitor
+              </Link>{" "}
+              to initialize the warehouse layout.
+            </p>
+          )}
 
-      <div className="dashboard-main-grid">
-        <section className="panel dashboard-large-panel">
-          <div className="panel-header">
-            <h3>
-              <Activity size={17} />
-              Warehouse Overview
-            </h3>
-
-            <span className="badge">
-              LIVE DATA
-            </span>
-          </div>
-
-          <WarehouseGrid />
-        </section>
-
-        <section className="panel">
-          <div className="panel-header">
-            <h3>
-              <Server size={17} />
-              System Status
-            </h3>
-          </div>
-
-          <div className="system-list">
-            <SystemRow
-              name="Frontend"
-              status="Online"
-            />
-
-            <SystemRow
-              name="WMS Core"
-              status="Online"
-            />
-
-            <SystemRow
-              name="Database"
-              status="Mock"
-            />
-
-            <SystemRow
-              name="RCS Integration"
-              status="Not Connected"
-            />
-          </div>
-        </section>
-      </div>
-
-      <div className="dashboard-bottom-grid">
-        <section className="panel">
-          <div className="panel-header">
-            <h3>
-              <ClipboardList size={17} />
-              Recent Orders
-            </h3>
-
-            <span>
-              {recentOrders.length} records
-            </span>
-          </div>
-
-          <div className="table-wrapper">
-            <table className="dashboard-table">
-              <thead>
-                <tr>
-                  <th>Order ID</th>
-                  <th>Items</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {recentOrders.map((order) => (
-                  <tr key={order.id}>
-                    <td>{order.id}</td>
-                    <td>{order.items}</td>
-                    <td>
-                      <span
-                        className={`order-status ${order.status.toLowerCase()}`}
-                      >
-                        {order.status}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        <section className="panel">
-          <div className="panel-header">
-            <h3>
-              <Bot size={17} />
-              Robot Activity
-            </h3>
-
-            <span>
-              {robotActivity.length} robots
-            </span>
-          </div>
-
-          <div className="activity-list">
-            {robotActivity.map((item) => (
-              <div
-                className="activity-item"
-                key={item.robot}
+          <div className="overview-stats">
+            {cards.map(([name, value]) => (
+              <section
+                className="panel overview-stat"
+                key={name}
               >
-                <div className="activity-icon">
-                  <Bot size={17} />
-                </div>
-
-                <div className="activity-content">
-                  <strong>
-                    {item.robot}
-                  </strong>
-
-                  <span>
-                    {item.activity}
-                  </span>
-                </div>
-
-                <span
-                  className={`activity-status ${item.status.toLowerCase()}`}
-                >
-                  {item.status}
-                </span>
-              </div>
+                <span>{name}</span>
+                <strong>{value}</strong>
+              </section>
             ))}
           </div>
-        </section>
-      </div>
-    </div>
-  );
-}
 
-function SystemRow({ name, status }) {
-  const statusClass =
-    status === "Online"
-      ? "system-online"
-      : status === "Mock"
-      ? "system-mock"
-      : "system-offline";
+          <div className="overview-columns">
+            <section className="panel overview-section">
+              <div className="overview-heading">
+                <h3>Rack occupancy</h3>
 
-  return (
-    <div className="system-row">
-      <span>{name}</span>
+                <Link to="/warehouse">
+                  Open Monitor
+                </Link>
+              </div>
 
-      <strong className={statusClass}>
-        {status}
-      </strong>
+              <p>
+                Each point holds one basket.
+                Empty baskets also occupy a point.
+              </p>
+
+              {summary.racks.length === 0 && (
+                <p>No rack data yet.</p>
+              )}
+
+              {summary.racks.map((rack) => {
+                const used = rack.shelves.filter(
+                  (shelf) => basketOf(shelf)
+                ).length;
+
+                return (
+                  <div
+                    className="overview-rack"
+                    key={rack.id}
+                  >
+                    <div>
+                      <strong>
+                        {rack.name || rack.id}
+                      </strong>
+
+                      <span>
+                        {used}
+                        {" / "}
+                        {rack.shelves.length}
+                        {" baskets"}
+                      </span>
+                    </div>
+
+                    <progress
+                      value={used}
+                      max={
+                        rack.shelves.length || 1
+                      }
+                      aria-label={
+                        `${rack.id} basket occupancy`
+                      }
+                    />
+                  </div>
+                );
+              })}
+            </section>
+
+            <section className="panel overview-section">
+              <div className="overview-heading">
+                <h3>Dispatch summary</h3>
+
+                <Link to="/dispatcher">
+                  Manage queue
+                </Link>
+              </div>
+
+              <dl className="overview-facts">
+                {queueSummary.map(
+                  ([label, value]) => (
+                    <div key={label}>
+                      <dt>{label}</dt>
+                      <dd>{value}</dd>
+                    </div>
+                  )
+                )}
+              </dl>
+
+              <p>
+                Eligible urgent tasks follow
+                the active task. Equal priority
+                follows FIFO.
+              </p>
+
+              <Link to="/warehouse-data">
+                View basket contents and inventory
+              </Link>
+            </section>
+          </div>
+
+          <section className="panel overview-section">
+            <div className="overview-heading">
+              <h3>Recent transfers</h3>
+
+              <Link to="/dispatcher">
+                View all
+              </Link>
+            </div>
+
+            <div className="table-wrapper">
+              <table className="dashboard-table">
+                <thead>
+                  <tr>
+                    <th>Task</th>
+                    <th>Basket</th>
+                    <th>Route</th>
+                    <th>Priority</th>
+                    <th>Send time</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {summary.recent.length === 0 && (
+                    <tr>
+                      <td colSpan={6}>
+                        No queued transfers yet.
+                        Create a basket transfer
+                        from Monitor.
+                      </td>
+                    </tr>
+                  )}
+
+                  {summary.recent.map((task) => (
+                    <tr key={task.id}>
+                      <td>{task.id}</td>
+
+                      <td>
+                        {task.basketId || "—"}
+                      </td>
+
+                      <td>
+                        {task.sourceRcsPointCode ||
+                          "—"}
+
+                        {" → "}
+
+                        {task.destinationRcsPointCode ||
+                          "—"}
+                      </td>
+
+                      <td>
+                        {task.wmsPriority ||
+                          task.rcsPriority}
+                      </td>
+
+                      <td>
+                        {task.scheduledSendAt &&
+                        Number.isFinite(
+                          Date.parse(
+                            task.scheduledSendAt
+                          )
+                        )
+                          ? new Date(
+                              task.scheduledSendAt
+                            ).toLocaleString()
+                          : "As soon as ready"}
+                      </td>
+
+                      <td>
+                        {task.backendError
+                          ? "Needs attention"
+                          : task.sendStatus === "SENT"
+                          ? task.rcsStatus
+                          : task.sendStatus}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </>
+      )}
     </div>
   );
 }

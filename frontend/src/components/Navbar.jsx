@@ -1,35 +1,48 @@
-import { WifiOff, Server } from "lucide-react";
+import {
+  Settings,
+  Server,
+} from "lucide-react";
+
+import { Link } from "react-router-dom";
 
 export default function Navbar() {
-  const connected = false;
-
   return (
     <header className="navbar">
       <div className="navbar-left">
-        <div className="logo-box">W</div>
+        <div className="logo-box">
+          W
+        </div>
 
         <div>
-          <h1>Warehouse Management System</h1>
-          <span>External RCS Integration</span>
+          <h1>
+            Warehouse Management System
+          </h1>
+
+          <span>
+            External RCS Integration
+          </span>
         </div>
       </div>
 
       <div className="navbar-right">
-        <div
-          className={`connection-status ${
-            connected ? "connected" : "disconnected"
-          }`}
+        <Link
+          to="/settings"
+          className="connection-status"
+          style={{
+            textDecoration: "none",
+            color: "inherit",
+          }}
         >
-          <WifiOff size={17} />
+          <Settings size={17} />
 
           <span>
-            RCS {connected ? "CONNECTED" : "DISCONNECTED"}
+            Connection settings
           </span>
-        </div>
+        </Link>
 
         <div className="system-status">
           <Server size={16} />
-          <span>WMS ONLINE</span>
+          <span>WMS</span>
         </div>
       </div>
     </header>
