@@ -1,5 +1,4 @@
 export const MONITOR_KEY = "wms-monitor-master-v2";
-
 const QUEUE_KEY = "wms-robot-tasks-v1";
 
 export function basketOf(shelf) {
@@ -13,7 +12,7 @@ export function basketOf(shelf) {
 
 export function readMonitor() {
   const data = JSON.parse(
-    localStorage.getItem(MONITOR_KEY) || "null"
+    localStorage.getItem(MONITOR_KEY) || "null",
   );
 
   if (!Array.isArray(data?.racks)) {
@@ -29,31 +28,28 @@ export function shelvesOf(data) {
       ...shelf,
       rack: rack.id,
       basket: basketOf(shelf),
-    }))
+    })),
   );
 }
 
 export function isReserved(id, except = "") {
   const queue = JSON.parse(
-    localStorage.getItem(QUEUE_KEY) || "[]"
+    localStorage.getItem(QUEUE_KEY) || "[]",
   );
 
   return queue.some(
     (task) =>
       task.id !== except &&
       task.rcsStatus !== "COMPLETED" &&
-      (
-        task.sourceLocationId === id ||
-        task.destinationLocationId === id
-      )
+      (task.sourceLocationId === id ||
+        task.destinationLocationId === id),
   );
 }
 
 export function assertEditable(id) {
   if (isReserved(id)) {
     throw new Error(
-      "This location is reserved by a queued transfer. " +
-      "Remove the unsent task or wait for completion."
+      "This location is reserved by a queued transfer. Remove the unsent task or wait for completion.",
     );
   }
 }
@@ -62,60 +58,45 @@ export function validateTransfer(
   fromId,
   toId,
   except = "",
-  expectedBasket = ""
+  expectedBasket = "",
 ) {
   const shelves = shelvesOf(readMonitor());
-
-  const from = shelves.find(
-    (shelf) => shelf.id === fromId
-  );
-
-  const to = shelves.find(
-    (shelf) => shelf.id === toId
-  );
+  const from = shelves.find((s) => s.id === fromId);
+  const to = shelves.find((s) => s.id === toId);
 
   if (!from || !to || from.id === to.id) {
-    throw new Error(
-      "Choose two different locations."
-    );
+    throw new Error("Choose two different locations.");
   }
 
   if (!from.basket) {
-    throw new Error(
-      "The source has no basket."
-    );
+    throw new Error("The source has no basket.");
   }
 
   if (to.basket || to.inventory?.length) {
     throw new Error(
-      "Destination must be empty: one basket per location."
+      "Destination must be empty: one basket per location.",
     );
   }
 
   for (const shelf of [from, to]) {
-    const matchingCodes = shelves.filter(
-      (row) => row.code === shelf.code
-    );
-
-    if (!shelf.code || matchingCodes.length !== 1) {
+    if (
+      !shelf.code ||
+      shelves.filter((s) => s.code === shelf.code).length !== 1
+    ) {
       throw new Error(
-        "Location codes must be present and unique."
+        "Location codes must be present and unique.",
       );
     }
 
     if (
-      ["BLOCKED", "MAINTENANCE"].includes(
-        shelf.status
-      )
+      ["BLOCKED", "MAINTENANCE"].includes(shelf.status)
     ) {
-      throw new Error(
-        "Location is unavailable."
-      );
+      throw new Error("Location is unavailable.");
     }
 
     if (isReserved(shelf.id, except)) {
       throw new Error(
-        "Location already reserved by another transfer."
+        "Location already reserved by another transfer.",
       );
     }
   }
@@ -124,18 +105,16 @@ export function validateTransfer(
     expectedBasket &&
     from.basket.id !== expectedBasket
   ) {
-    throw new Error(
-      "The source basket has changed."
-    );
+    throw new Error("The source basket has changed.");
   }
 
   if (
     from.inventory.some(
-      (item) => Number(item.reserved) > 0
+      (item) => Number(item.reserved) > 0,
     )
   ) {
     throw new Error(
-      "Resolve outbound stock reservations before moving this basket."
+      "Resolve outbound stock reservations before moving this basket.",
     );
   }
 
@@ -151,34 +130,27 @@ export function completeBasketTransfer(task) {
   }
 
   const data = readMonitor();
-
   const key =
-    task.rcsTaskChainCode ||
-    task.bridgeTaskId;
+    task.rcsTaskChainCode || task.bridgeTaskId;
 
   if (!key) {
-    throw new Error(
-      "Missing confirmed transfer ID."
-    );
+    throw new Error("Missing confirmed transfer ID.");
   }
 
-  // Already applied: do not move the basket twice.
   if (data.completedBasketTransfers?.[key]) {
     return true;
   }
 
   const shelves = data.racks.flatMap(
-    (rack) => rack.shelves
+    (rack) => rack.shelves,
   );
 
   const from = shelves.find(
-    (shelf) =>
-      shelf.id === task.sourceLocationId
+    (shelf) => shelf.id === task.sourceLocationId,
   );
 
   const to = shelves.find(
-    (shelf) =>
-      shelf.id === task.destinationLocationId
+    (shelf) => shelf.id === task.destinationLocationId,
   );
 
   if (
@@ -189,12 +161,10 @@ export function completeBasketTransfer(task) {
     to.inventory?.length
   ) {
     throw new Error(
-      "RCS completed, but basket locations conflict. " +
-      "Check physical locations and Monitor before continuing."
+      "RCS completed, but basket locations conflict. Check physical locations and Monitor before continuing.",
     );
   }
 
-  // Move the whole basket and all product records.
   to.basket = basketOf(from);
   to.inventory = from.inventory;
 
@@ -220,14 +190,14 @@ export function completeBasketTransfer(task) {
     ...(data.history || []),
   ];
 
-  // Basket, contents and completion ledger are saved together.
+  // Basket, inventory and completion ledger are committed together.
   localStorage.setItem(
     MONITOR_KEY,
-    JSON.stringify(data)
+    JSON.stringify(data),
   );
 
   window.dispatchEvent(
-    new CustomEvent("wms-monitor-data-changed")
+    new CustomEvent("wms-monitor-data-changed"),
   );
 
   return true;

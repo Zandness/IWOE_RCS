@@ -1,212 +1,149 @@
-const DEFAULT_RCS_BRIDGE_URL =
-  "http://127.0.0.1:8000";
-
-
-const RCS_BRIDGE_URL =
-  String(
-    import.meta.env.VITE_RCS_BRIDGE_URL ||
-      DEFAULT_RCS_BRIDGE_URL
-  ).replace(/\/+$/, "");
-
-
-/* =========================================================
-   BASE URL
-========================================================= */
+const BASE_URL = String(
+  import.meta.env.VITE_RCS_BRIDGE_URL || "",
+).replace(/\/+$/, "");
 
 export function getRcsBridgeBaseUrl() {
-  return RCS_BRIDGE_URL;
+  return BASE_URL || window.location.origin;
 }
 
-
-/* =========================================================
-   READ RESPONSE
-========================================================= */
-
-async function readJsonResponse(
-  response
+async function bridgeFetch(
+  path,
+  { signal, method = "GET", body } = {},
 ) {
-  let data = null;
-
+  let response;
 
   try {
-    data =
-      await response.json();
-  } catch {
-    data = null;
+    response = await fetch(`${BASE_URL}${path}`, {
+      method,
+      signal,
+
+      headers: {
+        "Content-Type": "application/json",
+      },
+
+      ...(body === undefined
+        ? {}
+        : { body: JSON.stringify(body) }),
+    });
+  } catch (cause) {
+    throw new Error(
+      signal?.aborted
+        ? "The request timed out or was cancelled. Check task status before submitting again."
+        : `Cannot reach the WMS backend at ${getRcsBridgeBaseUrl()}. Check that FastAPI is running. ${cause.message}`,
+    );
   }
 
+  let data;
 
-  if (!response.ok) {
+  try {
+    data = await response.json();
+  } catch {
+    throw new Error(
+      `Backend returned an unreadable response (HTTP ${response.status}). Check task status before submitting again.`,
+    );
+  }
+
+  if (!response.ok || data?.success === false) {
     const detail =
       data?.detail ||
       data?.message ||
-      `RCS Bridge request failed with HTTP ${response.status}.`;
+      `HTTP ${response.status}`;
 
+    const text =
+      typeof detail === "string"
+        ? detail
+        : detail?.rcsResponse?.message ||
+          detail?.message ||
+          JSON.stringify(detail);
 
-    const error =
-      new Error(
-        typeof detail ===
-          "string"
-          ? detail
-          : JSON.stringify(
-              detail
-            )
-      );
+    const error = new Error(text);
 
-
-    error.status =
-      response.status;
-
-
-    error.data =
-      data;
-
+    error.status = response.status;
+    error.data = data;
 
     throw error;
   }
 
+  if (
+    !data ||
+    typeof data !== "object" ||
+    Array.isArray(data)
+  ) {
+    throw new Error(
+      "Unexpected backend response. Check task status before submitting again.",
+    );
+  }
 
   return data;
 }
 
+export function getRcsBridgeStatus(options = {}) {
+  return bridgeFetch("/api/rcs/status", options);
+}
 
-/* =========================================================
-   FETCH WRAPPER
-========================================================= */
-
-async function bridgeFetch(
-  path,
-  options = {}
+export async function checkRcsConnection(
+  robotCode,
+  options = {},
 ) {
-  let response;
+  const code = String(robotCode || "").trim();
 
-
-  try {
-    response =
-      await fetch(
-        `${RCS_BRIDGE_URL}${path}`,
-        {
-          ...options,
-
-          headers: {
-            "Content-Type":
-              "application/json",
-
-            ...(
-              options.headers ||
-              {}
-            ),
-          },
-        }
-      );
-  } catch (error) {
+  if (!code) {
     throw new Error(
-      `Cannot connect to WMS RCS Bridge at ${RCS_BRIDGE_URL}. ` +
-        `Make sure FastAPI is running. ${
-          error?.message ||
-          ""
-        }`
+      "Enter a robot code for the connection check.",
     );
   }
 
-
-  return readJsonResponse(
-    response
-  );
-}
-
-
-/* =========================================================
-   BRIDGE STATUS
-========================================================= */
-
-export async function getRcsBridgeStatus(
-  options = {}
-) {
-  return bridgeFetch(
-    "/api/rcs/status",
+  const result = await bridgeFetch(
+    "/api/rcs/connection/check",
     {
-      method:
-        "GET",
+      ...options,
+      method: "POST",
 
-      signal:
-        options.signal,
-    }
+      body: {
+        singleRobotCode: code,
+      },
+    },
   );
+
+  if (
+    result.connected !== true ||
+    result.mode !== "HIK"
+  ) {
+    throw new Error(
+      "RCS did not confirm a connection.",
+    );
+  }
+
+  return result;
 }
 
-
-/* =========================================================
-   CREATE RCS TASK
-========================================================= */
-
-export async function createRcsBridgeTask(
+// The bridge records the task and forwards it to HIK.
+// Basket contents are not included in the RCS command.
+export function createRcsBridgeTask(
   command,
-  options = {}
+  options = {},
 ) {
-  return bridgeFetch(
-    "/api/rcs/tasks",
-    {
-      method:
-        "POST",
-
-      signal:
-        options.signal,
-
-      body:
-        JSON.stringify(
-          command
-        ),
-    }
-  );
+  return bridgeFetch("/api/rcs/tasks", {
+    ...options,
+    method: "POST",
+    body: command,
+  });
 }
 
-
-/* =========================================================
-   GET ONE RCS TASK
-========================================================= */
-
-export async function getRcsBridgeTask(
+export function getRcsBridgeTask(
   bridgeTaskId,
-  options = {}
+  options = {},
 ) {
   if (!bridgeTaskId) {
-    throw new Error(
-      "bridgeTaskId is required."
-    );
+    throw new Error("Missing backend task ID.");
   }
 
-
   return bridgeFetch(
-    `/api/rcs/tasks/${encodeURIComponent(
-      bridgeTaskId
-    )}`,
-    {
-      method:
-        "GET",
-
-      signal:
-        options.signal,
-    }
+    `/api/rcs/tasks/${encodeURIComponent(bridgeTaskId)}`,
+    options,
   );
 }
 
-
-/* =========================================================
-   GET ALL RCS TASKS
-========================================================= */
-
-export async function getAllRcsBridgeTasks(
-  options = {}
-) {
-  return bridgeFetch(
-    "/api/rcs/tasks",
-    {
-      method:
-        "GET",
-
-      signal:
-        options.signal,
-    }
-  );
+export function getAllRcsBridgeTasks(options = {}) {
+  return bridgeFetch("/api/rcs/tasks", options);
 }

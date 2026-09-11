@@ -1,11 +1,5 @@
-import {
-  useEffect,
-  useState,
-} from "react";
-
-import {
-  basketOf,
-} from "../utils/basketStore";
+import { useEffect, useState } from "react";
+import { basketOf } from "../utils/basketStore";
 
 export default function BasketDetails({
   shelf,
@@ -13,10 +7,7 @@ export default function BasketDetails({
 }) {
   const basket = basketOf(shelf);
 
-  const [id, setId] = useState(
-    basket?.id || ""
-  );
-
+  const [id, setId] = useState(basket?.id || "");
   const [message, setMessage] = useState("");
 
   useEffect(() => {
@@ -27,39 +18,31 @@ export default function BasketDetails({
   const hasContents = shelf.inventory.some(
     (item) =>
       Number(item.quantity) > 0 ||
-      Number(item.reserved) > 0
+      Number(item.reserved) > 0,
   );
 
   function save(remove = false) {
     try {
       if (!remove && !id.trim()) {
-        throw new Error(
-          "Enter a basket ID."
-        );
+        throw new Error("Enter a basket ID.");
       }
 
       if (remove && hasContents) {
         throw new Error(
-          "Deduct all contents before removing an empty basket."
+          "Deduct all contents before removing an empty basket.",
         );
       }
 
       onSave({
-        basket: remove
-          ? null
-          : { id: id.trim() },
-
+        basket: remove ? null : { id: id.trim() },
         capacity: 1,
-
-        ...(remove
-          ? { inventory: [] }
-          : {}),
+        ...(remove ? { inventory: [] } : {}),
       });
 
       setMessage(
         remove
           ? "Empty basket removed."
-          : "Basket saved. Use Inbound below to add products and quantities."
+          : "Basket saved. Use Inbound below to add products and quantities.",
       );
     } catch (error) {
       setMessage(error.message);
@@ -79,7 +62,6 @@ export default function BasketDetails({
 
       <label>
         Basket ID
-
         <input
           value={id}
           onChange={(event) =>
@@ -106,11 +88,7 @@ export default function BasketDetails({
         </button>
       )}
 
-      {message && (
-        <p role="status">
-          {message}
-        </p>
-      )}
+      {message && <p role="status">{message}</p>}
     </section>
   );
 }

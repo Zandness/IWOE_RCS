@@ -1062,3 +1062,22 @@
 .monitor-shelf-save-row button:hover {
   background: #0891b2;
 }
+
+/* Keep the floor icon schematic;
+   show every level in the front view. */
+.rack-front-side-panel:not(.empty) {
+  align-self: start;
+  max-height: min(900px, 90vh);
+  overflow-y: auto;
+}
+
+.rack-front-side-panel .monitor-rcs-panel {
+  margin-top: 12px;
+}
+
+.rack-front-side-panel .monitor-rcs-panel input {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 8px 0;
+}

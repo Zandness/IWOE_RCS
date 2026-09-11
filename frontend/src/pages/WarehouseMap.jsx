@@ -1,3 +1,5 @@
+import { createOutboundReservation } from "../utils/warehouseOperations";
+
 import {
   useEffect,
   useMemo,
@@ -21,6 +23,15 @@ import {
 
 import BasketDetails from "../components/BasketDetails";
 import MonitorRcsDispatch from "../components/MonitorRcsDispatch";
+import RackShelfSettings from "../components/RackShelfSettings";
+
+import {
+  rackShelfCount,
+  rackDepthCount,
+  rackSlots,
+  shelfDepth,
+  resizeRack,
+} from "../utils/rackStructure";
 
 import {
   basketOf,
@@ -136,16 +147,14 @@ const DEFAULT_STORAGE_LINKS = [
 
 export default function WarehouseMap() {
   const [monitorData, setMonitorData] = useState(
-    loadMonitorData
+    loadMonitorData,
   );
 
-  const [selectedRackId, setSelectedRackId] =
-    useState(
-      () => loadMonitorData().racks[0]?.id || ""
-    );
+  const [selectedRackId, setSelectedRackId] = useState(
+    () => loadMonitorData().racks[0]?.id || "",
+  );
 
-  const [selectedShelfRef, setSelectedShelfRef] =
-    useState(null);
+  const [selectedShelfRef, setSelectedShelfRef] = useState(null);
 
   const [search, setSearch] = useState("");
   const [zoneFilter, setZoneFilter] = useState("ALL");
@@ -155,7 +164,7 @@ export default function WarehouseMap() {
 
     localStorage.setItem(
       MONITOR_STORAGE_KEY,
-      JSON.stringify(normalized)
+      JSON.stringify(normalized),
     );
 
     setMonitorData(normalized);
@@ -165,7 +174,7 @@ export default function WarehouseMap() {
         detail: {
           source: "warehouse-monitor",
         },
-      })
+      }),
     );
   }
 
@@ -182,7 +191,7 @@ export default function WarehouseMap() {
 
     window.addEventListener(
       "wms-monitor-data-changed",
-      refreshData
+      refreshData,
     );
 
     window.addEventListener("focus", refreshData);
@@ -191,7 +200,7 @@ export default function WarehouseMap() {
     return () => {
       window.removeEventListener(
         "wms-monitor-data-changed",
-        refreshData
+        refreshData,
       );
 
       window.removeEventListener("focus", refreshData);
@@ -203,10 +212,10 @@ export default function WarehouseMap() {
     () =>
       Array.from(
         new Set(
-          monitorData.racks.map((rack) => rack.zone)
-        )
+          monitorData.racks.map((rack) => rack.zone),
+        ),
       ).sort(),
-    [monitorData.racks]
+    [monitorData.racks],
   );
 
   const visibleRackIds = useMemo(() => {
@@ -247,17 +256,13 @@ export default function WarehouseMap() {
             .toLowerCase()
             .includes(query);
         })
-        .map((rack) => rack.id)
+        .map((rack) => rack.id),
     );
-  }, [
-    monitorData.racks,
-    search,
-    zoneFilter,
-  ]);
+  }, [monitorData.racks, search, zoneFilter]);
 
   const selectedRack =
     monitorData.racks.find(
-      (rack) => rack.id === selectedRackId
+      (rack) => rack.id === selectedRackId,
     ) ||
     monitorData.racks[0] ||
     null;
@@ -266,27 +271,27 @@ export default function WarehouseMap() {
     ? monitorData.racks
         .find(
           (rack) =>
-            rack.id === selectedShelfRef.rackId
+            rack.id === selectedShelfRef.rackId,
         )
         ?.shelves.find(
           (shelf) =>
-            shelf.id === selectedShelfRef.shelfId
+            shelf.id === selectedShelfRef.shelfId,
         ) || null
     : null;
 
   const selectedShelfRack = selectedShelfRef
     ? monitorData.racks.find(
         (rack) =>
-          rack.id === selectedShelfRef.rackId
+          rack.id === selectedShelfRef.rackId,
       ) || null
     : null;
 
   const allShelves = monitorData.racks.flatMap(
-    (rack) => rack.shelves
+    (rack) => rack.shelves,
   );
 
   const occupiedShelves = allShelves.filter(
-    (shelf) => Boolean(basketOf(shelf))
+    (shelf) => Boolean(basketOf(shelf)),
   ).length;
 
   const totalQty = allShelves.reduce(
@@ -295,9 +300,9 @@ export default function WarehouseMap() {
       shelf.inventory.reduce(
         (itemSum, item) =>
           itemSum + Number(item.quantity || 0),
-        0
+        0,
       ),
-    0
+    0,
   );
 
   if (monitorData.loadError) {
@@ -332,9 +337,9 @@ export default function WarehouseMap() {
           <h2>Warehouse Floor &amp; Rack Monitor</h2>
 
           <p>
-            Monitor is the master source for rack positions,
-            eight-level storage data and basket contents.
-            Inventory follows this structure.
+              Monitor is the master source for rack positions,
+              rack-specific shelf data and basket contents.
+              Inventory follows this structure.
           </p>
         </div>
 
@@ -428,6 +433,16 @@ export default function WarehouseMap() {
 
           <RackFrontPanel
             rack={selectedRack}
+            onResizeRack={(rackId, count, depth) =>
+              saveAndSet(
+                resizeRack(
+                  readMonitor(),
+                  rackId,
+                  count,
+                  depth,
+                ),
+              )
+              }
             onShelfClick={(shelf) =>
               setSelectedShelfRef({
                 rackId: selectedRack.id,
@@ -471,12 +486,10 @@ export default function WarehouseMap() {
               shelvesOf(latest).some(
                 (shelf) =>
                   shelf.id !== selectedShelf.id &&
-                  shelf.basket?.id === patch.basket.id
+                  shelf.basket?.id === patch.basket.id,
               )
             ) {
-              throw new Error(
-                "Basket ID already exists."
-              );
+              throw new Error("Basket ID already exists.");
             }
 
             if (
@@ -484,12 +497,10 @@ export default function WarehouseMap() {
               shelvesOf(latest).some(
                 (shelf) =>
                   shelf.id !== selectedShelf.id &&
-                  shelf.code === patch.code
+                  shelf.code === patch.code,
               )
             ) {
-              throw new Error(
-                "Location code already exists."
-              );
+              throw new Error("Location code already exists.");
             }
 
             saveAndSet(
@@ -500,8 +511,8 @@ export default function WarehouseMap() {
                 (current) => ({
                   ...current,
                   ...patch,
-                })
-              )
+                }),
+              ),
             );
           }}
           onInbound={(payload) => {
@@ -512,8 +523,8 @@ export default function WarehouseMap() {
                 readMonitor(),
                 selectedShelfRack.id,
                 selectedShelf.id,
-                payload
-              )
+                payload,
+              ),
             );
           }}
           onOutbound={(payload) => {
@@ -524,8 +535,8 @@ export default function WarehouseMap() {
                 readMonitor(),
                 selectedShelfRack.id,
                 selectedShelf.id,
-                payload
-              )
+                payload,
+              ),
             );
           }}
           onDeduct={(payload) => {
@@ -536,8 +547,8 @@ export default function WarehouseMap() {
                 readMonitor(),
                 selectedShelfRack.id,
                 selectedShelf.id,
-                payload
-              )
+                payload,
+              ),
             );
           }}
         />
@@ -586,7 +597,7 @@ function WarehouseFloorPlan({
   });
 
   const [camera, setCamera] = useState(
-    cameraRef.current
+    cameraRef.current,
   );
 
   const [dragging, setDragging] = useState(false);
@@ -597,9 +608,9 @@ function WarehouseFloorPlan({
         waypoints.map((point) => [
           point.id,
           point,
-        ])
+        ]),
       ),
-    [waypoints]
+    [waypoints],
   );
 
   function updateCamera(next) {
@@ -618,15 +629,14 @@ function WarehouseFloorPlan({
       MIN_ZOOM,
       Math.min(
         1,
-        (viewport.clientWidth - 32) / MAP_WIDTH
-      )
+        (viewport.clientWidth - 32) / MAP_WIDTH,
+      ),
     );
 
     updateCamera({
       x:
         (viewport.clientWidth -
           MAP_WIDTH * zoom) / 2,
-
       y: 16,
       zoom,
     });
@@ -637,7 +647,7 @@ function WarehouseFloorPlan({
 
     const zoom = Math.max(
       MIN_ZOOM,
-      Math.min(MAX_ZOOM, value)
+      Math.min(MAX_ZOOM, value),
     );
 
     const ratio = zoom / current.zoom;
@@ -646,11 +656,9 @@ function WarehouseFloorPlan({
       x:
         pointerX -
         (pointerX - current.x) * ratio,
-
       y:
         pointerY -
         (pointerY - current.y) * ratio,
-
       zoom,
     });
   }
@@ -665,7 +673,7 @@ function WarehouseFloorPlan({
     zoomAt(
       cameraRef.current.zoom * factor,
       viewport.clientWidth / 2,
-      viewport.clientHeight / 2
+      viewport.clientHeight / 2,
     );
   }
 
@@ -681,22 +689,18 @@ function WarehouseFloorPlan({
         return;
       }
 
-      const bounds =
-        viewport.getBoundingClientRect();
+      const bounds = viewport.getBoundingClientRect();
 
       const unit =
         event.deltaMode === 1
           ? 16
           : event.deltaMode === 2
-          ? viewport.clientHeight
-          : 1;
+            ? viewport.clientHeight
+            : 1;
 
       const delta = Math.max(
         -200,
-        Math.min(
-          200,
-          event.deltaY * unit
-        )
+        Math.min(200, event.deltaY * unit),
       );
 
       zoomAt(
@@ -709,20 +713,20 @@ function WarehouseFloorPlan({
 
         event.clientY -
           bounds.top -
-          viewport.clientTop
+          viewport.clientTop,
       );
     }
 
     viewport.addEventListener(
       "wheel",
       handleWheel,
-      { passive: false }
+      { passive: false },
     );
 
     return () => {
       viewport.removeEventListener(
         "wheel",
-        handleWheel
+        handleWheel,
       );
     };
   }, []);
@@ -737,7 +741,7 @@ function WarehouseFloorPlan({
 
     if (
       event.target.closest(
-        "button, input, select, textarea, a"
+        "button, input, select, textarea, a",
       )
     ) {
       return;
@@ -754,7 +758,7 @@ function WarehouseFloorPlan({
     };
 
     event.currentTarget.setPointerCapture(
-      event.pointerId
+      event.pointerId,
     );
 
     setDragging(true);
@@ -772,12 +776,10 @@ function WarehouseFloorPlan({
 
     updateCamera({
       ...cameraRef.current,
-
       x:
         drag.cameraX +
         event.clientX -
         drag.startX,
-
       y:
         drag.cameraY +
         event.clientY -
@@ -798,11 +800,11 @@ function WarehouseFloorPlan({
 
     if (
       event.currentTarget.hasPointerCapture(
-        event.pointerId
+        event.pointerId,
       )
     ) {
       event.currentTarget.releasePointerCapture(
-        event.pointerId
+        event.pointerId,
       );
     }
   }
@@ -829,9 +831,7 @@ function WarehouseFloorPlan({
         <button
           type="button"
           aria-label="Zoom out"
-          disabled={
-            camera.zoom <= MIN_ZOOM
-          }
+          disabled={camera.zoom <= MIN_ZOOM}
           onClick={() =>
             zoomFromButton(1 / 1.2)
           }
@@ -846,9 +846,7 @@ function WarehouseFloorPlan({
         <button
           type="button"
           aria-label="Zoom in"
-          disabled={
-            camera.zoom >= MAX_ZOOM
-          }
+          disabled={camera.zoom >= MAX_ZOOM}
           onClick={() =>
             zoomFromButton(1.2)
           }
@@ -901,7 +899,6 @@ function WarehouseFloorPlan({
             margin: 0,
             boxSizing: "border-box",
             transformOrigin: "0 0",
-
             transform:
               `translate(${camera.x}px, ${camera.y}px) ` +
               `scale(${camera.zoom})`,
@@ -911,27 +908,22 @@ function WarehouseFloorPlan({
             className="floor-route-layer"
             aria-hidden="true"
           >
-            {routeEdges.map(
-              ([fromId, toId]) => {
-                const from =
-                  waypointMap.get(fromId);
+            {routeEdges.map(([fromId, toId]) => {
+              const from = waypointMap.get(fromId);
+              const to = waypointMap.get(toId);
 
-                const to =
-                  waypointMap.get(toId);
-
-                if (!from || !to) {
-                  return null;
-                }
-
-                return (
-                  <FloorRoute
-                    key={`${fromId}-${toId}`}
-                    from={from}
-                    to={to}
-                  />
-                );
+              if (!from || !to) {
+                return null;
               }
-            )}
+
+              return (
+                <FloorRoute
+                  key={`${fromId}-${toId}`}
+                  from={from}
+                  to={to}
+                />
+              );
+            })}
           </div>
 
           <StorageWaypointLinks
@@ -951,15 +943,9 @@ function WarehouseFloorPlan({
             <FloorRack
               key={rack.id}
               rack={rack}
-              visible={
-                visibleRackIds.has(rack.id)
-              }
-              active={
-                selectedRackId === rack.id
-              }
-              onClick={() =>
-                onSelectRack(rack.id)
-              }
+              visible={visibleRackIds.has(rack.id)}
+              active={selectedRackId === rack.id}
+              onClick={() => onSelectRack(rack.id)}
             />
           ))}
         </div>
@@ -979,9 +965,9 @@ function StorageWaypointLinks({
         racks.map((rack) => [
           rack.id,
           rack,
-        ])
+        ]),
       ),
-    [racks]
+    [racks],
   );
 
   return (
@@ -989,29 +975,25 @@ function StorageWaypointLinks({
       className="floor-route-layer"
       aria-hidden="true"
     >
-      {storageLinks.map(
-        ([rackId, waypointId]) => {
-          const rack = rackMap.get(rackId);
+      {storageLinks.map(([rackId, waypointId]) => {
+        const rack = rackMap.get(rackId);
+        const waypoint = waypointMap.get(waypointId);
 
-          const waypoint =
-            waypointMap.get(waypointId);
-
-          if (!rack || !waypoint) {
-            return null;
-          }
-
-          return (
-            <FloorRoute
-              key={`${rackId}-${waypointId}`}
-              from={{
-                left: rack.left,
-                top: waypoint.top,
-              }}
-              to={waypoint}
-            />
-          );
+        if (!rack || !waypoint) {
+          return null;
         }
-      )}
+
+        return (
+          <FloorRoute
+            key={`${rackId}-${waypointId}`}
+            from={{
+              left: rack.left,
+              top: waypoint.top,
+            }}
+            to={waypoint}
+          />
+        );
+      })}
     </div>
   );
 }
@@ -1028,13 +1010,9 @@ function FloorRoute({ from, to }) {
       <div
         className="floor-route-line horizontal"
         style={{
-          left:
-            `${Math.min(from.left, to.left)}%`,
-
+          left: `${Math.min(from.left, to.left)}%`,
           top: `${from.top}%`,
-
-          width:
-            `${Math.abs(to.left - from.left)}%`,
+          width: `${Math.abs(to.left - from.left)}%`,
         }}
       />
     );
@@ -1046,12 +1024,8 @@ function FloorRoute({ from, to }) {
         className="floor-route-line vertical"
         style={{
           left: `${from.left}%`,
-
-          top:
-            `${Math.min(from.top, to.top)}%`,
-
-          height:
-            `${Math.abs(to.top - from.top)}%`,
+          top: `${Math.min(from.top, to.top)}%`,
+          height: `${Math.abs(to.top - from.top)}%`,
         }}
       />
     );
@@ -1080,7 +1054,7 @@ function FloorRack({
   onClick,
 }) {
   const occupied = rack.shelves.filter(
-    (shelf) => Boolean(basketOf(shelf))
+    (shelf) => Boolean(basketOf(shelf)),
   ).length;
 
   return (
@@ -1104,14 +1078,14 @@ function FloorRack({
 
       <div className="floor-rack-body">
         {Array.from({
-          length: SHELF_COUNT,
+          length: Math.min(8, rack.shelves.length),
         }).map((_, index) => (
           <i key={index} />
         ))}
       </div>
 
       <small>
-        {occupied}/{SHELF_COUNT} occupied
+        {occupied}/{rack.shelves.length} occupied
       </small>
     </button>
   );
@@ -1120,7 +1094,23 @@ function FloorRack({
 function RackFrontPanel({
   rack,
   onShelfClick,
+  onResizeRack,
 }) {
+  const [selectedDepth, setSelectedDepth] = useState(1);
+
+  const depthCount = rack
+    ? rackDepthCount(rack)
+    : 1;
+
+  const activeDepth = Math.min(
+    selectedDepth,
+    depthCount,
+  );
+
+  useEffect(() => {
+    setSelectedDepth(1);
+  }, [rack?.id]);
+
   if (!rack) {
     return (
       <aside className="rack-front-side-panel empty">
@@ -1129,16 +1119,19 @@ function RackFrontPanel({
         <strong>Select a storage rack</strong>
 
         <span>
-          {SHELF_COUNT} shelf blocks will appear here.
+          Shelf blocks will appear here.
         </span>
       </aside>
     );
   }
 
-  const shelves = [...rack.shelves].sort(
-    (a, b) =>
-      Number(b.level) - Number(a.level)
-  );
+  const shelves = rack.shelves
+    .filter(
+      (shelf) => shelfDepth(shelf) === activeDepth,
+    )
+    .sort(
+      (a, b) => Number(b.level) - Number(a.level),
+    );
 
   const totalQty = shelves.reduce(
     (sum, shelf) =>
@@ -1146,9 +1139,9 @@ function RackFrontPanel({
       shelf.inventory.reduce(
         (itemSum, item) =>
           itemSum + Number(item.quantity || 0),
-        0
+        0,
       ),
-    0
+    0,
   );
 
   return (
@@ -1159,7 +1152,11 @@ function RackFrontPanel({
           <h3>Rack {rack.id}</h3>
 
           <p>
-            Monitor master data · {SHELF_COUNT} shelf levels
+            Monitor master data
+            {" · "}
+            {rackShelfCount(rack)} shelf levels
+            {" · "}
+            {depthCount} depths
           </p>
         </div>
 
@@ -1167,6 +1164,37 @@ function RackFrontPanel({
           <strong>{totalQty}</strong>
           <span>stock qty</span>
         </div>
+      </div>
+
+      <RackShelfSettings
+        rack={rack}
+        onSave={onResizeRack}
+      />
+
+      <div
+        className="overview-actions"
+        role="group"
+        aria-label="Rack depth"
+      >
+        {Array.from(
+          { length: depthCount },
+          (_, index) => index + 1,
+        ).map((depth) => (
+          <button
+            type="button"
+            key={depth}
+            aria-pressed={activeDepth === depth}
+            style={{
+              borderBottom:
+                activeDepth === depth
+                  ? "3px solid #22d3ee"
+                  : "3px solid transparent",
+            }}
+            onClick={() => setSelectedDepth(depth)}
+          >
+            Depth {depth}
+          </button>
+        ))}
       </div>
 
       <div className="rack-five-shelf-frame">
@@ -1177,14 +1205,13 @@ function RackFrontPanel({
           const qty = shelf.inventory.reduce(
             (sum, item) =>
               sum + Number(item.quantity || 0),
-            0
+            0,
           );
 
           const state = getShelfState(shelf);
 
           const firstItem = shelf.inventory.find(
-            (item) =>
-              Number(item.quantity || 0) > 0
+            (item) => Number(item.quantity || 0) > 0,
           );
 
           return (
@@ -1200,11 +1227,11 @@ function RackFrontPanel({
                 <button
                   type="button"
                   className={`rack-five-block ${state}`}
-                  onClick={() =>
-                    onShelfClick(shelf)
-                  }
+                  onClick={() => onShelfClick(shelf)}
                 >
-                  <strong>{shelf.code}</strong>
+                  <strong>
+                    {shelf.code || "Set RCS location code"}
+                  </strong>
 
                   <span>
                     {firstItem
@@ -1265,33 +1292,32 @@ function ShelfInventoryModal({
 }) {
   const [mode, setMode] = useState("INBOUND");
 
-  const [selectedItemId, setSelectedItemId] =
-    useState(
-      shelf.inventory[0]?.id || ""
-    );
+  const [selectedItemId, setSelectedItemId] = useState(
+    shelf.inventory[0]?.id || "",
+  );
 
   const [sku, setSku] = useState(
     shelf.inventory[0]?.sku ||
-    skuCatalog[0]?.sku ||
-    ""
+      skuCatalog[0]?.sku ||
+      "",
   );
 
   const [itemName, setItemName] = useState(
     shelf.inventory[0]?.name ||
-    skuCatalog[0]?.name ||
-    ""
+      skuCatalog[0]?.name ||
+      "",
   );
 
   const [unit, setUnit] = useState(
     shelf.inventory[0]?.unit ||
-    skuCatalog[0]?.unit ||
-    "PCS"
+      skuCatalog[0]?.unit ||
+      "PCS",
   );
 
   const [category, setCategory] = useState(
     shelf.inventory[0]?.category ||
-    skuCatalog[0]?.category ||
-    "General"
+      skuCatalog[0]?.category ||
+      "General",
   );
 
   const [quantity, setQuantity] = useState("");
@@ -1299,41 +1325,36 @@ function ShelfInventoryModal({
   const [note, setNote] = useState("");
   const [message, setMessage] = useState("");
 
-  const [codeDraft, setCodeDraft] = useState(
-    shelf.code
-  );
-
-  const [statusDraft, setStatusDraft] = useState(
-    shelf.status
-  );
+  const [codeDraft, setCodeDraft] = useState(shelf.code);
+  const [statusDraft, setStatusDraft] = useState(shelf.status);
 
   useEffect(() => {
     setSelectedItemId(
-      shelf.inventory[0]?.id || ""
+      shelf.inventory[0]?.id || "",
     );
 
     setSku(
       shelf.inventory[0]?.sku ||
-      skuCatalog[0]?.sku ||
-      ""
+        skuCatalog[0]?.sku ||
+        "",
     );
 
     setItemName(
       shelf.inventory[0]?.name ||
-      skuCatalog[0]?.name ||
-      ""
+        skuCatalog[0]?.name ||
+        "",
     );
 
     setUnit(
       shelf.inventory[0]?.unit ||
-      skuCatalog[0]?.unit ||
-      "PCS"
+        skuCatalog[0]?.unit ||
+        "PCS",
     );
 
     setCategory(
       shelf.inventory[0]?.category ||
-      skuCatalog[0]?.category ||
-      "General"
+        skuCatalog[0]?.category ||
+        "General",
     );
 
     setQuantity("");
@@ -1348,22 +1369,22 @@ function ShelfInventoryModal({
   const totalQty = shelf.inventory.reduce(
     (sum, item) =>
       sum + Number(item.quantity || 0),
-    0
+    0,
   );
 
   const selectedItem = shelf.inventory.find(
-    (item) => item.id === selectedItemId
+    (item) => item.id === selectedItemId,
   );
 
   const reservedQty = Number(
-    selectedItem?.reserved || 0
+    selectedItem?.reserved || 0,
   );
 
   const freeQty = selectedItem
     ? Math.max(
         0,
         Number(selectedItem.quantity || 0) -
-          reservedQty
+          reservedQty,
       )
     : 0;
 
@@ -1371,14 +1392,14 @@ function ShelfInventoryModal({
     "BLOCKED",
     "MAINTENANCE",
   ].includes(
-    String(shelf.status || "").toUpperCase()
+    String(shelf.status || "").toUpperCase(),
   );
 
   function handleSkuChange(nextSku) {
     setSku(nextSku);
 
     const master = skuCatalog.find(
-      (item) => item.sku === nextSku
+      (item) => item.sku === nextSku,
     );
 
     if (master) {
@@ -1398,7 +1419,7 @@ function ShelfInventoryModal({
       qty <= 0
     ) {
       setMessage(
-        "Quantity must be greater than 0."
+        "Quantity must be greater than 0.",
       );
 
       return;
@@ -1422,12 +1443,12 @@ function ShelfInventoryModal({
         });
 
         setMessage(
-          `Inbound +${qty} saved in Monitor.`
+          `Inbound +${qty} saved in Monitor.`,
         );
       } else if (mode === "OUTBOUND") {
         if (!selectedItem) {
           setMessage(
-            "Select an inventory record first."
+            "Select an inventory record first.",
           );
 
           return;
@@ -1435,7 +1456,7 @@ function ShelfInventoryModal({
 
         if (qty > freeQty) {
           setMessage(
-            `Only ${freeQty} free stock is available.`
+            `Only ${freeQty} free stock is available.`,
           );
 
           return;
@@ -1449,12 +1470,12 @@ function ShelfInventoryModal({
         });
 
         setMessage(
-          `Outbound reservation ${qty} saved in Monitor.`
+          `Outbound reservation ${qty} saved in Monitor.`,
         );
       } else {
         if (!selectedItem) {
           setMessage(
-            "Select an inventory record first."
+            "Select an inventory record first.",
           );
 
           return;
@@ -1462,7 +1483,7 @@ function ShelfInventoryModal({
 
         if (qty > freeQty) {
           setMessage(
-            `Only ${freeQty} free stock can be deducted.`
+            `Only ${freeQty} free stock can be deducted.`,
           );
 
           return;
@@ -1476,14 +1497,14 @@ function ShelfInventoryModal({
         });
 
         setMessage(
-          `Direct deduction ${qty} saved in Monitor.`
+          `Direct deduction ${qty} saved in Monitor.`,
         );
       }
 
       setQuantity("");
     } catch (error) {
       setMessage(
-        error.message || "Operation failed."
+        error.message || "Operation failed.",
       );
     }
   }
@@ -1491,7 +1512,7 @@ function ShelfInventoryModal({
   function saveShelfData() {
     if (!codeDraft.trim()) {
       setMessage(
-        "Location Code is required."
+        "Location Code is required.",
       );
 
       return;
@@ -1505,7 +1526,7 @@ function ShelfInventoryModal({
       });
 
       setMessage(
-        "Shelf data saved in Monitor."
+        "Shelf data saved in Monitor.",
       );
     } catch (error) {
       setMessage(error.message);
@@ -1516,9 +1537,7 @@ function ShelfInventoryModal({
     <div
       className="rack-location-modal-backdrop"
       onMouseDown={(event) => {
-        if (
-          event.target === event.currentTarget
-        ) {
+        if (event.target === event.currentTarget) {
           onClose();
         }
       }}
@@ -1532,6 +1551,8 @@ function ShelfInventoryModal({
               {rack.id}
               {" · LEVEL "}
               {shelf.level}
+              {" · DEPTH "}
+              {shelfDepth(shelf)}
             </span>
 
             <h3>{shelf.code}</h3>
@@ -1545,6 +1566,39 @@ function ShelfInventoryModal({
           >
             <X size={19} />
           </button>
+        </div>
+
+        <div className="overview-actions">
+          {["source", "destination"].map((role) => (
+            <button
+              key={role}
+              type="button"
+              disabled={!shelf.code}
+              onClick={() => {
+                window.dispatchEvent(
+                  new CustomEvent("wms-transfer-select", {
+                    detail: {
+                      role,
+                      shelfId: shelf.id,
+                    },
+                  }),
+                );
+
+                onClose();
+
+                requestAnimationFrame(() => {
+                  document
+                    .getElementById("monitor-transfer-form")
+                    ?.scrollIntoView({
+                      behavior: "smooth",
+                      block: "start",
+                    });
+                });
+              }}
+            >
+              Use as {role}
+            </button>
+          ))}
         </div>
 
         <div className="rack-location-overview">
@@ -1654,13 +1708,13 @@ function ShelfInventoryModal({
             {shelf.inventory.length > 0 ? (
               shelf.inventory.map((item) => {
                 const reserved = Number(
-                  item.reserved || 0
+                  item.reserved || 0,
                 );
 
                 const free = Math.max(
                   0,
                   Number(item.quantity || 0) -
-                    reserved
+                    reserved,
                 );
 
                 return (
@@ -1834,7 +1888,7 @@ function ShelfInventoryModal({
                       {Math.max(
                         0,
                         Number(item.quantity || 0) -
-                          Number(item.reserved || 0)
+                          Number(item.reserved || 0),
                       )}
                     </option>
                   ))}
@@ -1905,8 +1959,8 @@ function ShelfInventoryModal({
                 mode === "INBOUND"
                   ? "inbound"
                   : mode === "OUTBOUND"
-                  ? "outbound"
-                  : "deduct"
+                    ? "outbound"
+                    : "deduct"
               }
               disabled={operationsDisabled}
               onClick={submitOperation}
@@ -1914,8 +1968,8 @@ function ShelfInventoryModal({
               {mode === "INBOUND"
                 ? "Confirm Inbound"
                 : mode === "OUTBOUND"
-                ? "Create Outbound"
-                : "Deduct Stock"}
+                  ? "Create Outbound"
+                  : "Deduct Stock"}
             </button>
           </div>
         </section>
@@ -1927,7 +1981,6 @@ function ShelfInventoryModal({
 function createDefaultMonitorData() {
   const racks = DEFAULT_RACK_LAYOUT.map((rack) => ({
     ...rack,
-
     name: `Rack ${rack.id}`,
 
     shelves: Array.from(
@@ -1938,16 +1991,13 @@ function createDefaultMonitorData() {
         return {
           id: `${rack.id}-S${level}`,
           level,
-
-          code:
-            `${rack.id}-${String(level).padStart(2, "0")}`,
-
+          code: `${rack.id}-${String(level).padStart(2, "0")}`,
           capacity: 1,
           basket: null,
           status: "AVAILABLE",
           inventory: [],
         };
-      }
+      },
     ),
   }));
 
@@ -1955,18 +2005,19 @@ function createDefaultMonitorData() {
     version: 4,
     layoutVersion: CURRENT_LAYOUT_VERSION,
     completedBasketTransfers: {},
+    outboundOperations: [],
     racks,
 
     waypoints: DEFAULT_WAYPOINTS.map(
-      (item) => ({ ...item })
+      (item) => ({ ...item }),
     ),
 
     routeEdges: DEFAULT_ROUTE_EDGES.map(
-      (edge) => [...edge]
+      (edge) => [...edge],
     ),
 
     storageLinks: DEFAULT_STORAGE_LINKS.map(
-      (edge) => [...edge]
+      (edge) => [...edge],
     ),
 
     skuCatalog: DEFAULT_SKUS,
@@ -1977,13 +2028,13 @@ function createDefaultMonitorData() {
 function loadMonitorData() {
   try {
     let raw = localStorage.getItem(
-      MONITOR_STORAGE_KEY
+      MONITOR_STORAGE_KEY,
     );
 
     if (!raw) {
       for (const legacyKey of LEGACY_MONITOR_STORAGE_KEYS) {
         const legacyRaw = localStorage.getItem(
-          legacyKey
+          legacyKey,
         );
 
         if (legacyRaw) {
@@ -1998,31 +2049,38 @@ function loadMonitorData() {
 
       localStorage.setItem(
         MONITOR_STORAGE_KEY,
-        JSON.stringify(fresh)
+        JSON.stringify(fresh),
       );
 
       return fresh;
     }
 
+    const backupKey =
+      `${MONITOR_STORAGE_KEY}-before-depth-v1`;
+
+    if (!localStorage.getItem(backupKey)) {
+      localStorage.setItem(backupKey, raw);
+    }
+
     const normalized = normalizeMonitorData(
-      JSON.parse(raw)
+      JSON.parse(raw),
     );
+  
 
     localStorage.setItem(
       MONITOR_STORAGE_KEY,
-      JSON.stringify(normalized)
+      JSON.stringify(normalized),
     );
 
     return normalized;
   } catch (error) {
     console.error(
       "Could not load monitor master data.",
-      error
+      error,
     );
 
     return {
       ...createDefaultMonitorData(),
-
       loadError:
         error.message ||
         "Monitor data cannot be read.",
@@ -2041,60 +2099,67 @@ function normalizeMonitorData(data) {
     sourceRacks.map((rack) => [
       String(rack.id),
       rack,
-    ])
+    ]),
   );
 
-  const racks = DEFAULT_RACK_LAYOUT.map(
-    (layout) => {
-      const saved = rackMap.get(layout.id) || {};
+  const racks = DEFAULT_RACK_LAYOUT.map((layout) => {
+    const saved = rackMap.get(layout.id) || {};
 
-      const savedShelves = Array.isArray(
-        saved.shelves
-      )
-        ? saved.shelves
-        : [];
+    const savedShelves = Array.isArray(saved.shelves)
+      ? saved.shelves
+      : [];
 
-      return {
-        ...layout,
-        ...saved,
+    const shelfCount = rackShelfCount(
+      saved,
+      SHELF_COUNT,
+    );
 
-        id: layout.id,
-        zone: saved.zone || layout.zone,
-        name: saved.name || `Rack ${layout.id}`,
+    const depthCount = rackDepthCount(saved);
 
-        left: layout.left,
-        top: layout.top,
+    const fallbackRack = fallback.racks.find(
+      (rack) => rack.id === layout.id,
+    );
 
-        shelves: Array.from(
-          { length: SHELF_COUNT },
-          (_, index) => {
-            const level = index + 1;
+    const sourceRack = savedShelves.length
+      ? {
+          ...saved,
+          id: layout.id,
+          shelves: savedShelves,
+        }
+      : {
+          ...fallbackRack,
+          ...saved,
+          id: layout.id,
+          shelves: fallbackRack?.shelves || [],
+        };
 
-            const existing = savedShelves.find(
-              (shelf) =>
-                Number(shelf.level) === level
-            );
+    return {
+      ...layout,
+      ...saved,
 
-            const fallbackShelf = fallback.racks
-              .find(
-                (rack) =>
-                  rack.id === layout.id
-              )
-              ?.shelves.find(
-                (shelf) =>
-                  shelf.level === level
-              );
+      id: layout.id,
+      zone: saved.zone || layout.zone,
+      name: saved.name || `Rack ${layout.id}`,
 
-            return normalizeShelf(
-              existing || fallbackShelf,
-              layout.id,
-              level
-            );
-          }
+      left: layout.left,
+      top: layout.top,
+
+      shelfCount,
+      depthCount,
+
+      shelves: rackSlots(
+        sourceRack,
+        shelfCount,
+        depthCount,
+      ).map((shelf) =>
+        normalizeShelf(
+          shelf,
+          layout.id,
+          shelf.level,
         ),
-      };
-    }
-  );
+      ),
+    };
+  });
 
   return {
     version: 4,
@@ -2103,18 +2168,23 @@ function normalizeMonitorData(data) {
     completedBasketTransfers:
       data?.completedBasketTransfers || {},
 
+    outboundOperations:
+      Array.isArray(data?.outboundOperations)
+        ? data.outboundOperations
+        : [],
+
     racks,
 
     waypoints: DEFAULT_WAYPOINTS.map(
-      (item) => ({ ...item })
+      (item) => ({ ...item }),
     ),
 
     routeEdges: DEFAULT_ROUTE_EDGES.map(
-      (edge) => [...edge]
+      (edge) => [...edge],
     ),
 
     storageLinks: DEFAULT_STORAGE_LINKS.map(
-      (edge) => [...edge]
+      (edge) => [...edge],
     ),
 
     skuCatalog:
@@ -2130,50 +2200,49 @@ function normalizeMonitorData(data) {
 }
 
 function normalizeShelf(shelf, rackId, level) {
-  const inventory = Array.isArray(
-    shelf?.inventory
-  )
+  const inventory = Array.isArray(shelf?.inventory)
     ? shelf.inventory.map((item, index) => ({
         id: String(
           item.id ||
-          `${rackId}-S${level}-INV-${index + 1}`
+            `${rackId}-S${level}-INV-${index + 1}`,
         ),
 
         sku: String(item.sku || ""),
 
         name: String(
-          item.name || item.sku || "Item"
+          item.name || item.sku || "Item",
         ),
 
         category: String(
-          item.category || "General"
+          item.category || "General",
         ),
 
         unit: String(item.unit || "PCS"),
 
         quantity: Math.max(
           0,
-          Number(item.quantity || 0)
+          Number(item.quantity || 0),
         ),
 
         reserved: Math.max(
           0,
-          Number(item.reserved || 0)
+          Number(item.reserved || 0),
         ),
       }))
     : [];
 
   const id = String(
-    shelf?.id || `${rackId}-S${level}`
+    shelf?.id || `${rackId}-S${level}`,
   );
 
   return {
     id,
     level,
+    depth: shelfDepth(shelf),
 
     code: String(
-      shelf?.code ||
-      `${rackId}-${String(level).padStart(2, "0")}`
+      shelf?.code ??
+        `${rackId}-${String(level).padStart(2, "0")}`,
     ),
 
     capacity: 1,
@@ -2185,7 +2254,7 @@ function normalizeShelf(shelf, rackId, level) {
     }),
 
     status: String(
-      shelf?.status || "AVAILABLE"
+      shelf?.status || "AVAILABLE",
     ).toUpperCase(),
 
     inventory,
@@ -2196,7 +2265,7 @@ function updateShelf(
   data,
   rackId,
   shelfId,
-  updater
+  updater,
 ) {
   return {
     ...data,
@@ -2211,9 +2280,9 @@ function updateShelf(
               (shelf) =>
                 shelf.id === shelfId
                   ? updater({ ...shelf })
-                  : shelf
+                  : shelf,
             ),
-          }
+          },
     ),
   };
 }
@@ -2222,7 +2291,7 @@ function applyInbound(
   data,
   rackId,
   shelfId,
-  payload
+  payload,
 ) {
   const qty = Number(payload.quantity || 0);
 
@@ -2235,32 +2304,32 @@ function applyInbound(
     (shelf) => {
       if (
         ["BLOCKED", "MAINTENANCE"].includes(
-          shelf.status
+          shelf.status,
         )
       ) {
         throw new Error(
-          `Shelf ${shelf.code} is ${shelf.status}.`
+          `Shelf ${shelf.code} is ${shelf.status}.`,
         );
       }
 
       if (!basketOf(shelf)) {
         throw new Error(
-          "Create a basket at this location before adding stock."
+          "Create a basket at this location before adding stock.",
         );
       }
 
       const inventory = shelf.inventory.map(
-        (item) => ({ ...item })
+        (item) => ({ ...item }),
       );
 
       const existingIndex = inventory.findIndex(
-        (item) => item.sku === payload.sku
+        (item) => item.sku === payload.sku,
       );
 
       if (existingIndex >= 0) {
         inventory[existingIndex].quantity =
           Number(
-            inventory[existingIndex].quantity || 0
+            inventory[existingIndex].quantity || 0,
           ) + qty;
       } else {
         inventory.push({
@@ -2278,20 +2347,20 @@ function applyInbound(
         "INBOUND",
         rackId,
         shelf,
-        payload
+        payload,
       );
 
       return {
         ...shelf,
         inventory,
       };
-    }
+    },
   );
 
   return appendSkuAndHistory(
     next,
     payload,
-    historyItem
+    historyItem,
   );
 }
 
@@ -2299,84 +2368,21 @@ function applyOutboundReservation(
   data,
   rackId,
   shelfId,
-  payload
+  payload,
 ) {
-  let historyItem = null;
-
-  const next = updateShelf(
+  return createOutboundReservation(
     data,
     rackId,
     shelfId,
-    (shelf) => {
-      const inventory = shelf.inventory.map(
-        (item) => ({ ...item })
-      );
-
-      const index = inventory.findIndex(
-        (item) => item.id === payload.itemId
-      );
-
-      if (index < 0) {
-        throw new Error(
-          "Inventory record not found."
-        );
-      }
-
-      const current = inventory[index];
-
-      const free = Math.max(
-        0,
-        Number(current.quantity || 0) -
-          Number(current.reserved || 0)
-      );
-
-      const qty = Number(
-        payload.quantity || 0
-      );
-
-      if (qty > free) {
-        throw new Error(
-          `Only ${free} free stock is available.`
-        );
-      }
-
-      current.reserved =
-        Number(current.reserved || 0) + qty;
-
-      historyItem = createHistoryRecord(
-        "OUTBOUND",
-        rackId,
-        shelf,
-        {
-          ...payload,
-          sku: current.sku,
-          name: current.name,
-          unit: current.unit,
-        }
-      );
-
-      return {
-        ...shelf,
-        inventory,
-      };
-    }
+    payload,
   );
-
-  return {
-    ...next,
-
-    history: [
-      historyItem,
-      ...(next.history || []),
-    ].slice(0, 300),
-  };
 }
 
 function applyDeductStock(
   data,
   rackId,
   shelfId,
-  payload
+  payload,
 ) {
   let historyItem = null;
 
@@ -2386,16 +2392,16 @@ function applyDeductStock(
     shelfId,
     (shelf) => {
       const inventory = shelf.inventory.map(
-        (item) => ({ ...item })
+        (item) => ({ ...item }),
       );
 
       const index = inventory.findIndex(
-        (item) => item.id === payload.itemId
+        (item) => item.id === payload.itemId,
       );
 
       if (index < 0) {
         throw new Error(
-          "Inventory record not found."
+          "Inventory record not found.",
         );
       }
 
@@ -2404,26 +2410,26 @@ function applyDeductStock(
       const free = Math.max(
         0,
         Number(current.quantity || 0) -
-          Number(current.reserved || 0)
+          Number(current.reserved || 0),
       );
 
       const qty = Number(
-        payload.quantity || 0
+        payload.quantity || 0,
       );
 
       if (qty > free) {
         throw new Error(
-          `Only ${free} free stock can be deducted.`
+          `Only ${free} free stock can be deducted.`,
         );
       }
 
       const beforeQuantity = Number(
-        current.quantity || 0
+        current.quantity || 0,
       );
 
       current.quantity = Math.max(
         0,
-        beforeQuantity - qty
+        beforeQuantity - qty,
       );
 
       historyItem = createHistoryRecord(
@@ -2437,7 +2443,7 @@ function applyDeductStock(
           unit: current.unit,
           beforeQuantity,
           afterQuantity: current.quantity,
-        }
+        },
       );
 
       return {
@@ -2446,10 +2452,10 @@ function applyDeductStock(
         inventory: inventory.filter(
           (item) =>
             Number(item.quantity || 0) > 0 ||
-            Number(item.reserved || 0) > 0
+            Number(item.reserved || 0) > 0,
         ),
       };
-    }
+    },
   );
 
   return {
@@ -2465,7 +2471,7 @@ function applyDeductStock(
 function appendSkuAndHistory(
   data,
   payload,
-  historyItem
+  historyItem,
 ) {
   const catalog = [
     ...(data.skuCatalog || []),
@@ -2473,7 +2479,7 @@ function appendSkuAndHistory(
 
   if (
     !catalog.some(
-      (item) => item.sku === payload.sku
+      (item) => item.sku === payload.sku,
     )
   ) {
     catalog.push({
@@ -2499,7 +2505,7 @@ function createHistoryRecord(
   type,
   rackId,
   shelf,
-  payload
+  payload,
 ) {
   return {
     id:
@@ -2515,7 +2521,7 @@ function createHistoryRecord(
     itemName: payload.name || "",
 
     quantity: Number(
-      payload.quantity || 0
+      payload.quantity || 0,
     ),
 
     unit: payload.unit || "",
@@ -2536,13 +2542,13 @@ function getNextMonitorInventoryId(data) {
     rack.shelves.forEach((shelf) => {
       shelf.inventory.forEach((item) => {
         const match = String(
-          item.id || ""
+          item.id || "",
         ).match(/(\d+)$/);
 
         if (match) {
           max = Math.max(
             max,
-            Number(match[1])
+            Number(match[1]),
           );
         }
       });
@@ -2557,12 +2563,12 @@ function getNextMonitorInventoryId(data) {
 
 function getShelfState(shelf) {
   const status = String(
-    shelf.status || ""
+    shelf.status || "",
   ).toUpperCase();
 
   if (
     ["BLOCKED", "MAINTENANCE"].includes(
-      status
+      status,
     )
   ) {
     return "blocked";

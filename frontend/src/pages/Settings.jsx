@@ -7,6 +7,7 @@ import {
 import {
   getRcsBridgeBaseUrl,
   getRcsBridgeStatus,
+  checkRcsConnection,
 } from "../services/rcs";
 
 import {
@@ -17,27 +18,21 @@ import {
 import "../styles/OverviewSettings.css";
 
 export default function Settings() {
-  const [draft, setDraft] = useState(
-    loadPreferences
-  );
-
+  const [draft, setDraft] = useState(loadPreferences);
   const [message, setMessage] = useState("");
-
   const [bridge, setBridge] = useState(null);
 
-  const [bridgeMessage, setBridgeMessage] =
-    useState("Not checked");
-
-  const [robotCode, setRobotCode] = useState(
-    "30964"
+  const [bridgeMessage, setBridgeMessage] = useState(
+    "Not checked",
   );
 
+  const [robotCode, setRobotCode] = useState("30964");
+
   const [rcsMessage, setRcsMessage] = useState(
-    "Not checked"
+    "Not checked",
   );
 
   const [busy, setBusy] = useState(false);
-
   const controllerRef = useRef(null);
 
   useEffect(() => {
@@ -51,33 +46,25 @@ export default function Settings() {
 
     try {
       if (!draft.warehouseName.trim()) {
-        throw new Error(
-          "Enter a warehouse name."
-        );
+        throw new Error("Enter a warehouse name.");
       }
 
       const value = {
-        warehouseName:
-          draft.warehouseName.trim(),
-
-        defaultPriority: Number(
-          draft.defaultPriority
-        ),
+        warehouseName: draft.warehouseName.trim(),
+        defaultPriority: Number(draft.defaultPriority),
       };
 
       localStorage.setItem(
         PREFERENCES_KEY,
-        JSON.stringify(value)
+        JSON.stringify(value),
       );
 
       window.dispatchEvent(
-        new CustomEvent(
-          "wms-preferences-changed"
-        )
+        new CustomEvent("wms-preferences-changed"),
       );
 
       setMessage(
-        "Saved. The default priority applies when opening a new transfer form. Existing tasks are unchanged."
+        "Saved. The default priority applies when opening a new transfer form. Existing tasks are unchanged.",
       );
     } catch (error) {
       setMessage(error.message);
@@ -96,76 +83,38 @@ export default function Settings() {
 
     const timer = window.setTimeout(
       () => request.abort(),
-      35000
+      35000,
     );
 
     try {
       if (realRcs) {
-        setRcsMessage(
-          "Checking robot response…"
-        );
+        setRcsMessage("Checking robot response…");
 
-        const response = await fetch(
-          `${getRcsBridgeBaseUrl()}/api/rcs/connection/check`,
-          {
-            method: "POST",
-
-            headers: {
-              "Content-Type":
-                "application/json",
-            },
-
-            body: JSON.stringify({
-              singleRobotCode:
-                robotCode.trim(),
-            }),
-
-            signal: request.signal,
-          }
-        );
-
-        const body = await response.json();
-
-        if (
-          !response.ok ||
-          body.connected !== true ||
-          body.mode !== "HIK"
-        ) {
-          const errorMessage =
-            typeof body.detail === "string"
-              ? body.detail
-              : body.detail?.message ||
-                body.message ||
-                "RCS did not confirm a connection.";
-
-          throw new Error(errorMessage);
-        }
+        await checkRcsConnection(robotCode, {
+          signal: request.signal,
+        });
 
         setRcsMessage(
-          `RCS responded to robot ${robotCode.trim()} query at ${new Date().toLocaleTimeString()}.`
+          `RCS responded to robot ${robotCode.trim()} query at ${new Date().toLocaleTimeString()}.`,
         );
       } else {
         setBridge(null);
+        setBridgeMessage("Checking backend…");
 
-        setBridgeMessage(
-          "Checking backend…"
-        );
-
-        const status =
-          await getRcsBridgeStatus({
-            signal: request.signal,
-          });
+        const status = await getRcsBridgeStatus({
+          signal: request.signal,
+        });
 
         if (status.ok !== true) {
           throw new Error(
-            "Unexpected backend response."
+            "Unexpected backend response.",
           );
         }
 
         setBridge(status);
 
         setBridgeMessage(
-          `Backend responded at ${new Date().toLocaleTimeString()}.`
+          `Backend responded at ${new Date().toLocaleTimeString()}.`,
         );
       }
     } catch (error) {
@@ -196,8 +145,7 @@ export default function Settings() {
           <h2>Settings</h2>
 
           <p>
-            Warehouse preferences and
-            connection checks.
+            Warehouse preferences and connection checks.
           </p>
         </div>
       </div>
@@ -220,8 +168,7 @@ export default function Settings() {
                 onChange={(event) =>
                   setDraft({
                     ...draft,
-                    warehouseName:
-                      event.target.value,
+                    warehouseName: event.target.value,
                   })
                 }
               />
@@ -231,50 +178,32 @@ export default function Settings() {
               Default transfer priority
 
               <select
-                value={
-                  draft.defaultPriority
-                }
+                value={draft.defaultPriority}
                 onChange={(event) =>
                   setDraft({
                     ...draft,
                     defaultPriority:
-                      Number(
-                        event.target.value
-                      ),
+                      Number(event.target.value),
                   })
                 }
               >
-                <option value={30}>
-                  Low
-                </option>
-
-                <option value={60}>
-                  Normal
-                </option>
-
-                <option value={90}>
-                  High
-                </option>
-
-                <option value={120}>
-                  Urgent
-                </option>
+                <option value={30}>Low</option>
+                <option value={60}>Normal</option>
+                <option value={90}>High</option>
+                <option value={120}>Urgent</option>
               </select>
             </label>
 
             <p>
-              Saved for this browser. You can
-              override priority for each
-              transfer in Monitor.
+              Saved for this browser. You can override
+              priority for each transfer in Monitor.
             </p>
 
             <button className="primary-button">
               Save preferences
             </button>
 
-            <p role="status">
-              {message}
-            </p>
+            <p role="status">{message}</p>
           </form>
         </section>
 
@@ -289,16 +218,12 @@ export default function Settings() {
 
             <div>
               <dt>Basket contents</dt>
-              <dd>
-                Multiple products and quantities
-              </dd>
+              <dd>Multiple products and quantities</dd>
             </div>
 
             <div>
               <dt>Location update</dt>
-              <dd>
-                After confirmed completion
-              </dd>
+              <dd>After confirmed completion</dd>
             </div>
 
             <div>
@@ -308,9 +233,9 @@ export default function Settings() {
           </dl>
 
           <p>
-            Keep one WMS tab open for automatic
-            dispatch. Warehouse layout and basket
-            contents are managed in Monitor.
+            Keep one WMS tab open for automatic dispatch.
+            Warehouse layout and basket contents are
+            managed in Monitor.
           </p>
         </section>
       </div>
@@ -329,11 +254,13 @@ export default function Settings() {
           </label>
 
           <p>
-            The URL comes from VITE_RCS_BRIDGE_URL.
+            By default, the website forwards API requests
+            to FastAPI through the web server.
+            VITE_RCS_BRIDGE_URL can override this address.
             Change it in the frontend environment
             configuration and restart Vite.
-            HIK credentials and server settings
-            remain in the backend configuration.
+            HIK credentials and server settings remain
+            in the backend configuration.
           </p>
 
           <button
@@ -345,35 +272,25 @@ export default function Settings() {
             Check backend
           </button>
 
-          <p role="status">
-            {bridgeMessage}
-          </p>
+          <p role="status">{bridgeMessage}</p>
 
           {bridge && (
             <dl className="overview-facts">
               <div>
                 <dt>Mode</dt>
-                <dd>
-                  {bridge.bridgeMode ||
-                    "Unknown"}
-                </dd>
+                <dd>{bridge.bridgeMode || "Unknown"}</dd>
               </div>
 
               <div>
                 <dt>HIK configured</dt>
                 <dd>
-                  {bridge.hikConfigured
-                    ? "Yes"
-                    : "No"}
+                  {bridge.hikConfigured ? "Yes" : "No"}
                 </dd>
               </div>
 
               <div>
                 <dt>Backend task database</dt>
-                <dd>
-                  {bridge.database ||
-                    "Unknown"}
-                </dd>
+                <dd>{bridge.database || "Unknown"}</dd>
               </div>
             </dl>
           )}
@@ -385,13 +302,8 @@ export default function Settings() {
               value={robotCode}
               disabled={busy}
               onChange={(event) => {
-                setRobotCode(
-                  event.target.value
-                );
-
-                setRcsMessage(
-                  "Not checked"
-                );
+                setRobotCode(event.target.value);
+                setRcsMessage("Not checked");
               }}
             />
           </label>
@@ -399,23 +311,19 @@ export default function Settings() {
           <button
             type="button"
             className="primary-button"
-            disabled={
-              busy || !robotCode.trim()
-            }
+            disabled={busy || !robotCode.trim()}
             onClick={() => check(true)}
           >
             Check RCS connection
           </button>
 
-          <p role="status">
-            {rcsMessage}
-          </p>
+          <p role="status">{rcsMessage}</p>
 
           <p>
             This checks a robot query only.
             It does not submit movement tasks.
-            A backend response alone does not
-            confirm an RCS connection.
+            A backend response alone does not confirm
+            an RCS connection.
           </p>
         </div>
       </section>

@@ -20,7 +20,7 @@ import {
 
 import "../styles/OverviewSettings.css";
 
-const QUEUE_KEY = "wms-robot-tasks-v1";
+const KEY = "wms-robot-tasks-v1";
 
 const PRIORITIES = {
   30: "LOW",
@@ -31,12 +31,12 @@ const PRIORITIES = {
 
 function loadQueue() {
   const value = JSON.parse(
-    localStorage.getItem(QUEUE_KEY) || "[]"
+    localStorage.getItem(KEY) || "[]",
   );
 
   if (!Array.isArray(value)) {
     throw new Error(
-      "Invalid queue data. Restore the saved data before continuing."
+      "Invalid queue data. Restore the saved data before continuing.",
     );
   }
 
@@ -45,7 +45,7 @@ function loadQueue() {
 
 export function orderReady(
   queue,
-  now = Date.now()
+  now = Date.now(),
 ) {
   return queue
     .filter(
@@ -54,7 +54,7 @@ export function orderReady(
         (
           !task.scheduledSendAt ||
           Date.parse(task.scheduledSendAt) <= now
-        )
+        ),
     )
     .sort(
       (a, b) =>
@@ -62,42 +62,29 @@ export function orderReady(
           Number(a.rcsPriority || 60) ||
         Date.parse(a.createdAt) -
           Date.parse(b.createdAt) ||
-        queue.indexOf(a) - queue.indexOf(b)
+        queue.indexOf(a) - queue.indexOf(b),
     );
 }
 
 export function commandFor(task) {
   return {
     robotTaskCode: task.warehouseTaskId,
-
-    taskType:
-      task.rcsTaskType || "CTUB1",
-
-    initPriority: Number(
-      task.rcsPriority || 60
-    ),
-
-    scheduledSendAt:
-      task.scheduledSendAt || null,
+    taskType: task.rcsTaskType || "CTUB1",
+    initPriority: Number(task.rcsPriority || 60),
+    scheduledSendAt: task.scheduledSendAt || null,
 
     source: {
-      type:
-        task.sourceRcsTargetType || "STORAGE",
-
+      type: task.sourceRcsTargetType || "STORAGE",
       code: task.sourceRcsPointCode,
-
-      mapCode:
-        task.sourceRcsMapCode || "",
+      autoStart: 1,
+      mapCode: task.sourceRcsMapCode || "",
     },
 
     destination: {
-      type:
-        task.destinationRcsTargetType || "STORAGE",
-
+      type: task.destinationRcsTargetType || "STORAGE",
       code: task.destinationRcsPointCode,
-
-      mapCode:
-        task.destinationRcsMapCode || "",
+      autoStart: 1,
+      mapCode: task.destinationRcsMapCode || "",
     },
   };
 }
@@ -107,7 +94,7 @@ async function timed(call) {
 
   const timer = window.setTimeout(
     () => controller.abort(),
-    35000
+    35000,
   );
 
   try {
@@ -128,7 +115,7 @@ function datetimeInput(value) {
 
   return new Date(
     date.getTime() -
-      date.getTimezoneOffset() * 60000
+      date.getTimezoneOffset() * 60000,
   )
     .toISOString()
     .slice(0, 16);
@@ -149,34 +136,104 @@ export default function RobotTaskDispatcher() {
     }
   });
 
-  const [queue, setQueue] = useState(
-    initial.queue
-  );
-
+  const [queue, setQueue] = useState(initial.queue);
   const [running, setRunning] = useState(false);
-
-  const [message, setMessage] = useState(
-    initial.error
-  );
-
+  const [message, setMessage] = useState(initial.error);
   const [details, setDetails] = useState("");
-
   const [now, setNow] = useState(Date.now());
 
-  const queueRef = useRef(queue);
-  const enabledRef = useRef(false);
-  const busyRef = useRef(false);
+  const ref = useRef(queue);
+  const enabled = useRef(false);
+  const busy = useRef(false);
+  const blocked = useRef(Boolean(initial.error));
+  const alive = useRef(true);
 
-  const blockedRef = useRef(
-    Boolean(initial.error)
+  const [checking, setChecking] = useState(false);
+
+  const [connection, setConnection] = useState(
+    "Backend not checked",
   );
 
-  const aliveRef = useRef(true);
+  const checkingRef = useRef(false);
+  const startVersion = useRef(0);
+
+  async function startQueue() {
+    if (checkingRef.current || blocked.current) {
+      return;
+    }
+
+    checkingRef.current = true;
+
+    const ticket = ++startVersion.current;
+
+    setChecking(true);
+    setConnection("Checking backend…");
+
+    try {
+      const status = await timed(getRcsBridgeStatus);
+
+      if (
+        ticket !== startVersion.current ||
+        !alive.current
+      ) {
+        return;
+      }
+
+      if (
+        !status.ok ||
+        status.bridgeMode !== "HIK" ||
+        !status.hikConfigured
+      ) {
+        throw new Error(
+          "Backend must run in HIK mode with an RCS address. Check Settings before starting.",
+        );
+      }
+
+      setConnection(
+        `HIK backend ready · ${new Date().toLocaleTimeString()}`,
+      );
+
+      if (
+        ref.current.some((task) =>
+          ["SENDING", "OUTCOME_UNKNOWN"].includes(
+            task.sendStatus,
+          ),
+        )
+      ) {
+        throw new Error(
+          "An earlier submission is unresolved. Check unresolved tasks before starting.",
+        );
+      }
+
+      enabled.current = true;
+
+      setRunning(true);
+
+      setMessage(
+        "Queue started. Eligible transfers will be sent automatically. Keep this WMS tab open.",
+      );
+    } catch (error) {
+      if (
+        ticket === startVersion.current &&
+        alive.current
+      ) {
+        setConnection(error.message);
+        pause(error.message);
+      }
+    } finally {
+      checkingRef.current = false;
+
+      if (alive.current) {
+        setChecking(false);
+      }
+    }
+  }
 
   function pause(text) {
-    enabledRef.current = false;
+    startVersion.current += 1;
+    enabled.current = false;
 
-    if (aliveRef.current) {
+    if (alive.current) {
       setRunning(false);
 
       if (text) {
@@ -187,50 +244,47 @@ export default function RobotTaskDispatcher() {
 
   function commit(next) {
     localStorage.setItem(
-      QUEUE_KEY,
-      JSON.stringify(next)
+      KEY,
+      JSON.stringify(next),
     );
 
-    queueRef.current = next;
+    ref.current = next;
 
-    if (aliveRef.current) {
+    if (alive.current) {
       setQueue(next);
     }
 
     window.dispatchEvent(
       new CustomEvent("wms-data-changed", {
         detail: {
-          keys: [QUEUE_KEY],
+          keys: [KEY],
         },
-      })
+      }),
     );
   }
 
   function patch(id, changes, note) {
     commit(
-      queueRef.current.map((task) => {
-        if (task.id !== id) {
-          return task;
-        }
+      ref.current.map((task) =>
+        task.id !== id
+          ? task
+          : {
+              ...task,
+              ...changes,
 
-        return {
-          ...task,
-          ...changes,
-
-          history: note
-            ? [
-                ...(task.history || []),
-
-                {
-                  id: crypto.randomUUID(),
-                  type: "QUEUE_UPDATE",
-                  at: new Date().toISOString(),
-                  message: note,
-                },
-              ].slice(-300)
-            : task.history,
-        };
-      })
+              history: note
+                ? [
+                    ...(task.history || []),
+                    {
+                      id: crypto.randomUUID(),
+                      type: "QUEUE_UPDATE",
+                      at: new Date().toISOString(),
+                      message: note,
+                    },
+                  ].slice(-300)
+                : task.history,
+            },
+      ),
     );
   }
 
@@ -244,7 +298,7 @@ export default function RobotTaskDispatcher() {
       task.rcsTaskChainCode !== queueTask.rcsTaskChainCode
     ) {
       throw new Error(
-        "The RCS task response does not match this queue entry."
+        "The RCS task response does not match this queue entry.",
       );
     }
 
@@ -261,7 +315,7 @@ export default function RobotTaskDispatcher() {
       ].includes(status)
     ) {
       throw new Error(
-        `Unrecognized RCS status: ${status}`
+        `Unrecognized RCS status: ${status}`,
       );
     }
 
@@ -275,7 +329,15 @@ export default function RobotTaskDispatcher() {
       });
     }
 
-    const note =
+    patch(
+      queueTask.id,
+
+      {
+        rcsStatus: status,
+        backendError: "",
+        lastStatusCheckAt: new Date().toISOString(),
+      },
+
       queueTask.rcsStatus !== status
         ? `RCS ${status}${
             status === "COMPLETED" &&
@@ -283,44 +345,32 @@ export default function RobotTaskDispatcher() {
               ? ": basket location updated"
               : ""
           }`
-        : "";
-
-    patch(
-      queueTask.id,
-      {
-        rcsStatus: status,
-        backendError: "",
-        lastStatusCheckAt:
-          new Date().toISOString(),
-      },
-      note
+        : "",
     );
 
     if (
-      [
-        "FAILED",
-        "CANCELLED",
-        "CANCELED",
-      ].includes(status)
+      ["FAILED", "CANCELLED", "CANCELED"].includes(
+        status,
+      )
     ) {
       pause(
-        "Task stopped. Check the physical basket location before continuing."
+        "Task stopped. Check the physical basket location before continuing.",
       );
     }
   }
 
   async function pollActive() {
-    const activeTasks = queueRef.current.filter(
+    const active = ref.current.filter(
       (task) =>
         task.sendStatus === "SENT" &&
-        task.rcsStatus !== "COMPLETED"
+        task.rcsStatus !== "COMPLETED",
     );
 
-    for (const task of activeTasks) {
+    for (const task of active) {
       try {
         if (!task.bridgeTaskId) {
           throw new Error(
-            "Missing backend task ID. Check this task in RCS."
+            "Missing backend task ID. Check this task in RCS.",
           );
         }
 
@@ -328,8 +378,8 @@ export default function RobotTaskDispatcher() {
           (options) =>
             getRcsBridgeTask(
               task.bridgeTaskId,
-              options
-            )
+              options,
+            ),
         );
 
         applySnapshot(task, response);
@@ -344,20 +394,17 @@ export default function RobotTaskDispatcher() {
   }
 
   async function tick() {
-    if (
-      busyRef.current ||
-      blockedRef.current
-    ) {
+    if (busy.current || blocked.current) {
       return;
     }
 
-    busyRef.current = true;
+    busy.current = true;
 
     try {
       await pollActive();
 
-      // Recover location synchronization after a browser restart.
-      for (const task of queueRef.current) {
+      // Recover a confirmed completion after a reload.
+      for (const task of ref.current) {
         if (
           task.basketId &&
           task.rcsStatus === "COMPLETED"
@@ -366,39 +413,35 @@ export default function RobotTaskDispatcher() {
         }
       }
 
-      if (!enabledRef.current) {
+      if (!enabled.current) {
         return;
       }
 
-      const uncertainTask = queueRef.current.some(
-        (task) =>
-          [
-            "SENDING",
-            "OUTCOME_UNKNOWN",
-          ].includes(task.sendStatus)
-      );
-
-      if (uncertainTask) {
+      if (
+        ref.current.some((task) =>
+          ["SENDING", "OUTCOME_UNKNOWN"].includes(
+            task.sendStatus,
+          ),
+        )
+      ) {
         pause(
-          "An earlier submission has an unknown outcome. Check unresolved tasks first."
+          "An earlier submission has an unknown outcome. Check unresolved tasks first.",
         );
 
         return;
       }
 
-      const unfinishedTask = queueRef.current.some(
-        (task) =>
-          task.sendStatus === "SENT" &&
-          task.rcsStatus !== "COMPLETED"
-      );
-
-      if (unfinishedTask) {
+      if (
+        ref.current.some(
+          (task) =>
+            task.sendStatus === "SENT" &&
+            task.rcsStatus !== "COMPLETED",
+        )
+      ) {
         return;
       }
 
-      const next = orderReady(
-        queueRef.current
-      )[0];
+      const next = orderReady(ref.current)[0];
 
       if (!next) {
         return;
@@ -406,14 +449,14 @@ export default function RobotTaskDispatcher() {
 
       if (!next.basketId) {
         pause(
-          "This legacy task has no basket data. Review it and recreate an unsent transfer from Monitor."
+          "This legacy task has no basket data. Review it and recreate an unsent transfer from Monitor.",
         );
 
         return;
       }
 
       const bridge = await timed(
-        getRcsBridgeStatus
+        getRcsBridgeStatus,
       );
 
       if (
@@ -421,69 +464,68 @@ export default function RobotTaskDispatcher() {
         !bridge.hikConfigured
       ) {
         throw new Error(
-          "Configure the HIK backend before starting the queue."
+          "Configure the HIK backend before starting the queue.",
         );
       }
 
-      // Priority may change while the backend check is running.
+      // A more urgent task may arrive during the check.
       if (
-        !enabledRef.current ||
-        !aliveRef.current ||
-        orderReady(queueRef.current)[0]?.id !==
-          next.id
+        !enabled.current ||
+        !alive.current ||
+        orderReady(ref.current)[0]?.id !== next.id
       ) {
         return;
       }
 
-      const liveTask = queueRef.current.find(
-        (task) => task.id === next.id
+      const live = ref.current.find(
+        (task) => task.id === next.id,
       );
 
       const { from, to } = validateTransfer(
-        liveTask.sourceLocationId,
-        liveTask.destinationLocationId,
-        liveTask.id,
-        liveTask.basketId
+        live.sourceLocationId,
+        live.destinationLocationId,
+        live.id,
+        live.basketId,
       );
 
       if (
-        from.code !== liveTask.sourceRcsPointCode ||
-        to.code !== liveTask.destinationRcsPointCode
+        from.code !== live.sourceRcsPointCode ||
+        to.code !== live.destinationRcsPointCode
       ) {
         throw new Error(
-          "Location codes changed. Remove this unsent task and recreate it."
+          "Location codes changed. Remove this unsent task and recreate it.",
         );
       }
 
       const sequence =
         Math.max(
           0,
-          ...queueRef.current.map(
-            (task) =>
-              Number(task.dispatchSequence || 0)
-          )
+          ...ref.current.map((task) =>
+            Number(task.dispatchSequence || 0),
+          ),
         ) + 1;
 
-      // Save before POST so an uncertain result is never resent automatically.
+      // Persist before sending. Do not blindly retry.
       patch(
-        liveTask.id,
+        live.id,
+
         {
           sendStatus: "SENDING",
           dispatchSequence: sequence,
-          sendStartedAt:
-            new Date().toISOString(),
+          sendStartedAt: new Date().toISOString(),
           backendError: "",
         },
-        "Submitting to RCS"
+
+        "Submitting to RCS",
       );
 
       try {
         const response = await timed(
           (options) =>
             createRcsBridgeTask(
-              commandFor(liveTask),
-              options
-            )
+              commandFor(live),
+              options,
+            ),
         );
 
         if (
@@ -492,37 +534,34 @@ export default function RobotTaskDispatcher() {
           !response.rcsTaskChainCode
         ) {
           throw new Error(
-            "Submission returned no confirmed task ID."
+            "Submission returned no confirmed task ID.",
           );
         }
 
         patch(
-          liveTask.id,
+          live.id,
+
           {
             sendStatus: "SENT",
-
-            bridgeTaskId:
-              response.bridgeTaskId,
-
-            rcsTaskChainCode:
-              response.rcsTaskChainCode,
-
+            bridgeTaskId: response.bridgeTaskId,
+            rcsTaskChainCode: response.rcsTaskChainCode,
             bridgeMode: "HIK",
             rcsStatus: "CREATED",
-
-            sentAt:
-              new Date().toISOString(),
+            sentAt: new Date().toISOString(),
           },
-          "RCS accepted the task; waiting for completion"
+
+          "RCS accepted the task; waiting for completion",
         );
       } catch (error) {
         patch(
-          liveTask.id,
+          live.id,
+
           {
             sendStatus: "OUTCOME_UNKNOWN",
             backendError: error.message,
           },
-          "Check submission outcome before retrying"
+
+          "Check submission outcome before retrying",
         );
 
         pause(error.message);
@@ -530,24 +569,21 @@ export default function RobotTaskDispatcher() {
     } catch (error) {
       pause(error.message);
     } finally {
-      busyRef.current = false;
+      busy.current = false;
     }
   }
 
   async function reconcile() {
-    if (
-      busyRef.current ||
-      blockedRef.current
-    ) {
+    if (busy.current || blocked.current) {
       return;
     }
 
     pause();
-    busyRef.current = true;
+    busy.current = true;
 
     try {
       const response = await timed(
-        getAllRcsBridgeTasks
+        getAllRcsBridgeTasks,
       );
 
       if (
@@ -555,18 +591,15 @@ export default function RobotTaskDispatcher() {
         !Array.isArray(response.tasks)
       ) {
         throw new Error(
-          "Unexpected backend task list."
+          "Unexpected backend task list.",
         );
       }
 
-      for (const queueTask of [
-        ...queueRef.current,
-      ]) {
+      for (const queueTask of [...ref.current]) {
         if (
-          ![
-            "SENDING",
-            "OUTCOME_UNKNOWN",
-          ].includes(queueTask.sendStatus)
+          !["SENDING", "OUTCOME_UNKNOWN"].includes(
+            queueTask.sendStatus,
+          )
         ) {
           continue;
         }
@@ -578,7 +611,7 @@ export default function RobotTaskDispatcher() {
             task.source?.code ===
               queueTask.sourceRcsPointCode &&
             task.destination?.code ===
-              queueTask.destinationRcsPointCode
+              queueTask.destinationRcsPointCode,
         );
 
         if (
@@ -593,12 +626,9 @@ export default function RobotTaskDispatcher() {
 
         const recovered = {
           ...queueTask,
-
           sendStatus: "SENT",
           bridgeTaskId: task.bridgeTaskId,
-          rcsTaskChainCode:
-            task.rcsTaskChainCode,
-
+          rcsTaskChainCode: task.rcsTaskChainCode,
           bridgeMode: "HIK",
           rcsStatus: "CREATED",
         };
@@ -606,7 +636,7 @@ export default function RobotTaskDispatcher() {
         patch(
           queueTask.id,
           recovered,
-          "Recovered backend submission"
+          "Recovered backend submission",
         );
 
         applySnapshot(recovered, {
@@ -616,17 +646,17 @@ export default function RobotTaskDispatcher() {
       }
 
       setMessage(
-        "Backend records checked. Unmatched tasks remain blocked; nothing was resubmitted."
+        "Backend records checked. Unmatched tasks remain blocked; nothing was resubmitted.",
       );
     } catch (error) {
       setMessage(error.message);
     } finally {
-      busyRef.current = false;
+      busy.current = false;
     }
   }
 
   useEffect(() => {
-    aliveRef.current = true;
+    alive.current = true;
 
     function enqueue(event) {
       const request = event.detail;
@@ -638,9 +668,9 @@ export default function RobotTaskDispatcher() {
       request.handled = true;
 
       try {
-        if (blockedRef.current) {
+        if (blocked.current) {
           throw new Error(
-            "Queue storage is unreadable."
+            "Queue storage is unreadable.",
           );
         }
 
@@ -653,17 +683,26 @@ export default function RobotTaskDispatcher() {
 
         const current = validateTransfer(
           from.id,
-          to.id
+          to.id,
         );
 
+        const taskType =
+          typeof draft.taskType === "string"
+            ? draft.taskType.trim()
+            : "";
+
+        if (!taskType) {
+          throw new Error(
+            "Enter the task type registered in RCS.",
+          );
+        }
+
         const priority = Number(
-          draft.initPriority
+          draft.initPriority,
         );
 
         if (!PRIORITIES[priority]) {
-          throw new Error(
-            "Invalid priority."
-          );
+          throw new Error("Invalid priority.");
         }
 
         const time =
@@ -672,15 +711,14 @@ export default function RobotTaskDispatcher() {
 
         if (!Number.isFinite(Date.parse(time))) {
           throw new Error(
-            "Invalid scheduled time."
+            "Invalid scheduled time.",
           );
         }
 
-        const id =
-          `RCSQ-${crypto.randomUUID()}`;
+        const id = `RCSQ-${crypto.randomUUID()}`;
 
         commit([
-          ...queueRef.current,
+          ...ref.current,
 
           {
             id,
@@ -690,40 +728,34 @@ export default function RobotTaskDispatcher() {
 
             origin: "MONITOR",
             type: "STORAGE_TRANSFER",
+            basketId: current.from.basket.id,
 
-            basketId:
-              current.from.basket.id,
+            rcsTaskType: taskType,
 
-            rcsTaskType:
-              draft.taskType || "CTUB1",
+            sourceLocationId: current.from.id,
+            destinationLocationId: current.to.id,
 
-            sourceLocationId:
-              current.from.id,
-
-            destinationLocationId:
-              current.to.id,
-
-            sourceRcsPointCode:
-              current.from.code,
-
-            destinationRcsPointCode:
-              current.to.code,
+            sourceRcsPointCode: current.from.code,
+            destinationRcsPointCode: current.to.code,
 
             sourceRcsTargetType: "STORAGE",
             destinationRcsTargetType: "STORAGE",
 
             wmsPriority: PRIORITIES[priority],
             rcsPriority: priority,
-            scheduledSendAt: time,
 
-            createdAt:
-              new Date().toISOString(),
+            scheduledSendAt: time,
+            createdAt: new Date().toISOString(),
 
             sendStatus: "NOT_SENT",
             rcsStatus: "NOT_SENT",
             history: [],
           },
         ]);
+
+        if (request.payload.startAfterEnqueue) {
+          void startQueue();
+        }
       } catch (error) {
         request.error = error.message;
       }
@@ -731,34 +763,34 @@ export default function RobotTaskDispatcher() {
 
     function storage(event) {
       if (
-        event.key !== QUEUE_KEY &&
+        event.key !== KEY &&
         event.key !== null
       ) {
         return;
       }
 
       pause(
-        "Queue changed in another tab. Use one WMS tab for dispatch."
+        "Queue changed in another tab. Use one WMS tab for dispatch.",
       );
 
       try {
-        queueRef.current = loadQueue();
-        setQueue(queueRef.current);
-        blockedRef.current = false;
+        ref.current = loadQueue();
+        setQueue(ref.current);
+        blocked.current = false;
       } catch (error) {
-        blockedRef.current = true;
+        blocked.current = true;
         setMessage(error.message);
       }
     }
 
     window.addEventListener(
       "wms-rcs-enqueue-request",
-      enqueue
+      enqueue,
     );
 
     window.addEventListener(
       "storage",
-      storage
+      storage,
     );
 
     const timer = window.setInterval(() => {
@@ -767,30 +799,30 @@ export default function RobotTaskDispatcher() {
     }, 1000);
 
     return () => {
-      aliveRef.current = false;
-      enabledRef.current = false;
+      alive.current = false;
+      enabled.current = false;
 
       window.clearInterval(timer);
 
       window.removeEventListener(
         "wms-rcs-enqueue-request",
-        enqueue
+        enqueue,
       );
 
       window.removeEventListener(
         "storage",
-        storage
+        storage,
       );
     };
   }, []);
 
   function edit(id, value) {
     try {
-      const task = queueRef.current.find(
-        (entry) => entry.id === id
+      const item = ref.current.find(
+        (task) => task.id === id,
       );
 
-      if (task?.sendStatus !== "NOT_SENT") {
+      if (item?.sendStatus !== "NOT_SENT") {
         return;
       }
 
@@ -800,19 +832,11 @@ export default function RobotTaskDispatcher() {
     }
   }
 
-  function removeUnsent(id) {
-    try {
-      commit(
-        queueRef.current.filter(
-          (task) =>
-            task.id !== id ||
-            task.sendStatus !== "NOT_SENT"
-        )
-      );
-    } catch (error) {
-      pause(error.message);
-    }
-  }
+  const active = queue.find(
+    (task) =>
+      task.sendStatus === "SENT" &&
+      task.rcsStatus !== "COMPLETED",
+  );
 
   const ready = orderReady(queue, now);
 
@@ -820,35 +844,33 @@ export default function RobotTaskDispatcher() {
     ready.map((task, index) => [
       task.id,
       index + 1,
-    ])
+    ]),
   );
 
   const pending = queue
     .filter(
-      (task) =>
-        task.sendStatus === "NOT_SENT"
+      (task) => task.sendStatus === "NOT_SENT",
     )
     .sort(
       (a, b) =>
         (readyIds.get(a.id) || 100000) -
           (readyIds.get(b.id) || 100000) ||
         Date.parse(a.scheduledSendAt) -
-          Date.parse(b.scheduledSendAt)
+          Date.parse(b.scheduledSendAt),
     );
 
   const submitted = queue
     .filter(
-      (task) =>
-        task.sendStatus !== "NOT_SENT"
+      (task) => task.sendStatus !== "NOT_SENT",
     )
     .sort(
       (a, b) =>
         Number(b.dispatchSequence || 0) -
-        Number(a.dispatchSequence || 0)
+        Number(a.dispatchSequence || 0),
     );
 
   const detailTask = queue.find(
-    (task) => task.id === details
+    (task) => task.id === details,
   );
 
   return (
@@ -862,8 +884,9 @@ export default function RobotTaskDispatcher() {
           <h2>Basket transfer queue</h2>
 
           <p>
-            Schedule transfers here. Higher priority
-            eligible work follows the active task.
+            Create transfers in Monitor, then start
+            this queue. Ready tasks run by priority,
+            then arrival order. The active task finishes first.
           </p>
         </div>
       </div>
@@ -879,27 +902,23 @@ export default function RobotTaskDispatcher() {
             className="primary-button"
             disabled={
               running ||
-              blockedRef.current
+              checking ||
+              blocked.current
             }
-            onClick={() => {
-              enabledRef.current = true;
-              setRunning(true);
-
-              setMessage(
-                "Queue started. Keep this WMS tab open."
-              );
-            }}
+            onClick={startQueue}
           >
-            Start Queue
+            {checking
+              ? "Checking backend…"
+              : "Start Queue"}
           </button>
 
           <button
             type="button"
             className="primary-button"
-            disabled={!running}
+            disabled={!running && !checking}
             onClick={() =>
               pause(
-                "Queue paused. The active robot task continues."
+                "Queue paused. The active robot task continues.",
               )
             }
           >
@@ -915,14 +934,63 @@ export default function RobotTaskDispatcher() {
           </button>
         </div>
 
-        <p role="status">
-          {message ||
-            (
-              running
-                ? "Queue running"
-                : "Queue paused"
-            )}
+        <p>
+          <strong>
+            {running
+              ? "Queue running"
+              : "Queue paused"}
+          </strong>
+          {" · "}
+          {ready.length} ready
+          {" · "}
+          {pending.length - ready.length} scheduled
         </p>
+
+        <p role="status">{message}</p>
+
+        <p>
+          {connection}
+          {" · "}
+          <Link to="/settings">
+            Connection settings
+          </Link>
+        </p>
+
+        {active && (
+          <div className="overview-notice">
+            <strong>
+              Active transfer:{" "}
+              {active.basketId || "Previous task"}
+            </strong>
+
+            <p>
+              {active.sourceRcsPointCode} →{" "}
+              {active.destinationRcsPointCode}
+              {" · "}
+              {active.rcsStatus}
+            </p>
+
+            <p>
+              Task type: {active.rcsTaskType || "CTUB1"}
+              {" · "}
+              RCS task: {active.rcsTaskChainCode}
+            </p>
+
+            <p>
+              {active.backendError ||
+                "Checking task status automatically. The basket location updates after confirmed completion."}
+            </p>
+
+            {active.lastStatusCheckAt && (
+              <small>
+                Last checked:{" "}
+                {new Date(
+                  active.lastStatusCheckAt,
+                ).toLocaleString()}
+              </small>
+            )}
+          </div>
+        )}
       </section>
 
       <section className="panel overview-section">
@@ -935,6 +1003,7 @@ export default function RobotTaskDispatcher() {
             <thead>
               <tr>
                 <th>Ready order</th>
+                <th>Task type</th>
                 <th>Basket / route</th>
                 <th>Priority</th>
                 <th>Scheduled send time</th>
@@ -943,9 +1012,9 @@ export default function RobotTaskDispatcher() {
             </thead>
 
             <tbody>
-              {pending.length === 0 && (
+              {!pending.length && (
                 <tr>
-                  <td colSpan={5}>
+                  <td colSpan={6}>
                     No waiting transfers.
                   </td>
                 </tr>
@@ -958,74 +1027,61 @@ export default function RobotTaskDispatcher() {
                       "Scheduled"}
                   </td>
 
+                  <td>{task.rcsTaskType || "CTUB1"}</td>
+
                   <td>
                     <strong>
-                      {task.basketId ||
-                        "Legacy task"}
+                      {task.basketId || "Legacy task"}
                     </strong>
 
                     <br />
 
-                    {task.sourceRcsPointCode}
-                    {" → "}
+                    {task.sourceRcsPointCode} →{" "}
                     {task.destinationRcsPointCode}
                   </td>
 
                   <td>
                     <select
-                      aria-label={
-                        `Priority ${task.id}`
-                      }
-                      value={
-                        task.rcsPriority || 60
-                      }
+                      aria-label={`Priority ${task.id}`}
+                      value={task.rcsPriority || 60}
                       onChange={(event) =>
                         edit(task.id, {
                           rcsPriority: Number(
-                            event.target.value
+                            event.target.value,
                           ),
 
                           wmsPriority:
-                            PRIORITIES[
-                              event.target.value
-                            ],
+                            PRIORITIES[event.target.value],
                         })
                       }
                     >
-                      {Object.entries(
-                        PRIORITIES
-                      ).map(([value, label]) => (
-                        <option
-                          key={value}
-                          value={value}
-                        >
-                          {label}
-                        </option>
-                      ))}
+                      {Object.entries(PRIORITIES).map(
+                        ([value, label]) => (
+                          <option
+                            key={value}
+                            value={value}
+                          >
+                            {label}
+                          </option>
+                        ),
+                      )}
                     </select>
                   </td>
 
                   <td>
                     <input
-                      aria-label={
-                        `Send time ${task.id}`
-                      }
+                      aria-label={`Send time ${task.id}`}
                       type="datetime-local"
                       value={datetimeInput(
-                        task.scheduledSendAt
+                        task.scheduledSendAt,
                       )}
                       onChange={(event) => {
-                        const value =
-                          event.target.value
-                            ? new Date(
-                                event.target.value
-                              )
-                            : new Date();
+                        const value = event.target.value
+                          ? new Date(event.target.value)
+                          : new Date();
 
                         if (
-                          Number.isFinite(
-                            value.getTime()
-                          )
+                          Number.isFinite(value.getTime())
                         ) {
                           edit(task.id, {
                             scheduledSendAt:
@@ -1039,9 +1095,19 @@ export default function RobotTaskDispatcher() {
                   <td>
                     <button
                       type="button"
-                      onClick={() =>
-                        removeUnsent(task.id)
-                      }
+                      onClick={() => {
+                        try {
+                          commit(
+                            ref.current.filter(
+                              (item) =>
+                                item.id !== task.id ||
+                                item.sendStatus !== "NOT_SENT",
+                            ),
+                          );
+                        } catch (error) {
+                          pause(error.message);
+                        }
+                      }}
                     >
                       Remove
                     </button>
@@ -1063,6 +1129,7 @@ export default function RobotTaskDispatcher() {
             <thead>
               <tr>
                 <th>Send order</th>
+                <th>Task type</th>
                 <th>Basket / route</th>
                 <th>Status</th>
                 <th>RCS task ID</th>
@@ -1071,9 +1138,9 @@ export default function RobotTaskDispatcher() {
             </thead>
 
             <tbody>
-              {submitted.length === 0 && (
+              {!submitted.length && (
                 <tr>
-                  <td colSpan={5}>
+                  <td colSpan={6}>
                     No submitted tasks.
                   </td>
                 </tr>
@@ -1085,14 +1152,14 @@ export default function RobotTaskDispatcher() {
                     {task.dispatchSequence || "—"}
                   </td>
 
+                  <td>{task.rcsTaskType || "CTUB1"}</td>
+
                   <td>
-                    {task.basketId ||
-                      "Legacy task"}
+                    {task.basketId || "Legacy task"}
 
                     <br />
 
-                    {task.sourceRcsPointCode}
-                    {" → "}
+                    {task.sourceRcsPointCode} →{" "}
                     {task.destinationRcsPointCode}
                   </td>
 
@@ -1100,8 +1167,8 @@ export default function RobotTaskDispatcher() {
                     {task.backendError
                       ? "Needs attention"
                       : task.sendStatus === "SENT"
-                      ? task.rcsStatus
-                      : task.sendStatus}
+                        ? task.rcsStatus
+                        : task.sendStatus}
                   </td>
 
                   <td>
@@ -1116,7 +1183,7 @@ export default function RobotTaskDispatcher() {
                         setDetails(
                           details === task.id
                             ? ""
-                            : task.id
+                            : task.id,
                         )
                       }
                     >
@@ -1132,19 +1199,23 @@ export default function RobotTaskDispatcher() {
         {detailTask && (
           <div className="overview-notice">
             <p>
+              Task type: {detailTask.rcsTaskType || "CTUB1"}
+            </p>
+
+            <p>
               {detailTask.backendError ||
                 detailTask.rcsStatus}
             </p>
 
             <ul>
               {(detailTask.history || []).map(
-                (entry, index) => (
-                  <li key={entry.id || index}>
-                    {entry.at || entry.createdAt}
+                (record, index) => (
+                  <li key={record.id || index}>
+                    {record.at || record.createdAt}
                     {" · "}
-                    {entry.message}
+                    {record.message}
                   </li>
-                )
+                ),
               )}
             </ul>
           </div>

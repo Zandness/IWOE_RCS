@@ -1,156 +1,339 @@
 import {
-  ArrowDownToLine,
-  ArrowUpFromLine,
-} from "lucide-react";
+  useEffect,
+  useState,
+} from "react";
 
-import { useState } from "react";
+import { Link } from "react-router-dom";
 
-import InboundOperations from "../components/operations/InboundOperations";
-import OutboundOperations from "../components/operations/OutboundOperations";
-import StockOutboundOperations from "../components/operations/StockOutboundOperations";
+import {
+  readOperationsSnapshot,
+  updateOutbound,
+} from "../utils/warehouseOperations";
 
-import "../styles/WarehouseOperations.css";
+import "../styles/OverviewSettings.css";
 
 export default function WarehouseOperations() {
-  const [activeTab, setActiveTab] =
-    useState("INBOUND");
+  const [snapshot, setSnapshot] = useState(null);
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+  const [tab, setTab] = useState("OUTBOUND");
+  const [search, setSearch] = useState("");
+
+  function refresh() {
+    try {
+      setSnapshot(readOperationsSnapshot());
+      setError("");
+    } catch (error) {
+      setError(error.message);
+    }
+  }
+
+  useEffect(() => {
+    refresh();
+
+    const events = [
+      "focus",
+      "storage",
+      "wms-monitor-data-changed",
+      "wms-data-changed",
+    ];
+
+    events.forEach((event) => {
+      window.addEventListener(event, refresh);
+    });
+
+    return () => {
+      events.forEach((event) => {
+        window.removeEventListener(event, refresh);
+      });
+    };
+  }, []);
+
+  function act(operation, action) {
+    if (
+      action === "COMPLETE" &&
+      !window.confirm(
+        `Confirm that ${operation.quantity} ${operation.unit} of ${operation.sku} has actually been picked? This deducts stock.`,
+      )
+    ) {
+      return;
+    }
+
+    try {
+      updateOutbound(operation.id, action);
+
+      setMessage(
+        action === "COMPLETE"
+          ? "Picking confirmed. Stock and reservation reduced."
+          : action === "CANCEL"
+            ? "Cancelled. Reserved stock released; quantity unchanged."
+            : "Picking started. Quantity unchanged.",
+      );
+    } catch (error) {
+      setMessage(error.message);
+    }
+  }
+
+  const history = snapshot?.monitor.history || [];
+
+  const outbound =
+    snapshot?.monitor.outboundOperations || [];
+
+  const rows = (
+    tab === "OUTBOUND"
+      ? outbound
+      : history.filter((record) => record.type === tab)
+  )
+    .filter((record) =>
+      [
+        record.id,
+        record.sku,
+        record.itemName,
+        record.locationCode,
+        record.basketId,
+        record.reference,
+        record.status,
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(search.toLowerCase()),
+    )
+    .slice()
+    .sort(
+      (a, b) =>
+        (Date.parse(b.createdAt) || 0) -
+        (Date.parse(a.createdAt) || 0),
+    );
+
+  const legacyReservations = history.filter(
+    (record) =>
+      record.type === "OUTBOUND" &&
+      !record.operationId,
+  );
+
+  const hasLegacyRecords =
+    legacyReservations.length > 0 ||
+    snapshot?.legacyInbound.length > 0 ||
+    snapshot?.legacyOutbound.length > 0;
 
   return (
-    <div className="warehouse-operations-page">
-      <div className="warehouse-operations-header">
+    <div className="page wms-overview">
+      <div className="page-header">
         <div>
-          <span className="warehouse-operations-label">
-            WAREHOUSE MANAGEMENT
+          <span className="page-label">
+            WAREHOUSE OPERATIONS
           </span>
 
-          <h2>
-            Warehouse Operations
-          </h2>
+          <h2>Warehouse Operations</h2>
 
           <p>
-            Manage receiving, putaway,
-            stock allocation, picking,
-            dispatch and direct stock
-            outbound from one workspace.
+            Create stock operations from Monitor.
+            Manage picking and review stock history here.
           </p>
         </div>
       </div>
 
-      <div
-        className="warehouse-operations-tabs"
-        role="tablist"
-      >
-        <button
-          type="button"
-          role="tab"
-          aria-selected={
-            activeTab === "INBOUND"
-          }
-          className={
-            activeTab === "INBOUND"
-              ? "active"
-              : ""
-          }
-          onClick={() =>
-            setActiveTab("INBOUND")
-          }
-        >
-          <ArrowDownToLine
-            size={18}
-          />
+      <section className="panel overview-section">
+        <div className="overview-actions">
+          <Link to="/warehouse">
+            Open Monitor
+          </Link>
 
-          <div>
-            <strong>
-              Inbound
-            </strong>
+          <Link to="/tasks">
+            Task overview
+          </Link>
 
-            <span>
-              Receiving & Putaway
-            </span>
-          </div>
-        </button>
+          <button
+            type="button"
+            onClick={refresh}
+          >
+            Refresh
+          </button>
+        </div>
 
-        <button
-          type="button"
-          role="tab"
-          aria-selected={
-            activeTab === "OUTBOUND"
-          }
-          className={
-            activeTab === "OUTBOUND"
-              ? "active"
-              : ""
-          }
-          onClick={() =>
-            setActiveTab("OUTBOUND")
-          }
-        >
-          <ArrowUpFromLine
-            size={18}
-          />
+        <p>
+          Inbound adds contents to a basket.
+          Outbound reserves stock until picking is confirmed.
+          Deduct Stock is a direct adjustment.
+        </p>
 
-          <div>
-            <strong>
-              Outbound
-            </strong>
-
-            <span>
-              Allocation, Picking &
-              Dispatch
-            </span>
-          </div>
-        </button>
-
-        <button
-          type="button"
-          role="tab"
-          aria-selected={
-            activeTab === "STOCK_OUTBOUND"
-          }
-          className={
-            activeTab === "STOCK_OUTBOUND"
-              ? "active"
-              : ""
-          }
-          onClick={() =>
-            setActiveTab("STOCK_OUTBOUND")
-          }
-        >
-          <ArrowUpFromLine
-            size={18}
-          />
-
-          <div>
-            <strong>
-              Stock Outbound
-            </strong>
-
-            <span>
-              Direct Stock Deduction
-            </span>
-          </div>
-        </button>
-      </div>
-
-      <div className="warehouse-operations-content">
-        {activeTab === "INBOUND" && (
-          <InboundOperations
-            embedded
-          />
+        {error && (
+          <p role="alert">{error}</p>
         )}
 
-        {activeTab === "OUTBOUND" && (
-          <OutboundOperations
-            embedded
-          />
+        {message && (
+          <p role="status">{message}</p>
         )}
+      </section>
 
-        {activeTab === "STOCK_OUTBOUND" && (
-          <StockOutboundOperations
-            embedded
+      <section className="panel overview-section">
+        <div className="overview-actions">
+          {[
+            ["OUTBOUND", "Outbound picking"],
+            ["INBOUND", "Inbound history"],
+            ["DEDUCT_STOCK", "Deduction history"],
+          ].map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              className="primary-button"
+              aria-pressed={tab === value}
+              onClick={() => setTab(value)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        <label className="overview-search">
+          Search
+
+          <input
+            value={search}
+            onChange={(event) =>
+              setSearch(event.target.value)
+            }
+            placeholder="SKU, basket, location or reference"
           />
-        )}
-      </div>
+        </label>
+
+        <div className="table-wrapper">
+          <table className="dashboard-table">
+            <thead>
+              <tr>
+                <th>Operation / created</th>
+                <th>Location / basket</th>
+                <th>Product</th>
+                <th>Quantity</th>
+                <th>Status</th>
+
+                {tab === "OUTBOUND" && (
+                  <th>Action</th>
+                )}
+              </tr>
+            </thead>
+
+            <tbody>
+              {!rows.length && (
+                <tr>
+                  <td colSpan={tab === "OUTBOUND" ? 6 : 5}>
+                    No records.
+                  </td>
+                </tr>
+              )}
+
+              {rows.map((record) => (
+                <tr key={record.id}>
+                  <td>
+                    {record.id}
+                    <br />
+                    {new Date(
+                      record.createdAt,
+                    ).toLocaleString()}
+                  </td>
+
+                  <td>
+                    {record.locationCode}
+                    <br />
+                    {record.basketId || "—"}
+                  </td>
+
+                  <td>
+                    {record.sku}
+                    <br />
+                    {record.itemName}
+                  </td>
+
+                  <td>
+                    {record.quantity} {record.unit}
+                  </td>
+
+                  <td>
+                    {record.status || "RECORDED"}
+                  </td>
+
+                  {tab === "OUTBOUND" && (
+                    <td>
+                      {record.status === "PENDING" && (
+                        <button
+                          type="button"
+                          disabled={!!error}
+                          onClick={() =>
+                            act(record, "START")
+                          }
+                        >
+                          Start picking
+                        </button>
+                      )}
+
+                      {record.status === "IN_PROGRESS" && (
+                        <button
+                          type="button"
+                          disabled={!!error}
+                          onClick={() =>
+                            act(record, "COMPLETE")
+                          }
+                        >
+                          Confirm picked
+                        </button>
+                      )}
+
+                      {[
+                        "PENDING",
+                        "IN_PROGRESS",
+                      ].includes(record.status) && (
+                        <button
+                          type="button"
+                          disabled={!!error}
+                          onClick={() =>
+                            act(record, "CANCEL")
+                          }
+                        >
+                          Cancel
+                        </button>
+                      )}
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {hasLegacyRecords && (
+        <section className="panel overview-section">
+          <details>
+            <summary>
+              Previous-version records — review only
+            </summary>
+
+            <p>
+              These records are preserved separately.
+              Their stock reservations are not automatically
+              converted or released.
+            </p>
+
+            {[
+              ...legacyReservations,
+              ...(snapshot?.legacyInbound || []),
+              ...(snapshot?.legacyOutbound || []),
+            ].map((record, index) => (
+              <p key={index}>
+                {record.id || record.orderNo}
+                {" · "}
+                {record.sku || record.type || "Legacy order"}
+                {" · "}
+                {record.locationCode || ""}
+                {" · "}
+                {record.quantity ?? ""}
+                {" · "}
+                {record.status || "REVIEW REQUIRED"}
+              </p>
+            ))}
+          </details>
+        </section>
+      )}
     </div>
   );
 }
