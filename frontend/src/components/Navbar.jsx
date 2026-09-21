@@ -1,3 +1,4 @@
+import ThemeToggle from "./ThemeToggle";
 import {
   Settings,
   Server,
@@ -25,6 +26,7 @@ export default function Navbar() {
       </div>
 
       <div className="navbar-right">
+        <ThemeToggle />
         <Link
           to="/settings"
           className="connection-status"
