@@ -1,93 +1,35 @@
 import { useEffect, useState } from "react";
-import { basketOf } from "../utils/basketStore";
+import { basketOf, binLocationPatch } from "../utils/basketStore";
+import LoadTypeVisual, { getLoadInfo } from "./LoadTypeVisual";
 
-export default function BasketDetails({
-  shelf,
-  onSave,
-}) {
-  const basket = basketOf(shelf);
-
-  const [id, setId] = useState(basket?.id || "");
+export default function BasketDetails({ shelf, loadType = "BASKET", onSave }) {
+  const info = getLoadInfo(loadType);
+  const load = basketOf(shelf);
   const [message, setMessage] = useState("");
-
-  useEffect(() => {
-    setId(basket?.id || "");
-    setMessage("");
-  }, [shelf.id, basket?.id]);
-
-  const hasContents = shelf.inventory.some(
-    (item) =>
-      Number(item.quantity) > 0 ||
-      Number(item.reserved) > 0,
-  );
-
-  function save(remove = false) {
+  useEffect(() => setMessage(""), [shelf.id, loadType]);
+  const hasContents = (shelf.inventory || []).some(item =>
+    Number(item.quantity) > 0 || Number(item.reserved) > 0);
+  function apply(remove) {
     try {
-      if (!remove && !id.trim()) {
-        throw new Error("Enter a basket ID.");
-      }
-
-      if (remove && hasContents) {
-        throw new Error(
-          "Deduct all contents before removing an empty basket.",
-        );
-      }
-
-      onSave({
-        basket: remove ? null : { id: id.trim() },
-        capacity: 1,
-        ...(remove ? { inventory: [] } : {}),
-      });
-
-      setMessage(
-        remove
-          ? "Empty basket removed."
-          : "Basket saved. Use Inbound below to add products and quantities.",
-      );
-    } catch (error) {
-      setMessage(error.message);
-    }
+      onSave(binLocationPatch(shelf.id, remove));
+      setMessage(remove ? `${info.label} unbinned.` : `${info.label} binned.`);
+    } catch (error) { setMessage(error.message || "Could not update location."); }
   }
-
   return (
-    <section className="monitor-rcs-panel">
-      <h3>
-        Basket · {basket ? "1 / 1" : "0 / 1"}
-      </h3>
-
-      <p>
-        Product quantities belong to this basket.
-        They are managed in WMS and are not sent to RCS.
-      </p>
-
-      <label>
-        Basket ID
-        <input
-          value={id}
-          onChange={(event) =>
-            setId(event.target.value)
-          }
-          placeholder="e.g. BASKET-001"
-        />
-      </label>
-
-      <button
-        type="button"
-        onClick={() => save()}
-      >
-        Save Basket
-      </button>
-
-      {basket && (
-        <button
-          type="button"
-          disabled={hasContents}
-          onClick={() => save(true)}
-        >
-          Remove Empty Basket
-        </button>
-      )}
-
+    <section className="monitor-rcs-panel load-details-panel">
+      <div className="load-details-heading">
+        <LoadTypeVisual type={info.type} />
+        <div>
+          <h3>{info.label} · {load ? "Occupied" : "Empty"}</h3>
+          <p>{info.description}</p>
+        </div>
+      </div>
+      <div className="load-details-actions">
+        <button type="button" disabled={Boolean(load)} onClick={() => apply(false)}>Bin</button>
+        <button type="button" disabled={!load || hasContents} onClick={() => apply(true)}>Unbin</button>
+      </div>
+      <p>Bin marks this position as occupied. Unbin marks it as empty. These actions do not move the robot.</p>
+      {load && hasContents && <p>Remove products and reservations before Unbin.</p>}
       {message && <p role="status">{message}</p>}
     </section>
   );

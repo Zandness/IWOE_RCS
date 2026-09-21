@@ -1,11 +1,9 @@
-import { useEffect, useState } from "react";
+import { getLoadInfo } from "./LoadTypeVisual";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
 import LocationPicker from "./LocationPicker";
-
-import {
-  loadPreferences,
-} from "../utils/dashboardData";
+import { loadPreferences } from "../utils/dashboardData";
 
 import {
   readMonitor,
@@ -16,6 +14,23 @@ import {
 
 import "../styles/MonitorRcsDispatch.css";
 
+const QUEUE_KEY = "wms-robot-tasks-v1";
+const INPUT_HISTORY_KEY = "wms-transfer-input-history-v1";
+
+const TARGET_TYPES = ["STORAGE", "SITE", "CARRIER"];
+
+const TARGET_LABELS = {
+  STORAGE: "STORAGE — Bin alias",
+  SITE: "SITE — Point alias",
+  CARRIER: "CARRIER — Carrier number",
+};
+
+const TARGET_HINTS = {
+  STORAGE: "Enter the bin alias registered in RCS.",
+  SITE: "Enter the point alias registered in RCS, such as QQ1.",
+  CARRIER: "Enter the actual carrier number registered in RCS.",
+};
+
 const PRIORITIES = [30, 60, 90, 120];
 
 const PRIORITY_LABELS = {
@@ -25,12 +40,81 @@ const PRIORITY_LABELS = {
   120: "Urgent",
 };
 
+const FIELD_STYLE = {
+  display: "grid",
+  gap: 6,
+  minWidth: 0,
+};
+
+const INPUT_STYLE = {
+  boxSizing: "border-box",
+  width: "100%",
+  minWidth: 0,
+  height: 40,
+};
+
+const TARGET_GRID_STYLE = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 280px), 1fr))",
+  gap: 16,
+  margin: "16px 0",
+};
+
+function cleanHistory(values) {
+  if (!Array.isArray(values)) return [];
+
+  return [
+    ...new Set(
+      values
+        .filter((value) => typeof value === "string")
+        .map((value) => value.trim())
+        .filter(Boolean),
+    ),
+  ].slice(0, 50);
+}
+
+function readInputHistory() {
+  try {
+    const data = JSON.parse(
+      localStorage.getItem(INPUT_HISTORY_KEY) || "{}",
+    );
+
+    return {
+      robots: cleanHistory(data?.robots),
+      types: cleanHistory(data?.types),
+      lastRobot:
+        typeof data?.lastRobot === "string"
+          ? data.lastRobot
+          : "",
+      lastType:
+        typeof data?.lastType === "string"
+          ? data.lastType
+          : "CTUB1",
+    };
+  } catch {
+    return {
+      robots: [],
+      types: [],
+      lastRobot: "",
+      lastType: "CTUB1",
+    };
+  }
+}
+
 function normalizePriority(value) {
   const priority = Number(value);
+  return PRIORITIES.includes(priority) ? priority : 60;
+}
 
-  return PRIORITIES.includes(priority)
-    ? priority
-    : 60;
+function readTargetType(value) {
+  // Old tasks without a target type keep the original STORAGE behavior.
+  if (value == null || value === "") return "STORAGE";
+
+  if (!TARGET_TYPES.includes(value)) {
+    throw new Error(`Unsupported RCS target type: ${value}`);
+  }
+
+  return value;
 }
 
 function formatDate(value) {
@@ -41,9 +125,51 @@ function formatDate(value) {
     : "—";
 }
 
+function unavailable(shelf, isSource) {
+  const inventory = Array.isArray(shelf.inventory)
+    ? shelf.inventory
+    : [];
+
+  return (
+    isReserved(shelf.id) ||
+    ["BLOCKED", "MAINTENANCE"].includes(shelf.status) ||
+    (
+      isSource
+        ? !shelf.basket ||
+          inventory.some((item) => Number(item.reserved) > 0)
+        : Boolean(shelf.basket) || inventory.length > 0
+    )
+  );
+}
+
+function findSavedLocation(shelves, locationId, rcsCode, targetType) {
+  // WMS location IDs remain valid when the API uses an independent
+  // point alias or carrier number.
+  if (locationId) {
+    const matches = shelves.filter(
+      (shelf) => shelf.id === locationId,
+    );
+
+    if (matches.length === 1) return matches[0];
+  }
+
+  // A carrier number must not be guessed to be a WMS location code.
+  if (targetType !== "CARRIER" && rcsCode) {
+    const matches = shelves.filter(
+      (shelf) => shelf.code === rcsCode,
+    );
+
+    if (matches.length === 1) return matches[0];
+  }
+
+  throw new Error(
+    "The saved WMS location could not be found. Select the source and destination manually.",
+  );
+}
+
 export function loadCommandHistory() {
   const queue = JSON.parse(
-    localStorage.getItem("wms-robot-tasks-v1") || "[]",
+    localStorage.getItem(QUEUE_KEY) || "[]",
   );
 
   if (!Array.isArray(queue)) {
@@ -65,41 +191,114 @@ export function loadCommandHistory() {
 }
 
 export function recallCommand(task, shelves) {
-  const source = shelves.filter(
-    (shelf) =>
-      shelf.code === task.sourceRcsPointCode,
+  const sourceType = readTargetType(task.sourceRcsTargetType);
+  const destinationType = readTargetType(
+    task.destinationRcsTargetType,
   );
 
-  const destination = shelves.filter(
-    (shelf) =>
-      shelf.code === task.destinationRcsPointCode,
+  const source = findSavedLocation(
+    shelves,
+    task.sourceLocationId,
+    task.sourceRcsPointCode,
+    sourceType,
   );
 
-  if (
-    source.length !== 1 ||
-    destination.length !== 1
-  ) {
-    throw new Error(
-      "The saved location codes are missing or duplicated. Check Monitor location codes first.",
-    );
-  }
+  const destination = findSavedLocation(
+    shelves,
+    task.destinationLocationId,
+    task.destinationRcsPointCode,
+    destinationType,
+  );
 
   return {
     taskType: task.rcsTaskType || "CTUB1",
+    robotCode: task.rcsRobotCode || "",
     priority: normalizePriority(task.rcsPriority),
-    source: source[0].id,
-    destination: destination[0].id,
+    source: source.id,
+    destination: destination.id,
+    sourceType,
+    destinationType,
+    sourceCode: String(task.sourceRcsPointCode || ""),
+    destinationCode: String(task.destinationRcsPointCode || ""),
     sendTime: "",
   };
 }
 
+function RcsTargetFields({
+  title,
+  type,
+  code,
+  onTypeChange,
+  onCodeChange,
+  locationCode,
+}) {
+  return (
+    <fieldset style={{ minWidth: 0, margin: 0 }}>
+      <legend>{title}</legend>
+
+      <label style={FIELD_STYLE}>
+        RCS target type
+        <select
+          value={type}
+          onChange={(event) => onTypeChange(event.target.value)}
+          style={INPUT_STYLE}
+        >
+          {TARGET_TYPES.map((value) => (
+            <option key={value} value={value}>
+              {TARGET_LABELS[value]}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <label style={{ ...FIELD_STYLE, marginTop: 12 }}>
+        RCS target code
+        <input
+          required
+          value={code}
+          onChange={(event) => onCodeChange(event.target.value)}
+          placeholder={
+            type === "SITE"
+              ? "e.g. QQ1"
+              : type === "CARRIER"
+                ? "Actual RCS carrier number"
+                : "e.g. R8A04011"
+          }
+          style={INPUT_STYLE}
+        />
+      </label>
+
+      <p style={{ overflowWrap: "anywhere" }}>
+        {TARGET_HINTS[type]}
+      </p>
+
+      <p style={{ overflowWrap: "anywhere" }}>
+        WMS location code: {locationCode || "No location selected"}
+      </p>
+    </fieldset>
+  );
+}
+
 export default function MonitorRcsDispatch() {
   const navigate = useNavigate();
+  const submitting = useRef(false);
 
   const [shelves, setShelves] = useState([]);
   const [source, setSource] = useState("");
   const [destination, setDestination] = useState("");
-  const [taskType, setTaskType] = useState("CTUB1");
+
+  const [sourceType, setSourceType] = useState("STORAGE");
+  const [destinationType, setDestinationType] = useState("STORAGE");
+  const [sourceCode, setSourceCode] = useState("");
+  const [destinationCode, setDestinationCode] = useState("");
+
+  const [taskType, setTaskType] = useState(
+    () => readInputHistory().lastType,
+  );
+  const [robotCode, setRobotCode] = useState(
+    () => readInputHistory().lastRobot,
+  );
+  const [inputHistory, setInputHistory] = useState(readInputHistory);
 
   const [priority, setPriority] = useState(() =>
     normalizePriority(loadPreferences().defaultPriority),
@@ -110,6 +309,36 @@ export default function MonitorRcsDispatch() {
   const [history, setHistory] = useState([]);
   const [historyError, setHistoryError] = useState("");
   const [search, setSearch] = useState("");
+
+  function rememberInputs() {
+    const saved = readInputHistory();
+    const robot = robotCode.trim();
+    const type = taskType.trim();
+
+    const add = (value, old) =>
+      [...new Set([value, ...old].filter(Boolean))].slice(0, 50);
+
+    const next = {
+      robots: add(robot, saved.robots),
+      types: add(type, saved.types),
+      lastRobot: robot,
+      lastType: type,
+    };
+
+    try {
+      localStorage.setItem(INPUT_HISTORY_KEY, JSON.stringify(next));
+      setInputHistory(next);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function rememberOnBlur() {
+    if (!rememberInputs()) {
+      setMessage("Could not save input history in this browser.");
+    }
+  }
 
   useEffect(() => {
     function refresh() {
@@ -137,14 +366,14 @@ export default function MonitorRcsDispatch() {
       "focus",
     ];
 
-    events.forEach((event) => {
-      window.addEventListener(event, refresh);
-    });
+    events.forEach((event) =>
+      window.addEventListener(event, refresh),
+    );
 
     return () => {
-      events.forEach((event) => {
-        window.removeEventListener(event, refresh);
-      });
+      events.forEach((event) =>
+        window.removeEventListener(event, refresh),
+      );
     };
   }, []);
 
@@ -152,24 +381,15 @@ export default function MonitorRcsDispatch() {
     function selectPoint(event) {
       const { role, shelfId } = event.detail || {};
 
-      if (!["source", "destination"].includes(role)) {
-        return;
-      }
+      if (!["source", "destination"].includes(role)) return;
 
       try {
         const current = shelvesOf(readMonitor());
+        const shelf = current.find((item) => item.id === shelfId);
 
-        const shelf = current.find(
-          (item) => item.id === shelfId,
-        );
-
-        if (
-          !shelf ||
-          !shelf.code ||
-          unavailable(shelf, role === "source")
-        ) {
+        if (!shelf || unavailable(shelf, role === "source")) {
           throw new Error(
-            `This point cannot be used as ${role}. Check its basket, stock and reservations.`,
+            `This point cannot be used as ${role}. Check its load, stock and reservations.`,
           );
         }
 
@@ -177,66 +397,111 @@ export default function MonitorRcsDispatch() {
 
         if (role === "source") {
           setSource(shelfId);
-
-          setDestination((value) =>
-            value === shelfId ? "" : value,
-          );
+          setDestination((value) => value === shelfId ? "" : value);
         } else {
           setDestination(shelfId);
-
-          setSource((value) =>
-            value === shelfId ? "" : value,
-          );
+          setSource((value) => value === shelfId ? "" : value);
         }
 
+        // A changed location requires a fresh review of its RCS mapping.
         setMessage(
-          `${shelf.code} selected as ${role}. Review the form before adding a task.`,
+          `${shelf.code || shelf.id} selected as ${role}. Review the RCS target type and code.`,
         );
       } catch (error) {
         setMessage(error.message);
       }
     }
 
-    window.addEventListener(
-      "wms-transfer-select",
-      selectPoint,
-    );
+    window.addEventListener("wms-transfer-select", selectPoint);
 
     return () => {
-      window.removeEventListener(
-        "wms-transfer-select",
-        selectPoint,
-      );
+      window.removeEventListener("wms-transfer-select", selectPoint);
     };
   }, []);
+
+  // Reset an override when a different WMS location is selected.
+  // Reuse is handled separately below to preserve its saved API codes.
+  const previousLocations = useRef({ source: "", destination: "" });
+  const recalledLocations = useRef(null);
+
+  useEffect(() => {
+    const previous = previousLocations.current;
+    const recalled = recalledLocations.current;
+
+    if (
+      recalled &&
+      recalled.source === source &&
+      recalled.destination === destination
+    ) {
+      previousLocations.current = { source, destination };
+      recalledLocations.current = null;
+      return;
+    }
+
+    if (previous.source !== source) {
+      const selected = shelves.find((item) => item.id === source);
+      setSourceCode(
+        sourceType === "CARRIER" ? "" : selected?.code || "",
+      );
+    }
+
+    if (previous.destination !== destination) {
+      const selected = shelves.find((item) => item.id === destination);
+      setDestinationCode(
+        destinationType === "CARRIER" ? "" : selected?.code || "",
+      );
+    }
+
+    previousLocations.current = { source, destination };
+  }, [source, destination, shelves, sourceType, destinationType]);
+
+  function changeSourceType(value) {
+    setSourceType(value);
+    setSourceCode("");
+    setMessage("Enter the source RCS code for the selected target type.");
+  }
+
+  function changeDestinationType(value) {
+    setDestinationType(value);
+    setDestinationCode("");
+    setMessage(
+      "Enter the destination RCS code for the selected target type.",
+    );
+  }
 
   function reuse(task) {
     try {
       const currentShelves = shelvesOf(readMonitor());
+      const values = recallCommand(task, currentShelves);
 
-      const values = recallCommand(
-        task,
-        currentShelves,
-      );
+      recalledLocations.current = {
+        source: values.source,
+        destination: values.destination,
+      };
 
       setShelves(currentShelves);
       setTaskType(values.taskType);
+      setRobotCode(values.robotCode);
       setPriority(values.priority);
       setSource(values.source);
       setDestination(values.destination);
-      setSendTime(values.sendTime);
+      setSourceType(values.sourceType);
+      setDestinationType(values.destinationType);
+      setSourceCode(values.sourceCode);
+      setDestinationCode(values.destinationCode);
+      setSendTime("");
 
       const priorityChanged = !PRIORITIES.includes(
         Number(task.rcsPriority),
       );
 
       setMessage(
-        "Copied to the form. Review the basket, destination and time before adding a new task. Nothing has been sent." +
-          (
-            priorityChanged
-              ? " The saved priority is not supported, so Normal (60) was selected."
-              : ""
-          ),
+        "Copied to the form. Review the WMS locations, RCS target types and codes before adding a new task. Nothing has been sent." +
+        (
+          priorityChanged
+            ? " Normal priority (60) was selected because the saved priority is not supported."
+            : ""
+        ),
       );
     } catch (error) {
       setMessage(error.message);
@@ -245,33 +510,44 @@ export default function MonitorRcsDispatch() {
 
   function submit(event) {
     event.preventDefault();
+    if (submitting.current) return;
+
+    submitting.current = true;
 
     const startAfterEnqueue =
       event.nativeEvent.submitter?.value === "start";
 
     try {
       const type = taskType.trim();
+      const sourceRcsCode = sourceCode.trim();
+      const destinationRcsCode = destinationCode.trim();
 
       if (!type) {
-        throw new Error(
-          "Enter the task type registered in RCS.",
-        );
+        throw new Error("Enter the task type registered in RCS.");
       }
 
       if (!PRIORITIES.includes(priority)) {
-        throw new Error(
-          "Select a valid priority: Low, Normal, High or Urgent.",
-        );
+        throw new Error("Select a valid priority.");
       }
 
-      const { from, to } = validateTransfer(
-        source,
-        destination,
-      );
+      readTargetType(sourceType);
+      readTargetType(destinationType);
 
-      const time = sendTime
-        ? new Date(sendTime)
-        : new Date();
+      if (!sourceRcsCode || !destinationRcsCode) {
+        throw new Error("Enter both source and destination RCS codes.");
+      }
+
+      if (
+        sourceType === destinationType &&
+        sourceRcsCode === destinationRcsCode
+      ) {
+        throw new Error("Source and destination RCS targets must differ.");
+      }
+
+      // Keep the existing WMS stock, occupancy and reservation checks.
+      const { from, to } = validateTransfer(source, destination);
+
+      const time = sendTime ? new Date(sendTime) : new Date();
 
       if (!Number.isFinite(time.getTime())) {
         throw new Error("Invalid send time.");
@@ -280,16 +556,26 @@ export default function MonitorRcsDispatch() {
       const request = {
         handled: false,
         error: "",
-
         payload: {
           startAfterEnqueue,
           from,
           to,
           scheduledSendAt: time.toISOString(),
-
           draft: {
             taskType: type,
+            robotCode: robotCode.trim(),
             initPriority: priority,
+
+            // RobotTaskDispatcher must read these two objects.
+            // The WMS location IDs still come from from.id and to.id.
+            source: {
+              type: sourceType,
+              code: sourceRcsCode,
+            },
+            destination: {
+              type: destinationType,
+              code: destinationRcsCode,
+            },
           },
         },
       };
@@ -306,12 +592,21 @@ export default function MonitorRcsDispatch() {
         );
       }
 
+      const historySaved = rememberInputs();
+
       setSource("");
       setDestination("");
+      setSourceCode("");
+      setDestinationCode("");
       setSendTime("");
 
       setMessage(
-        `${type} added to the queue and command history.`,
+        `${type} added to the queue and command history.` +
+        (
+          historySaved
+            ? ""
+            : " Robot and task-type input history could not be saved."
+        ),
       );
 
       try {
@@ -321,49 +616,29 @@ export default function MonitorRcsDispatch() {
         setHistoryError(error.message);
       }
 
-      if (startAfterEnqueue) {
-        navigate("/dispatcher");
-      }
+      if (startAfterEnqueue) navigate("/dispatcher");
     } catch (error) {
       setMessage(error.message);
+    } finally {
+      submitting.current = false;
     }
   }
 
-  function unavailable(shelf, isSource) {
-    const inventory = Array.isArray(shelf.inventory)
-      ? shelf.inventory
-      : [];
-
-    return (
-      isReserved(shelf.id) ||
-      ["BLOCKED", "MAINTENANCE"].includes(
-        shelf.status,
-      ) ||
-      (
-        isSource
-          ? !shelf.basket ||
-            inventory.some(
-              (item) => Number(item.reserved) > 0,
-            )
-          : !!shelf.basket || inventory.length > 0
-      )
-    );
-  }
-
-  const from = shelves.find(
-    (shelf) => shelf.id === source,
-  );
-
-  const to = shelves.find(
-    (shelf) => shelf.id === destination,
-  );
+  const from = shelves.find((shelf) => shelf.id === source);
+  const to = shelves.find((shelf) => shelf.id === destination);
 
   const types = [
     ...new Set([
       "CTUB1",
-      ...history
-        .map((task) => task.rcsTaskType)
-        .filter(Boolean),
+      ...inputHistory.types,
+      ...history.map((task) => task.rcsTaskType).filter(Boolean),
+    ]),
+  ];
+
+  const robots = [
+    ...new Set([
+      ...inputHistory.robots,
+      ...history.map((task) => task.rcsRobotCode).filter(Boolean),
     ]),
   ];
 
@@ -375,6 +650,8 @@ export default function MonitorRcsDispatch() {
       task.rcsTaskType,
       task.sourceRcsPointCode,
       task.destinationRcsPointCode,
+      task.sourceRcsTargetType,
+      task.destinationRcsTargetType,
       task.rcsTaskChainCode,
       task.basketId,
     ]
@@ -385,52 +662,59 @@ export default function MonitorRcsDispatch() {
 
   const preview = {
     taskType: taskType.trim(),
-
+    ...(robotCode.trim() ? { robotCode: robotCode.trim() } : {}),
     targetRoute: [
       {
-        type: "STORAGE",
-        code: from?.code || "",
+        type: sourceType,
+        code: sourceCode.trim(),
         seq: 0,
         autoStart: 1,
       },
       {
-        type: "STORAGE",
-        code: to?.code || "",
+        type: destinationType,
+        code: destinationCode.trim(),
         seq: 1,
         autoStart: 1,
       },
     ],
-
     initPriority: priority,
   };
+
+  const cannotSubmit =
+    !source ||
+    !destination ||
+    !taskType.trim() ||
+    !sourceCode.trim() ||
+    !destinationCode.trim();
 
   return (
     <section
       id="monitor-transfer-form"
       className="monitor-rcs-panel"
     >
-      <h3>Move a basket</h3>
+      <h3>
+        {from
+          ? `Move a ${getLoadInfo(from.loadType).label.toLowerCase()}`
+          : "Move a load"}
+      </h3>
 
       <p>
-        Select a workflow registered in RCS for a
-        two-location storage transfer.
+        Select the WMS locations, then set the RCS target types and
+        codes required by the selected workflow.
       </p>
 
       <form onSubmit={submit}>
         <div className="monitor-rcs-fields">
           <label>
             Task type
-
             <input
               required
               value={taskType}
               list="rcs-task-types"
-              onChange={(event) =>
-                setTaskType(event.target.value)
-              }
-              placeholder="e.g. CTUB1"
+              onBlur={rememberOnBlur}
+              onChange={(event) => setTaskType(event.target.value)}
+              placeholder="e.g. CTUB1 or PF-LMR-COMMON"
             />
-
             <datalist id="rcs-task-types">
               {types.map((type) => (
                 <option key={type} value={type} />
@@ -439,13 +723,26 @@ export default function MonitorRcsDispatch() {
           </label>
 
           <label>
-            Priority
+            Robot code (optional)
+            <input
+              value={robotCode}
+              list="rcs-robot-codes"
+              onChange={(event) => setRobotCode(event.target.value)}
+              onBlur={rememberOnBlur}
+              placeholder="Leave empty for RCS assignment"
+            />
+            <datalist id="rcs-robot-codes">
+              {robots.map((code) => (
+                <option key={code} value={code} />
+              ))}
+            </datalist>
+          </label>
 
+          <label>
+            Priority
             <select
               value={priority}
-              onChange={(event) =>
-                setPriority(Number(event.target.value))
-              }
+              onChange={(event) => setPriority(Number(event.target.value))}
             >
               {PRIORITIES.map((value) => (
                 <option key={value} value={value}>
@@ -461,7 +758,6 @@ export default function MonitorRcsDispatch() {
             value={source}
             onChange={setSource}
             unavailable={(shelf) =>
-              !shelf.code ||
               shelf.id === destination ||
               unavailable(shelf, true)
             }
@@ -473,42 +769,65 @@ export default function MonitorRcsDispatch() {
             value={destination}
             onChange={setDestination}
             unavailable={(shelf) =>
-              !shelf.code ||
               shelf.id === source ||
+              (Boolean(from) && shelf.loadType !== from.loadType) ||
               unavailable(shelf, false)
             }
           />
 
           <label>
             Scheduled send time
-
             <input
               type="datetime-local"
               value={sendTime}
-              onChange={(event) =>
-                setSendTime(event.target.value)
-              }
+              onChange={(event) => setSendTime(event.target.value)}
             />
           </label>
         </div>
 
+        <div style={TARGET_GRID_STYLE}>
+          <RcsTargetFields
+            title="Source RCS target"
+            type={sourceType}
+            code={sourceCode}
+            onTypeChange={changeSourceType}
+            onCodeChange={setSourceCode}
+            locationCode={from?.code}
+          />
+
+          <RcsTargetFields
+            title="Destination RCS target"
+            type={destinationType}
+            code={destinationCode}
+            onTypeChange={changeDestinationType}
+            onCodeChange={setDestinationCode}
+            locationCode={to?.code}
+          />
+        </div>
+
         <p>
-          Leave the send time empty to make the task
-          available for dispatch immediately.
+          The RCS codes must refer to the selected WMS locations or
+          their loads. For CARRIER, use the actual RCS carrier number.
+        </p>
+
+        <p>
+          Leave the send time empty to make the task available for
+          dispatch immediately.
         </p>
 
         {from && (
           <p>
-            Selected basket:{" "}
+            Selected load:{" "}
             <strong>
-              {from.basket?.id || "No basket"}
+              {getLoadInfo(from.loadType).label}
+              {" · "}
+              {from.basket ? "Occupied" : "Empty"}
             </strong>
           </p>
         )}
 
         <details>
           <summary>Command JSON preview</summary>
-
           <pre
             style={{
               maxWidth: "100%",
@@ -525,11 +844,7 @@ export default function MonitorRcsDispatch() {
           <button
             type="submit"
             value="queue"
-            disabled={
-              !source ||
-              !destination ||
-              !taskType.trim()
-            }
+            disabled={cannotSubmit}
           >
             Add to queue
           </button>
@@ -537,23 +852,15 @@ export default function MonitorRcsDispatch() {
           <button
             type="submit"
             value="start"
-            disabled={
-              !source ||
-              !destination ||
-              !taskType.trim()
-            }
+            disabled={cannotSubmit}
           >
             Add and start dispatch
           </button>
 
-          <Link to="/dispatcher">
-            Open RCS Dispatch
-          </Link>
+          <Link to="/dispatcher">Open RCS Dispatch</Link>
         </div>
 
-        {message && (
-          <p role="status">{message}</p>
-        )}
+        {message && <p role="status">{message}</p>}
       </form>
 
       <hr />
@@ -561,26 +868,21 @@ export default function MonitorRcsDispatch() {
       <h3>Command history</h3>
 
       <p>
-        Reuse a previous command to fill in the form.
-        Review it before adding a new task.
+        Reuse a previous command to fill in the form. Review the
+        locations, target types and codes before adding a new task.
       </p>
 
       <label>
         Search command history
-
         <input
           type="search"
           value={search}
-          onChange={(event) =>
-            setSearch(event.target.value)
-          }
-          placeholder="Task type, location, basket or task code"
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder="Task type, location, target type or task code"
         />
       </label>
 
-      {historyError && (
-        <p role="alert">{historyError}</p>
-      )}
+      {historyError && <p role="alert">{historyError}</p>}
 
       <div
         className="table-wrapper"
@@ -611,12 +913,8 @@ export default function MonitorRcsDispatch() {
             )}
 
             {filtered.map((task, index) => {
-              const savedPriority = Number(
-                task.rcsPriority,
-              );
-
-              const priorityLabel =
-                PRIORITY_LABELS[savedPriority];
+              const savedPriority = Number(task.rcsPriority);
+              const priorityLabel = PRIORITY_LABELS[savedPriority];
 
               const status = task.backendError
                 ? "NEEDS_ATTENTION"
@@ -625,28 +923,24 @@ export default function MonitorRcsDispatch() {
                   : task.sendStatus || "NOT_SENT";
 
               return (
-                <tr
-                  key={
-                    task.id ||
-                    task.rcsTaskChainCode ||
-                    index
-                  }
-                >
+                <tr key={task.id || task.rcsTaskChainCode || index}>
                   <td>
                     {formatDate(task.createdAt)}
                     <br />
-                    {task.rcsTaskChainCode ||
-                      task.id ||
-                      "—"}
+                    {task.rcsTaskChainCode || task.id || "—"}
+                  </td>
+
+                  <td>{task.rcsTaskType || "CTUB1"}</td>
+
+                  <td>
+                    {task.sourceRcsTargetType || "STORAGE"}
+                    <br />
+                    {task.sourceRcsPointCode}
                   </td>
 
                   <td>
-                    {task.rcsTaskType || "CTUB1"}
-                  </td>
-
-                  <td>{task.sourceRcsPointCode}</td>
-
-                  <td>
+                    {task.destinationRcsTargetType || "STORAGE"}
+                    <br />
                     {task.destinationRcsPointCode}
                   </td>
 
@@ -659,10 +953,7 @@ export default function MonitorRcsDispatch() {
                   <td>{status}</td>
 
                   <td>
-                    <button
-                      type="button"
-                      onClick={() => reuse(task)}
-                    >
+                    <button type="button" onClick={() => reuse(task)}>
                       Reuse
                     </button>
                   </td>
@@ -674,9 +965,8 @@ export default function MonitorRcsDispatch() {
       </div>
 
       <p>
-        History is stored in this browser using the
-        dispatch queue. Tasks removed from the queue
-        are also removed from this list.
+        History is stored in this browser using the dispatch queue.
+        Tasks removed from the queue are also removed from this list.
       </p>
     </section>
   );

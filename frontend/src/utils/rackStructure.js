@@ -110,16 +110,23 @@ export function resizeRack(
   rackId,
   value,
   depthValue,
+  loadTypeValue,
 ) {
-  const rack = data.racks.find(
-    (item) => item.id === rackId,
-  );
+  const rack = data.racks.find((item) => item.id === rackId);
 
   if (!rack) {
-    throw new Error("Rack not found.");
+    throw new Error("Storage not found.");
   }
 
-  const count = Number(value);
+  const oldType = rack.loadType || "BASKET";
+  const loadType = loadTypeValue ?? oldType;
+
+  if (!["BASKET", "PALLET", "RACK"].includes(loadType)) {
+    throw new Error("Select Basket, Pallet or Rack.");
+  }
+
+  // A whole rack uses one pickup level per depth.
+  const count = loadType === "RACK" ? 1 : Number(value);
 
   const depthCount = Number(
     depthValue ?? rackDepthCount(rack),
@@ -131,7 +138,9 @@ export function resizeRack(
     count > MAX_SHELVES
   ) {
     throw new Error(
-      `Enter 1–${MAX_SHELVES} shelf levels.`,
+      loadType === "BASKET"
+        ? `Enter 1–${MAX_SHELVES} shelf levels.`
+        : `Enter 1–${MAX_SHELVES} storage positions.`,
     );
   }
 
@@ -143,21 +152,32 @@ export function resizeRack(
     throw new Error("Depth must be 1 or 2.");
   }
 
-  const removed = rack.shelves.filter(
+  const savedShelves = rack.shelves || [];
+  const typeChanged = loadType !== oldType;
+
+  const removedShelves = savedShelves.filter(
     (shelf) =>
       Number(shelf.level) > count ||
       shelfDepth(shelf) > depthCount,
   );
 
-  for (const shelf of removed) {
+  // Changing the type affects all locations in this storage.
+  const shelvesToCheck = typeChanged
+    ? savedShelves
+    : removedShelves;
+
+  for (const shelf of shelvesToCheck) {
     assertEditable(shelf.id);
 
-    if (
-      basketOf(shelf) ||
-      shelf.inventory?.length
-    ) {
+    const hasStoredItems =
+      Boolean(basketOf(shelf)) ||
+      Boolean(shelf.inventory?.length);
+
+    if (hasStoredItems) {
       throw new Error(
-        `Empty ${shelf.code || shelf.id} and remove its basket before reducing the rack.`,
+        `Remove stored items from ${
+          shelf.code || shelf.id
+        } before changing the type or reducing storage.`,
       );
     }
 
@@ -166,33 +186,29 @@ export function resizeRack(
     ).some(
       (operation) =>
         operation.shelfId === shelf.id &&
-        ![
-          "COMPLETED",
-          "CANCELLED",
-          "CANCELED",
-        ].includes(operation.status),
+        !["COMPLETED", "CANCELLED", "CANCELED"].includes(
+          operation.status,
+        ),
     );
 
     if (hasOpenOutbound) {
       throw new Error(
-        `Resolve outbound operations for ${shelf.code || shelf.id} first.`,
+        `Finish or cancel outbound tasks for ${
+          shelf.code || shelf.id
+        } first.`,
       );
     }
   }
 
-  const shelves = rackSlots(
-    rack,
-    count,
-    depthCount,
-  );
+  const shelves = rackSlots(rack, count, depthCount);
 
   return {
     ...data,
-
     racks: data.racks.map((item) =>
       item.id === rackId
         ? {
             ...item,
+            loadType,
             shelfCount: count,
             depthCount,
             shelves,

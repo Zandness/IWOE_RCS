@@ -1081,3 +1081,225 @@
   box-sizing: border-box;
   margin: 8px 0;
 }
+
+/* Keep sizing inside the panel and modal. */
+.rack-location-modal,
+.rack-location-modal *,
+.rack-front-side-panel,
+.rack-front-side-panel * {
+  box-sizing: border-box;
+}
+
+.rack-location-modal {
+  width: min(960px, calc(100vw - 32px));
+  max-width: calc(100vw - 32px);
+  max-height: calc(100dvh - 32px);
+  min-width: 0;
+  overflow-y: auto;
+}
+
+.rack-location-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.rack-location-modal-header > div,
+.rack-side-header > div,
+.rack-modal-section-title > div,
+.rack-location-inventory-item > div {
+  min-width: 0;
+}
+
+.rack-modal-close {
+  flex: 0 0 auto;
+}
+
+.rack-location-modal :is(h3, p, span, strong, small, label),
+.rack-front-side-panel :is(h3, p, span, strong, small, label) {
+  overflow-wrap: anywhere;
+}
+
+.rack-location-modal-header span,
+.rack-location-modal-header h3,
+.rack-side-header p,
+.rack-five-block :is(strong, span, small) {
+  white-space: normal;
+}
+
+.rack-location-modal .overview-actions,
+.rack-front-side-panel .overview-actions,
+.load-details-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.rack-location-modal > .overview-actions {
+  margin: 16px 18px;
+}
+
+.rack-location-modal .overview-actions button,
+.rack-front-side-panel .overview-actions button {
+  padding: 9px 14px;
+  border: 1px solid #315269;
+  border-radius: 8px;
+  background: #102b40;
+  color: #e2f1ff;
+  cursor: pointer;
+}
+
+.rack-front-side-panel .overview-actions button[aria-pressed="true"] {
+  border-color: #22d3ee;
+  background: #134155;
+}
+
+.rack-location-modal button,
+.rack-front-side-panel button {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.rack-location-modal button:disabled,
+.rack-front-side-panel button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.rack-location-overview {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.rack-operation-form {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.rack-operation-form > *,
+.rack-location-overview > *,
+.rack-five-level-blocks {
+  min-width: 0;
+}
+
+.rack-location-modal input,
+.rack-location-modal select,
+.rack-front-side-panel input,
+.rack-front-side-panel select {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.rack-location-modal > .load-details-panel {
+  margin: 16px 18px;
+  padding: 18px;
+}
+
+.load-details-heading {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-bottom: 16px;
+}
+
+.load-details-heading > div {
+  min-width: 0;
+}
+
+.load-details-heading h3 {
+  margin: 0 0 8px;
+}
+
+.load-details-heading p {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.load-type-visual {
+  display: block;
+  width: 112px;
+  height: 84px;
+  max-width: 100%;
+  flex: 0 0 auto;
+}
+
+.load-details-panel label {
+  display: grid;
+  gap: 8px;
+}
+
+.load-details-actions {
+  margin-top: 14px;
+}
+
+.load-position-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.load-position-item {
+  min-width: 0;
+}
+
+.load-position-label {
+  display: block;
+  margin-bottom: 8px;
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.load-position-grid .load-location-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: auto;
+  min-height: 190px;
+  padding: 18px;
+  text-align: center;
+}
+
+.load-location-card .load-type-visual {
+  width: 144px;
+  height: 108px;
+}
+
+.rack-side-hint {
+  align-items: flex-start;
+}
+
+.rack-side-hint > svg {
+  flex-shrink: 0;
+}
+
+@media (max-width: 640px) {
+  .rack-location-overview {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .rack-operation-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .load-details-heading {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .rack-location-inventory-item {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .rack-location-inventory-item > div {
+    flex: 1 1 140px;
+  }
+}

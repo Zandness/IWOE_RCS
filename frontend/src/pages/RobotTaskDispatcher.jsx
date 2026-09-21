@@ -1,9 +1,4 @@
-import {
-  useEffect,
-  useRef,
-  useState,
-} from "react";
-
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
 import {
@@ -22,11 +17,21 @@ import "../styles/OverviewSettings.css";
 
 const KEY = "wms-robot-tasks-v1";
 
+const TARGET_TYPES = ["STORAGE", "SITE", "CARRIER"];
+
 const PRIORITIES = {
   30: "LOW",
   60: "NORMAL",
   90: "HIGH",
   120: "URGENT",
+};
+
+const TABLE_STYLE = {
+  minWidth: 860,
+};
+
+const CELL_STYLE = {
+  overflowWrap: "anywhere",
 };
 
 function loadQueue() {
@@ -43,10 +48,76 @@ function loadQueue() {
   return value;
 }
 
-export function orderReady(
-  queue,
-  now = Date.now(),
-) {
+function normalizeTargetType(value) {
+  const type = value == null || value === ""
+    ? "STORAGE"
+    : value;
+
+  if (!TARGET_TYPES.includes(type)) {
+    throw new Error(`Unsupported RCS target type: ${type}`);
+  }
+
+  return type;
+}
+
+function normalizeTarget(value, fallbackCode, label) {
+  // Compatibility with the original Monitor form:
+  // missing target objects use STORAGE and the WMS location code.
+  if (
+    value != null &&
+    (typeof value !== "object" || Array.isArray(value))
+  ) {
+    throw new Error(`Invalid ${label} RCS target.`);
+  }
+
+  const type = normalizeTargetType(value?.type);
+
+  const rawCode = value == null
+    ? fallbackCode
+    : value.code;
+
+  if (typeof rawCode !== "string" || !rawCode.trim()) {
+    throw new Error(`Enter the ${label} RCS target code.`);
+  }
+
+  return {
+    type,
+    code: rawCode.trim(),
+  };
+}
+
+function targetsFor(task) {
+  const source = normalizeTarget(
+    {
+      type: task.sourceRcsTargetType,
+      code: task.sourceRcsPointCode,
+    },
+    "",
+    "source",
+  );
+
+  const destination = normalizeTarget(
+    {
+      type: task.destinationRcsTargetType,
+      code: task.destinationRcsPointCode,
+    },
+    "",
+    "destination",
+  );
+
+  if (
+    source.type === destination.type &&
+    source.code === destination.code
+  ) {
+    throw new Error(
+      "Source and destination RCS targets must differ.",
+    );
+  }
+
+  return { source, destination };
+}
+
+export function orderReady(queue, now = Date.now()) {
   return queue
     .filter(
       (task) =>
@@ -67,26 +138,66 @@ export function orderReady(
 }
 
 export function commandFor(task) {
+  const { source, destination } = targetsFor(task);
+
+  const robotCode = String(task.rcsRobotCode || "").trim();
+
   return {
     robotTaskCode: task.warehouseTaskId,
     taskType: task.rcsTaskType || "CTUB1",
+
+    ...(robotCode ? { robotCode } : {}),
+
     initPriority: Number(task.rcsPriority || 60),
     scheduledSendAt: task.scheduledSendAt || null,
 
     source: {
-      type: task.sourceRcsTargetType || "STORAGE",
-      code: task.sourceRcsPointCode,
+      ...source,
       autoStart: 1,
       mapCode: task.sourceRcsMapCode || "",
     },
 
     destination: {
-      type: task.destinationRcsTargetType || "STORAGE",
-      code: task.destinationRcsPointCode,
+      ...destination,
       autoStart: 1,
       mapCode: task.destinationRcsMapCode || "",
     },
   };
+}
+
+function commandText(task) {
+  try {
+    return JSON.stringify(commandFor(task), null, 2);
+  } catch (error) {
+    return `Cannot prepare command: ${error.message}`;
+  }
+}
+
+function assertWmsLocationsUnchanged(task, from, to) {
+  // New entries preserve WMS codes separately from RCS codes.
+  // Old entries used the WMS code directly as the RCS code.
+  const sourceWmsCode = Object.prototype.hasOwnProperty.call(
+    task,
+    "sourceWmsLocationCode",
+  )
+    ? task.sourceWmsLocationCode
+    : task.sourceRcsPointCode;
+
+  const destinationWmsCode = Object.prototype.hasOwnProperty.call(
+    task,
+    "destinationWmsLocationCode",
+  )
+    ? task.destinationWmsLocationCode
+    : task.destinationRcsPointCode;
+
+  if (
+    String(from.code || "") !== String(sourceWmsCode || "") ||
+    String(to.code || "") !== String(destinationWmsCode || "")
+  ) {
+    throw new Error(
+      "WMS location codes changed. Remove this unsent task and recreate it.",
+    );
+  }
 }
 
 async function timed(call) {
@@ -98,9 +209,7 @@ async function timed(call) {
   );
 
   try {
-    return await call({
-      signal: controller.signal,
-    });
+    return await call({ signal: controller.signal });
   } finally {
     window.clearTimeout(timer);
   }
@@ -109,30 +218,36 @@ async function timed(call) {
 function datetimeInput(value) {
   const date = new Date(value);
 
-  if (!Number.isFinite(date.getTime())) {
-    return "";
-  }
+  if (!Number.isFinite(date.getTime())) return "";
 
   return new Date(
-    date.getTime() -
-      date.getTimezoneOffset() * 60000,
+    date.getTime() - date.getTimezoneOffset() * 60000,
   )
     .toISOString()
     .slice(0, 16);
 }
 
+function RouteText({ task }) {
+  return (
+    <span>
+      {task.sourceRcsTargetType || "STORAGE"}
+      {": "}
+      {task.sourceRcsPointCode}
+      <br />
+      {"→ "}
+      {task.destinationRcsTargetType || "STORAGE"}
+      {": "}
+      {task.destinationRcsPointCode}
+    </span>
+  );
+}
+
 export default function RobotTaskDispatcher() {
   const [initial] = useState(() => {
     try {
-      return {
-        queue: loadQueue(),
-        error: "",
-      };
+      return { queue: loadQueue(), error: "" };
     } catch (error) {
-      return {
-        queue: [],
-        error: error.message,
-      };
+      return { queue: [], error: error.message };
     }
   });
 
@@ -141,29 +256,33 @@ export default function RobotTaskDispatcher() {
   const [message, setMessage] = useState(initial.error);
   const [details, setDetails] = useState("");
   const [now, setNow] = useState(Date.now());
+  const [checking, setChecking] = useState(false);
+  const [connection, setConnection] = useState(
+    "Backend not checked",
+  );
 
   const ref = useRef(queue);
   const enabled = useRef(false);
   const busy = useRef(false);
   const blocked = useRef(Boolean(initial.error));
   const alive = useRef(true);
-
-  const [checking, setChecking] = useState(false);
-
-  const [connection, setConnection] = useState(
-    "Backend not checked",
-  );
-
   const checkingRef = useRef(false);
   const startVersion = useRef(0);
 
-  async function startQueue() {
-    if (checkingRef.current || blocked.current) {
-      return;
+  function pause(text) {
+    startVersion.current += 1;
+    enabled.current = false;
+
+    if (alive.current) {
+      setRunning(false);
+      if (text) setMessage(text);
     }
+  }
+
+  async function startQueue() {
+    if (checkingRef.current || blocked.current) return;
 
     checkingRef.current = true;
-
     const ticket = ++startVersion.current;
 
     setChecking(true);
@@ -195,9 +314,7 @@ export default function RobotTaskDispatcher() {
 
       if (
         ref.current.some((task) =>
-          ["SENDING", "OUTCOME_UNKNOWN"].includes(
-            task.sendStatus,
-          ),
+          ["SENDING", "OUTCOME_UNKNOWN"].includes(task.sendStatus),
         )
       ) {
         throw new Error(
@@ -206,7 +323,6 @@ export default function RobotTaskDispatcher() {
       }
 
       enabled.current = true;
-
       setRunning(true);
 
       setMessage(
@@ -222,43 +338,19 @@ export default function RobotTaskDispatcher() {
       }
     } finally {
       checkingRef.current = false;
-
-      if (alive.current) {
-        setChecking(false);
-      }
-    }
-  }
-
-  function pause(text) {
-    startVersion.current += 1;
-    enabled.current = false;
-
-    if (alive.current) {
-      setRunning(false);
-
-      if (text) {
-        setMessage(text);
-      }
+      if (alive.current) setChecking(false);
     }
   }
 
   function commit(next) {
-    localStorage.setItem(
-      KEY,
-      JSON.stringify(next),
-    );
-
+    localStorage.setItem(KEY, JSON.stringify(next));
     ref.current = next;
 
-    if (alive.current) {
-      setQueue(next);
-    }
+    if (alive.current) setQueue(next);
 
     window.dispatchEvent(
       new CustomEvent("wms-data-changed", {
-        detail: {
-          keys: [KEY],
-        },
+        detail: { keys: [KEY] },
       }),
     );
   }
@@ -271,7 +363,6 @@ export default function RobotTaskDispatcher() {
           : {
               ...task,
               ...changes,
-
               history: note
                 ? [
                     ...(task.history || []),
@@ -314,15 +405,10 @@ export default function RobotTaskDispatcher() {
         "CANCELED",
       ].includes(status)
     ) {
-      throw new Error(
-        `Unrecognized RCS status: ${status}`,
-      );
+      throw new Error(`Unrecognized RCS status: ${status}`);
     }
 
-    if (
-      status === "COMPLETED" &&
-      queueTask.basketId
-    ) {
+    if (status === "COMPLETED" && queueTask.basketId) {
       completeBasketTransfer({
         ...queueTask,
         rcsStatus: status,
@@ -331,30 +417,23 @@ export default function RobotTaskDispatcher() {
 
     patch(
       queueTask.id,
-
       {
         rcsStatus: status,
         backendError: "",
         lastStatusCheckAt: new Date().toISOString(),
       },
-
       queueTask.rcsStatus !== status
         ? `RCS ${status}${
-            status === "COMPLETED" &&
-            queueTask.basketId
-              ? ": basket location updated"
+            status === "COMPLETED" && queueTask.basketId
+              ? ": load location updated"
               : ""
           }`
         : "",
     );
 
-    if (
-      ["FAILED", "CANCELLED", "CANCELED"].includes(
-        status,
-      )
-    ) {
+    if (["FAILED", "CANCELLED", "CANCELED"].includes(status)) {
       pause(
-        "Task stopped. Check the physical basket location before continuing.",
+        "Task stopped. Check the physical load location before continuing.",
       );
     }
   }
@@ -374,60 +453,41 @@ export default function RobotTaskDispatcher() {
           );
         }
 
-        const response = await timed(
-          (options) =>
-            getRcsBridgeTask(
-              task.bridgeTaskId,
-              options,
-            ),
+        const response = await timed((options) =>
+          getRcsBridgeTask(task.bridgeTaskId, options),
         );
 
         applySnapshot(task, response);
       } catch (error) {
-        patch(task.id, {
-          backendError: error.message,
-        });
-
+        patch(task.id, { backendError: error.message });
         pause(error.message);
       }
     }
   }
 
   async function tick() {
-    if (busy.current || blocked.current) {
-      return;
-    }
-
+    if (busy.current || blocked.current) return;
     busy.current = true;
 
     try {
       await pollActive();
 
-      // Recover a confirmed completion after a reload.
       for (const task of ref.current) {
-        if (
-          task.basketId &&
-          task.rcsStatus === "COMPLETED"
-        ) {
+        if (task.basketId && task.rcsStatus === "COMPLETED") {
           completeBasketTransfer(task);
         }
       }
 
-      if (!enabled.current) {
-        return;
-      }
+      if (!enabled.current) return;
 
       if (
         ref.current.some((task) =>
-          ["SENDING", "OUTCOME_UNKNOWN"].includes(
-            task.sendStatus,
-          ),
+          ["SENDING", "OUTCOME_UNKNOWN"].includes(task.sendStatus),
         )
       ) {
         pause(
           "An earlier submission has an unknown outcome. Check unresolved tasks first.",
         );
-
         return;
       }
 
@@ -442,24 +502,19 @@ export default function RobotTaskDispatcher() {
       }
 
       const next = orderReady(ref.current)[0];
-
-      if (!next) {
-        return;
-      }
+      if (!next) return;
 
       if (!next.basketId) {
         pause(
-          "This legacy task has no basket data. Review it and recreate an unsent transfer from Monitor.",
+          "This legacy task has no load data. Review it and recreate an unsent transfer from Monitor.",
         );
-
         return;
       }
 
-      const bridge = await timed(
-        getRcsBridgeStatus,
-      );
+      const bridge = await timed(getRcsBridgeStatus);
 
       if (
+        !bridge.ok ||
         bridge.bridgeMode !== "HIK" ||
         !bridge.hikConfigured
       ) {
@@ -468,7 +523,6 @@ export default function RobotTaskDispatcher() {
         );
       }
 
-      // A more urgent task may arrive during the check.
       if (
         !enabled.current ||
         !alive.current ||
@@ -481,6 +535,8 @@ export default function RobotTaskDispatcher() {
         (task) => task.id === next.id,
       );
 
+      if (!live || live.sendStatus !== "NOT_SENT") return;
+
       const { from, to } = validateTransfer(
         live.sourceLocationId,
         live.destinationLocationId,
@@ -488,44 +544,38 @@ export default function RobotTaskDispatcher() {
         live.basketId,
       );
 
-      if (
-        from.code !== live.sourceRcsPointCode ||
-        to.code !== live.destinationRcsPointCode
-      ) {
-        throw new Error(
-          "Location codes changed. Remove this unsent task and recreate it.",
-        );
-      }
+      assertWmsLocationsUnchanged(live, from, to);
+
+      // Validate and prepare the exact bridge request before
+      // marking the entry as SENDING.
+      const command = commandFor(live);
 
       const sequence =
         Math.max(
           0,
-          ...ref.current.map((task) =>
-            Number(task.dispatchSequence || 0),
-          ),
+          ...ref.current.map((task) => {
+            const value = Number(task.dispatchSequence || 0);
+            return Number.isFinite(value) ? value : 0;
+          }),
         ) + 1;
 
-      // Persist before sending. Do not blindly retry.
       patch(
         live.id,
-
         {
           sendStatus: "SENDING",
           dispatchSequence: sequence,
           sendStartedAt: new Date().toISOString(),
           backendError: "",
-        },
 
+          // Store the frontend-to-backend request for review.
+          submittedBridgeCommand: command,
+        },
         "Submitting to RCS",
       );
 
       try {
-        const response = await timed(
-          (options) =>
-            createRcsBridgeTask(
-              commandFor(live),
-              options,
-            ),
+        const response = await timed((options) =>
+          createRcsBridgeTask(command, options),
         );
 
         if (
@@ -540,7 +590,6 @@ export default function RobotTaskDispatcher() {
 
         patch(
           live.id,
-
           {
             sendStatus: "SENT",
             bridgeTaskId: response.bridgeTaskId,
@@ -549,18 +598,15 @@ export default function RobotTaskDispatcher() {
             rcsStatus: "CREATED",
             sentAt: new Date().toISOString(),
           },
-
           "RCS accepted the task; waiting for completion",
         );
       } catch (error) {
         patch(
           live.id,
-
           {
             sendStatus: "OUTCOME_UNKNOWN",
             backendError: error.message,
           },
-
           "Check submission outcome before retrying",
         );
 
@@ -574,25 +620,19 @@ export default function RobotTaskDispatcher() {
   }
 
   async function reconcile() {
-    if (busy.current || blocked.current) {
-      return;
-    }
+    if (busy.current || blocked.current) return;
 
     pause();
     busy.current = true;
 
     try {
-      const response = await timed(
-        getAllRcsBridgeTasks,
-      );
+      const response = await timed(getAllRcsBridgeTasks);
 
       if (
         response.mode !== "HIK" ||
         !Array.isArray(response.tasks)
       ) {
-        throw new Error(
-          "Unexpected backend task list.",
-        );
+        throw new Error("Unexpected backend task list.");
       }
 
       for (const queueTask of [...ref.current]) {
@@ -604,14 +644,15 @@ export default function RobotTaskDispatcher() {
           continue;
         }
 
+        const expected = targetsFor(queueTask);
+
         const matches = response.tasks.filter(
           (task) =>
-            task.robotTaskCode ===
-              queueTask.warehouseTaskId &&
-            task.source?.code ===
-              queueTask.sourceRcsPointCode &&
-            task.destination?.code ===
-              queueTask.destinationRcsPointCode,
+            task.robotTaskCode === queueTask.warehouseTaskId &&
+            task.source?.code === expected.source.code &&
+            task.source?.type === expected.source.type &&
+            task.destination?.code === expected.destination.code &&
+            task.destination?.type === expected.destination.type,
         );
 
         if (
@@ -639,10 +680,7 @@ export default function RobotTaskDispatcher() {
           "Recovered backend submission",
         );
 
-        applySnapshot(recovered, {
-          mode: "HIK",
-          task,
-        });
+        applySnapshot(recovered, { mode: "HIK", task });
       }
 
       setMessage(
@@ -661,17 +699,12 @@ export default function RobotTaskDispatcher() {
     function enqueue(event) {
       const request = event.detail;
 
-      if (!request || request.handled) {
-        return;
-      }
-
+      if (!request || request.handled) return;
       request.handled = true;
 
       try {
         if (blocked.current) {
-          throw new Error(
-            "Queue storage is unreadable.",
-          );
+          throw new Error("Queue storage is unreadable.");
         }
 
         const {
@@ -679,12 +712,26 @@ export default function RobotTaskDispatcher() {
           from,
           to,
           scheduledSendAt,
-        } = request.payload;
+        } = request.payload || {};
 
-        const current = validateTransfer(
-          from.id,
-          to.id,
-        );
+        if (!draft || !from?.id || !to?.id) {
+          throw new Error("Incomplete transfer request.");
+        }
+
+        const current = validateTransfer(from.id, to.id);
+
+        // Check that the form's WMS data is still current.
+        if (
+          String(from.code || "") !==
+            String(current.from.code || "") ||
+          String(to.code || "") !==
+            String(current.to.code || "") ||
+          from.basket?.id !== current.from.basket?.id
+        ) {
+          throw new Error(
+            "WMS location or load data changed. Review the transfer again.",
+          );
+        }
 
         const taskType =
           typeof draft.taskType === "string"
@@ -697,61 +744,81 @@ export default function RobotTaskDispatcher() {
           );
         }
 
-        const priority = Number(
-          draft.initPriority,
-        );
+        const priority = Number(draft.initPriority);
 
         if (!PRIORITIES[priority]) {
           throw new Error("Invalid priority.");
         }
 
-        const time =
-          scheduledSendAt ||
-          new Date().toISOString();
+        const sourceTarget = normalizeTarget(
+          draft.source,
+          current.from.code,
+          "source",
+        );
 
-        if (!Number.isFinite(Date.parse(time))) {
+        const destinationTarget = normalizeTarget(
+          draft.destination,
+          current.to.code,
+          "destination",
+        );
+
+        if (
+          sourceTarget.type === destinationTarget.type &&
+          sourceTarget.code === destinationTarget.code
+        ) {
           throw new Error(
-            "Invalid scheduled time.",
+            "Source and destination RCS targets must differ.",
           );
         }
 
-        const id = `RCSQ-${crypto.randomUUID()}`;
+        const time =
+          scheduledSendAt || new Date().toISOString();
 
-        commit([
-          ...ref.current,
+        if (!Number.isFinite(Date.parse(time))) {
+          throw new Error("Invalid scheduled time.");
+        }
 
-          {
-            id,
+        const task = {
+          id: `RCSQ-${crypto.randomUUID()}`,
+          warehouseTaskId: `MON-${crypto.randomUUID()}`,
 
-            warehouseTaskId:
-              `MON-${crypto.randomUUID()}`,
+          origin: "MONITOR",
+          type: "STORAGE_TRANSFER",
+          basketId: current.from.basket.id,
 
-            origin: "MONITOR",
-            type: "STORAGE_TRANSFER",
-            basketId: current.from.basket.id,
+          rcsTaskType: taskType,
+          rcsRobotCode: String(draft.robotCode || "").trim(),
 
-            rcsTaskType: taskType,
+          // Internal WMS locations used for stock/occupancy updates.
+          sourceLocationId: current.from.id,
+          destinationLocationId: current.to.id,
 
-            sourceLocationId: current.from.id,
-            destinationLocationId: current.to.id,
+          // Snapshot WMS codes separately from API target codes.
+          sourceWmsLocationCode: String(current.from.code || ""),
+          destinationWmsLocationCode: String(current.to.code || ""),
 
-            sourceRcsPointCode: current.from.code,
-            destinationRcsPointCode: current.to.code,
+          // API targets from the updated Monitor form.
+          sourceRcsPointCode: sourceTarget.code,
+          destinationRcsPointCode: destinationTarget.code,
 
-            sourceRcsTargetType: "STORAGE",
-            destinationRcsTargetType: "STORAGE",
+          sourceRcsTargetType: sourceTarget.type,
+          destinationRcsTargetType: destinationTarget.type,
 
-            wmsPriority: PRIORITIES[priority],
-            rcsPriority: priority,
+          wmsPriority: PRIORITIES[priority],
+          rcsPriority: priority,
 
-            scheduledSendAt: time,
-            createdAt: new Date().toISOString(),
+          scheduledSendAt: time,
+          createdAt: new Date().toISOString(),
 
-            sendStatus: "NOT_SENT",
-            rcsStatus: "NOT_SENT",
-            history: [],
-          },
-        ]);
+          sendStatus: "NOT_SENT",
+          rcsStatus: "NOT_SENT",
+          history: [],
+        };
+
+        // Validate the bridge command before saving the entry.
+        commandFor(task);
+
+        commit([...ref.current, task]);
 
         if (request.payload.startAfterEnqueue) {
           void startQueue();
@@ -762,12 +829,7 @@ export default function RobotTaskDispatcher() {
     }
 
     function storage(event) {
-      if (
-        event.key !== KEY &&
-        event.key !== null
-      ) {
-        return;
-      }
+      if (event.key !== KEY && event.key !== null) return;
 
       pause(
         "Queue changed in another tab. Use one WMS tab for dispatch.",
@@ -788,10 +850,7 @@ export default function RobotTaskDispatcher() {
       enqueue,
     );
 
-    window.addEventListener(
-      "storage",
-      storage,
-    );
+    window.addEventListener("storage", storage);
 
     const timer = window.setInterval(() => {
       setNow(Date.now());
@@ -801,32 +860,38 @@ export default function RobotTaskDispatcher() {
     return () => {
       alive.current = false;
       enabled.current = false;
+      startVersion.current += 1;
 
       window.clearInterval(timer);
-
       window.removeEventListener(
         "wms-rcs-enqueue-request",
         enqueue,
       );
-
-      window.removeEventListener(
-        "storage",
-        storage,
-      );
+      window.removeEventListener("storage", storage);
     };
   }, []);
 
   function edit(id, value) {
     try {
-      const item = ref.current.find(
-        (task) => task.id === id,
-      );
+      const item = ref.current.find((task) => task.id === id);
 
-      if (item?.sendStatus !== "NOT_SENT") {
-        return;
-      }
+      if (item?.sendStatus !== "NOT_SENT") return;
 
       patch(id, value);
+    } catch (error) {
+      pause(error.message);
+    }
+  }
+
+  function removeUnsent(id) {
+    try {
+      commit(
+        ref.current.filter(
+          (task) =>
+            task.id !== id ||
+            task.sendStatus !== "NOT_SENT",
+        ),
+      );
     } catch (error) {
       pause(error.message);
     }
@@ -841,16 +906,11 @@ export default function RobotTaskDispatcher() {
   const ready = orderReady(queue, now);
 
   const readyIds = new Map(
-    ready.map((task, index) => [
-      task.id,
-      index + 1,
-    ]),
+    ready.map((task, index) => [task.id, index + 1]),
   );
 
   const pending = queue
-    .filter(
-      (task) => task.sendStatus === "NOT_SENT",
-    )
+    .filter((task) => task.sendStatus === "NOT_SENT")
     .sort(
       (a, b) =>
         (readyIds.get(a.id) || 100000) -
@@ -860,33 +920,26 @@ export default function RobotTaskDispatcher() {
     );
 
   const submitted = queue
-    .filter(
-      (task) => task.sendStatus !== "NOT_SENT",
-    )
+    .filter((task) => task.sendStatus !== "NOT_SENT")
     .sort(
       (a, b) =>
         Number(b.dispatchSequence || 0) -
         Number(a.dispatchSequence || 0),
     );
 
-  const detailTask = queue.find(
-    (task) => task.id === details,
-  );
+  const detailTask = queue.find((task) => task.id === details);
 
   return (
     <div className="page wms-overview">
       <div className="page-header">
         <div>
-          <span className="page-label">
-            RCS DISPATCH
-          </span>
-
-          <h2>Basket transfer queue</h2>
+          <span className="page-label">RCS DISPATCH</span>
+          <h2>Load transfer queue</h2>
 
           <p>
-            Create transfers in Monitor, then start
-            this queue. Ready tasks run by priority,
-            then arrival order. The active task finishes first.
+            Create transfers in Monitor, then start this queue.
+            Ready tasks run by priority, then arrival order.
+            The active task finishes first.
           </p>
         </div>
       </div>
@@ -900,16 +953,10 @@ export default function RobotTaskDispatcher() {
           <button
             type="button"
             className="primary-button"
-            disabled={
-              running ||
-              checking ||
-              blocked.current
-            }
+            disabled={running || checking || blocked.current}
             onClick={startQueue}
           >
-            {checking
-              ? "Checking backend…"
-              : "Start Queue"}
+            {checking ? "Checking backend…" : "Start Queue"}
           </button>
 
           <button
@@ -917,9 +964,7 @@ export default function RobotTaskDispatcher() {
             className="primary-button"
             disabled={!running && !checking}
             onClick={() =>
-              pause(
-                "Queue paused. The active robot task continues.",
-              )
+              pause("Queue paused. The active robot task continues.")
             }
           >
             Pause Queue
@@ -936,9 +981,7 @@ export default function RobotTaskDispatcher() {
 
         <p>
           <strong>
-            {running
-              ? "Queue running"
-              : "Queue paused"}
+            {running ? "Queue running" : "Queue paused"}
           </strong>
           {" · "}
           {ready.length} ready
@@ -951,21 +994,17 @@ export default function RobotTaskDispatcher() {
         <p>
           {connection}
           {" · "}
-          <Link to="/settings">
-            Connection settings
-          </Link>
+          <Link to="/settings">Connection settings</Link>
         </p>
 
         {active && (
-          <div className="overview-notice">
+          <div className="overview-notice" style={CELL_STYLE}>
             <strong>
-              Active transfer:{" "}
-              {active.basketId || "Previous task"}
+              Active transfer: {active.basketId || "Previous task"}
             </strong>
 
             <p>
-              {active.sourceRcsPointCode} →{" "}
-              {active.destinationRcsPointCode}
+              <RouteText task={active} />
               {" · "}
               {active.rcsStatus}
             </p>
@@ -978,15 +1017,13 @@ export default function RobotTaskDispatcher() {
 
             <p>
               {active.backendError ||
-                "Checking task status automatically. The basket location updates after confirmed completion."}
+                "Checking task status automatically. The load location updates after confirmed completion."}
             </p>
 
             {active.lastStatusCheckAt && (
               <small>
                 Last checked:{" "}
-                {new Date(
-                  active.lastStatusCheckAt,
-                ).toLocaleString()}
+                {new Date(active.lastStatusCheckAt).toLocaleString()}
               </small>
             )}
           </div>
@@ -994,17 +1031,15 @@ export default function RobotTaskDispatcher() {
       </section>
 
       <section className="panel overview-section">
-        <h3>
-          Waiting transfers · {pending.length}
-        </h3>
+        <h3>Waiting transfers · {pending.length}</h3>
 
-        <div className="table-wrapper">
-          <table className="dashboard-table">
+        <div className="table-wrapper" style={{ overflowX: "auto" }}>
+          <table className="dashboard-table" style={TABLE_STYLE}>
             <thead>
               <tr>
                 <th>Ready order</th>
                 <th>Task type</th>
-                <th>Basket / route</th>
+                <th>Load / route</th>
                 <th>Priority</th>
                 <th>Scheduled send time</th>
                 <th>Action</th>
@@ -1014,30 +1049,22 @@ export default function RobotTaskDispatcher() {
             <tbody>
               {!pending.length && (
                 <tr>
-                  <td colSpan={6}>
-                    No waiting transfers.
-                  </td>
+                  <td colSpan={6}>No waiting transfers.</td>
                 </tr>
               )}
 
               {pending.map((task) => (
                 <tr key={task.id}>
-                  <td>
-                    {readyIds.get(task.id) ||
-                      "Scheduled"}
+                  <td>{readyIds.get(task.id) || "Scheduled"}</td>
+
+                  <td style={CELL_STYLE}>
+                    {task.rcsTaskType || "CTUB1"}
                   </td>
 
-                  <td>{task.rcsTaskType || "CTUB1"}</td>
-
-                  <td>
-                    <strong>
-                      {task.basketId || "Legacy task"}
-                    </strong>
-
+                  <td style={CELL_STYLE}>
+                    <strong>{task.basketId || "Legacy task"}</strong>
                     <br />
-
-                    {task.sourceRcsPointCode} →{" "}
-                    {task.destinationRcsPointCode}
+                    <RouteText task={task} />
                   </td>
 
                   <td>
@@ -1046,21 +1073,14 @@ export default function RobotTaskDispatcher() {
                       value={task.rcsPriority || 60}
                       onChange={(event) =>
                         edit(task.id, {
-                          rcsPriority: Number(
-                            event.target.value,
-                          ),
-
-                          wmsPriority:
-                            PRIORITIES[event.target.value],
+                          rcsPriority: Number(event.target.value),
+                          wmsPriority: PRIORITIES[event.target.value],
                         })
                       }
                     >
                       {Object.entries(PRIORITIES).map(
                         ([value, label]) => (
-                          <option
-                            key={value}
-                            value={value}
-                          >
+                          <option key={value} value={value}>
                             {label}
                           </option>
                         ),
@@ -1072,20 +1092,15 @@ export default function RobotTaskDispatcher() {
                     <input
                       aria-label={`Send time ${task.id}`}
                       type="datetime-local"
-                      value={datetimeInput(
-                        task.scheduledSendAt,
-                      )}
+                      value={datetimeInput(task.scheduledSendAt)}
                       onChange={(event) => {
                         const value = event.target.value
                           ? new Date(event.target.value)
                           : new Date();
 
-                        if (
-                          Number.isFinite(value.getTime())
-                        ) {
+                        if (Number.isFinite(value.getTime())) {
                           edit(task.id, {
-                            scheduledSendAt:
-                              value.toISOString(),
+                            scheduledSendAt: value.toISOString(),
                           });
                         }
                       }}
@@ -1095,95 +1110,16 @@ export default function RobotTaskDispatcher() {
                   <td>
                     <button
                       type="button"
-                      onClick={() => {
-                        try {
-                          commit(
-                            ref.current.filter(
-                              (item) =>
-                                item.id !== task.id ||
-                                item.sendStatus !== "NOT_SENT",
-                            ),
-                          );
-                        } catch (error) {
-                          pause(error.message);
-                        }
-                      }}
+                      onClick={() => removeUnsent(task.id)}
                     >
                       Remove
                     </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
 
-      <section className="panel overview-section">
-        <h3>
-          Submitted tasks · {submitted.length}
-        </h3>
-
-        <div className="table-wrapper">
-          <table className="dashboard-table">
-            <thead>
-              <tr>
-                <th>Send order</th>
-                <th>Task type</th>
-                <th>Basket / route</th>
-                <th>Status</th>
-                <th>RCS task ID</th>
-                <th>Details</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {!submitted.length && (
-                <tr>
-                  <td colSpan={6}>
-                    No submitted tasks.
-                  </td>
-                </tr>
-              )}
-
-              {submitted.map((task) => (
-                <tr key={task.id}>
-                  <td>
-                    {task.dispatchSequence || "—"}
-                  </td>
-
-                  <td>{task.rcsTaskType || "CTUB1"}</td>
-
-                  <td>
-                    {task.basketId || "Legacy task"}
-
-                    <br />
-
-                    {task.sourceRcsPointCode} →{" "}
-                    {task.destinationRcsPointCode}
-                  </td>
-
-                  <td>
-                    {task.backendError
-                      ? "Needs attention"
-                      : task.sendStatus === "SENT"
-                        ? task.rcsStatus
-                        : task.sendStatus}
-                  </td>
-
-                  <td>
-                    {task.rcsTaskChainCode ||
-                      "Unconfirmed"}
-                  </td>
-
-                  <td>
                     <button
                       type="button"
                       onClick={() =>
-                        setDetails(
-                          details === task.id
-                            ? ""
-                            : task.id,
+                        setDetails((value) =>
+                          value === task.id ? "" : task.id,
                         )
                       }
                     >
@@ -1195,32 +1131,139 @@ export default function RobotTaskDispatcher() {
             </tbody>
           </table>
         </div>
-
-        {detailTask && (
-          <div className="overview-notice">
-            <p>
-              Task type: {detailTask.rcsTaskType || "CTUB1"}
-            </p>
-
-            <p>
-              {detailTask.backendError ||
-                detailTask.rcsStatus}
-            </p>
-
-            <ul>
-              {(detailTask.history || []).map(
-                (record, index) => (
-                  <li key={record.id || index}>
-                    {record.at || record.createdAt}
-                    {" · "}
-                    {record.message}
-                  </li>
-                ),
-              )}
-            </ul>
-          </div>
-        )}
       </section>
+
+      <section className="panel overview-section">
+        <h3>Submitted tasks · {submitted.length}</h3>
+
+        <div className="table-wrapper" style={{ overflowX: "auto" }}>
+          <table className="dashboard-table" style={TABLE_STYLE}>
+            <thead>
+              <tr>
+                <th>Send order</th>
+                <th>Task type</th>
+                <th>Load / route</th>
+                <th>Status</th>
+                <th>RCS task ID</th>
+                <th>Details</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {!submitted.length && (
+                <tr>
+                  <td colSpan={6}>No submitted tasks.</td>
+                </tr>
+              )}
+
+              {submitted.map((task) => (
+                <tr key={task.id}>
+                  <td>{task.dispatchSequence || "—"}</td>
+
+                  <td style={CELL_STYLE}>
+                    {task.rcsTaskType || "CTUB1"}
+                  </td>
+
+                  <td style={CELL_STYLE}>
+                    {task.basketId || "Legacy task"}
+                    <br />
+                    <RouteText task={task} />
+                  </td>
+
+                  <td>
+                    {task.backendError
+                      ? "Needs attention"
+                      : task.sendStatus === "SENT"
+                        ? task.rcsStatus
+                        : task.sendStatus}
+                  </td>
+
+                  <td style={CELL_STYLE}>
+                    {task.rcsTaskChainCode || "Unconfirmed"}
+                  </td>
+
+                  <td>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setDetails((value) =>
+                          value === task.id ? "" : task.id,
+                        )
+                      }
+                    >
+                      Details
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {detailTask && (
+        <section
+          className="panel overview-section"
+          style={CELL_STYLE}
+        >
+          <h3>Transfer details</h3>
+
+          <p>Task type: {detailTask.rcsTaskType || "CTUB1"}</p>
+
+          <p>
+            WMS locations: {detailTask.sourceLocationId}
+            {" → "}
+            {detailTask.destinationLocationId}
+          </p>
+
+          <p>
+            <RouteText task={detailTask} />
+          </p>
+
+          <p>
+            Robot: {detailTask.rcsRobotCode || "Assigned by RCS"}
+          </p>
+
+          <p>
+            {detailTask.backendError || detailTask.rcsStatus}
+          </p>
+
+          <details>
+            <summary>
+              {detailTask.submittedBridgeCommand
+                ? "Saved request sent to backend"
+                : "Backend request preview"}
+            </summary>
+
+            <pre
+              style={{
+                maxWidth: "100%",
+                overflowX: "auto",
+                whiteSpace: "pre-wrap",
+                overflowWrap: "anywhere",
+              }}
+            >
+              {detailTask.submittedBridgeCommand
+                ? JSON.stringify(
+                    detailTask.submittedBridgeCommand,
+                    null,
+                    2,
+                  )
+                : commandText(detailTask)}
+            </pre>
+          </details>
+
+          <ul>
+            {(detailTask.history || []).map((record, index) => (
+              <li key={record.id || index}>
+                {record.at || record.createdAt}
+                {" · "}
+                {record.message}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
     </div>
   );
 }

@@ -25,6 +25,10 @@ import BasketDetails from "../components/BasketDetails";
 import MonitorRcsDispatch from "../components/MonitorRcsDispatch";
 import RackShelfSettings from "../components/RackShelfSettings";
 
+import LoadTypeVisual, {
+  getLoadInfo,
+} from "../components/LoadTypeVisual";
+
 import {
   rackShelfCount,
   rackDepthCount,
@@ -48,7 +52,7 @@ const LEGACY_MONITOR_STORAGE_KEYS = [
   "wms-monitor-master-v1",
 ];
 
-const CURRENT_LAYOUT_VERSION = 4;
+const CURRENT_LAYOUT_VERSION = 5;
 const SHELF_COUNT = 8;
 
 const DEFAULT_SKUS = [
@@ -72,44 +76,171 @@ const DEFAULT_SKUS = [
   },
 ];
 
+// Convert reference-image positions to percentages on the WMS map.
+// These positions are for display only.
+function mapPosition(x, y) {
+  return {
+    left: (x / 894) * 100,
+    top: ((y + 28) / 809) * 100,
+  };
+}
+
 const DEFAULT_RACK_LAYOUT = [
-  { id: "A01", zone: "ZONE-A", left: 30.5, top: 7.9 },
-  { id: "A02", zone: "ZONE-A", left: 47.2, top: 7.9 },
-  { id: "A03", zone: "ZONE-A", left: 30.5, top: 16.2 },
-  { id: "A04", zone: "ZONE-A", left: 47.2, top: 16.2 },
-  { id: "A05", zone: "ZONE-A", left: 30.5, top: 24.8 },
-  { id: "A06", zone: "ZONE-A", left: 47.2, top: 24.8 },
-  { id: "A07", zone: "ZONE-A", left: 30.5, top: 33.0 },
-  { id: "A08", zone: "ZONE-A", left: 47.2, top: 33.0 },
+  // Existing storage: left column
+  {
+    id: "A01",
+    zone: "ZONE-A",
+    ...mapPosition(463, 32),
+  },
+  {
+    id: "A03",
+    zone: "ZONE-A",
+    ...mapPosition(463, 66),
+  },
+  {
+    id: "A05",
+    zone: "ZONE-A",
+    ...mapPosition(463, 100),
+  },
+  {
+    id: "A07",
+    zone: "ZONE-A",
+    ...mapPosition(463, 135),
+  },
 
-  { id: "B01", zone: "ZONE-B", left: 73.7, top: 17.1 },
-  { id: "B02", zone: "ZONE-B", left: 73.7, top: 24.9 },
-  { id: "B03", zone: "ZONE-B", left: 73.7, top: 32.9 },
+  // Existing storage: middle column
+  {
+    id: "A02",
+    zone: "ZONE-A",
+    ...mapPosition(533, 32),
+  },
+  {
+    id: "A04",
+    zone: "ZONE-A",
+    ...mapPosition(533, 66),
+  },
+  {
+    id: "A06",
+    zone: "ZONE-A",
+    ...mapPosition(533, 100),
+  },
+  {
+    id: "A08",
+    zone: "ZONE-A",
+    ...mapPosition(533, 135),
+  },
 
-  { id: "C01", zone: "ZONE-C", left: 47.2, top: 78.5 },
+  // Existing storage: right column
+  {
+    id: "B01",
+    zone: "ZONE-B",
+    ...mapPosition(644, 70),
+  },
+  {
+    id: "B02",
+    zone: "ZONE-B",
+    ...mapPosition(644, 102),
+  },
+  {
+    id: "B03",
+    zone: "ZONE-B",
+    ...mapPosition(644, 135),
+  },
+
+  // Existing storage below the main group
+  {
+    id: "C01",
+    zone: "ZONE-C",
+    ...mapPosition(533, 322),
+  },
+
+  // Added storage: two positions on the left
+  {
+    id: "D01",
+    zone: "ZONE-D",
+    ...mapPosition(204, 66),
+  },
+  {
+    id: "D02",
+    zone: "ZONE-D",
+    ...mapPosition(282, 66),
+  },
+
+  // Added storage: purple square positions
+  {
+    id: "E01",
+    zone: "ZONE-E",
+    ...mapPosition(181, 269),
+  },
+  {
+    id: "E02",
+    zone: "ZONE-E",
+    ...mapPosition(136, 463),
+  },
+  {
+    id: "E03",
+    zone: "ZONE-E",
+    ...mapPosition(805, 390),
+  },
+
+  // Added storage: blue arrow position
+  {
+    id: "F01",
+    zone: "ZONE-F",
+    ...mapPosition(507, 374),
+  },
+  {
+    id: "F02",
+    zone: "ZONE-F",
+    ...mapPosition(746, 322),
+  },
 ];
 
 const DEFAULT_WAYPOINTS = [
-  { id: "WP-L1", left: 38.8, top: 8.5 },
-  { id: "WP-L2", left: 38.8, top: 16.8 },
-  { id: "WP-L3", left: 38.8, top: 25.2 },
-  { id: "WP-L4", left: 38.8, top: 33.5 },
-  { id: "WP-L5", left: 38.8, top: 41.6 },
-  { id: "WP-L6", left: 38.8, top: 57.2 },
-  { id: "WP-L7", left: 38.8, top: 69.3 },
-  { id: "WP-L8", left: 38.8, top: 79.1 },
+  // Main vertical route
+  { id: "WP-L1", ...mapPosition(498, 32) },
+  { id: "WP-L2", ...mapPosition(498, 66) },
+  { id: "WP-L3", ...mapPosition(498, 100) },
+  { id: "WP-L4", ...mapPosition(498, 135) },
+  { id: "WP-L5", ...mapPosition(498, 167) },
+  { id: "WP-L6", ...mapPosition(498, 232) },
+  { id: "WP-L7", ...mapPosition(498, 278) },
+  { id: "WP-L8", ...mapPosition(498, 322) },
 
-  { id: "WP-R1", left: 65.3, top: 17.8 },
-  { id: "WP-R2", left: 65.3, top: 25.6 },
-  { id: "WP-R3", left: 65.3, top: 33.6 },
-  { id: "WP-R4", left: 65.3, top: 41.6 },
-  { id: "WP-R5", left: 65.3, top: 57.2 },
+  // Upper-right route
+  { id: "WP-R1", ...mapPosition(608, 70) },
+  { id: "WP-R2", ...mapPosition(608, 102) },
+  { id: "WP-R3", ...mapPosition(608, 135) },
+  { id: "WP-R4", ...mapPosition(608, 167) },
+  { id: "WP-R5", ...mapPosition(608, 232) },
 
-  { id: "WP-M1", left: 48.9, top: 57.2 },
-  { id: "WP-RIGHT", left: 77.5, top: 57.2 },
+  // Connection between the upper routes
+  { id: "WP-M1", ...mapPosition(548, 232) },
+  { id: "WP-RIGHT", ...mapPosition(658, 232) },
+
+  // Left-side route
+  { id: "WP-D1", ...mapPosition(204, 184) },
+  { id: "WP-D2", ...mapPosition(282, 184) },
+  { id: "WP-D3", ...mapPosition(181, 184) },
+  { id: "WP-D4", ...mapPosition(181, 269) },
+
+  // Bottom route
+  { id: "WP-E1", ...mapPosition(302, 463) },
+  { id: "WP-E2", ...mapPosition(390, 463) },
+  { id: "WP-E3", ...mapPosition(478, 463) },
+  { id: "WP-E4", ...mapPosition(593, 463) },
+  { id: "WP-E5", ...mapPosition(593, 390) },
+  { id: "WP-E6", ...mapPosition(659, 390) },
+
+  // Route near the blue arrow
+  { id: "WP-F1", ...mapPosition(586, 374) },
+  { id: "WP-F2", ...mapPosition(630, 374) },
+  { id: "WP-F3", ...mapPosition(630, 322) },
+  { id: "WP-F4", ...mapPosition(674, 322) },
 ];
 
 const DEFAULT_ROUTE_EDGES = [
+  // Main vertical route
   ["WP-L1", "WP-L2"],
   ["WP-L2", "WP-L3"],
   ["WP-L3", "WP-L4"],
@@ -118,17 +249,37 @@ const DEFAULT_ROUTE_EDGES = [
   ["WP-L6", "WP-L7"],
   ["WP-L7", "WP-L8"],
 
+  // Upper-right route
   ["WP-R1", "WP-R2"],
   ["WP-R2", "WP-R3"],
   ["WP-R3", "WP-R4"],
   ["WP-R4", "WP-R5"],
 
+  // Upper horizontal connection
   ["WP-L6", "WP-M1"],
   ["WP-M1", "WP-R5"],
   ["WP-R5", "WP-RIGHT"],
+
+  // Left-side route
+  ["WP-D3", "WP-D1"],
+  ["WP-D1", "WP-D2"],
+  ["WP-D3", "WP-D4"],
+
+  // Bottom route
+  ["WP-E1", "WP-E2"],
+  ["WP-E2", "WP-E3"],
+  ["WP-E3", "WP-E4"],
+  ["WP-E4", "WP-E5"],
+  ["WP-E5", "WP-E6"],
+
+  // Route near the blue arrow
+  ["WP-F1", "WP-F2"],
+  ["WP-F2", "WP-F3"],
+  ["WP-F3", "WP-F4"],
 ];
 
 const DEFAULT_STORAGE_LINKS = [
+  // Existing storage
   ["A01", "WP-L1"],
   ["A02", "WP-L1"],
   ["A03", "WP-L2"],
@@ -143,6 +294,15 @@ const DEFAULT_STORAGE_LINKS = [
   ["B03", "WP-R3"],
 
   ["C01", "WP-L8"],
+
+  // Added storage
+  ["D01", "WP-D1"],
+  ["D02", "WP-D2"],
+  ["E01", "WP-D4"],
+  ["E02", "WP-E1"],
+  ["E03", "WP-E6"],
+  ["F01", "WP-F1"],
+  ["F02", "WP-F4"],
 ];
 
 export default function WarehouseMap() {
@@ -362,7 +522,7 @@ export default function WarehouseMap() {
 
         <SummaryCard
           icon={<Layers3 size={20} />}
-          title="Shelf Blocks"
+          title="Storage Positions"
           value={allShelves.length}
         />
 
@@ -433,16 +593,17 @@ export default function WarehouseMap() {
 
           <RackFrontPanel
             rack={selectedRack}
-            onResizeRack={(rackId, count, depth) =>
+            onResizeRack={(rackId, count, depth, loadType) =>
               saveAndSet(
                 resizeRack(
                   readMonitor(),
                   rackId,
                   count,
                   depth,
+                  loadType,
                 ),
               )
-              }
+            }
             onShelfClick={(shelf) =>
               setSelectedShelfRef({
                 rackId: selectedRack.id,
@@ -489,7 +650,7 @@ export default function WarehouseMap() {
                   shelf.basket?.id === patch.basket.id,
               )
             ) {
-              throw new Error("Basket ID already exists.");
+              throw new Error("Load ID already exists.");
             }
 
             if (
@@ -581,8 +742,8 @@ function WarehouseFloorPlan({
   selectedRackId,
   onSelectRack,
 }) {
-  const MAP_WIDTH = 1000;
-  const MAP_HEIGHT = 1300;
+  const MAP_WIDTH = 2682;
+  const MAP_HEIGHT = 2000;
 
   const MIN_ZOOM = 0.25;
   const MAX_ZOOM = 3;
@@ -988,7 +1149,7 @@ function StorageWaypointLinks({
             key={`${rackId}-${waypointId}`}
             from={{
               left: rack.left,
-              top: waypoint.top,
+              top: rack.top,
             }}
             to={waypoint}
           />
@@ -997,7 +1158,6 @@ function StorageWaypointLinks({
     </div>
   );
 }
-
 function FloorRoute({ from, to }) {
   const sameRow =
     Math.abs(from.top - to.top) < 0.05;
@@ -1098,14 +1258,10 @@ function RackFrontPanel({
 }) {
   const [selectedDepth, setSelectedDepth] = useState(1);
 
-  const depthCount = rack
-    ? rackDepthCount(rack)
-    : 1;
-
-  const activeDepth = Math.min(
-    selectedDepth,
-    depthCount,
-  );
+  const info = getLoadInfo(rack?.loadType);
+  const isBasket = info.type === "BASKET";
+  const depthCount = rack ? rackDepthCount(rack) : 1;
+  const activeDepth = Math.min(selectedDepth, depthCount);
 
   useEffect(() => {
     setSelectedDepth(1);
@@ -1115,48 +1271,86 @@ function RackFrontPanel({
     return (
       <aside className="rack-front-side-panel empty">
         <Warehouse size={30} />
-
-        <strong>Select a storage rack</strong>
-
-        <span>
-          Shelf blocks will appear here.
-        </span>
+        <strong>Select a storage location</strong>
+        <span>Storage details will appear here.</span>
       </aside>
     );
   }
 
-  const shelves = rack.shelves
-    .filter(
-      (shelf) => shelfDepth(shelf) === activeDepth,
-    )
-    .sort(
-      (a, b) => Number(b.level) - Number(a.level),
+  const locations = rack.shelves
+    .filter((item) => shelfDepth(item) === activeDepth)
+    .sort((a, b) =>
+      isBasket
+        ? Number(b.level) - Number(a.level)
+        : Number(a.level) - Number(b.level),
     );
 
-  const totalQty = shelves.reduce(
-    (sum, shelf) =>
+  const totalQty = locations.reduce(
+    (sum, location) =>
       sum +
-      shelf.inventory.reduce(
-        (itemSum, item) =>
-          itemSum + Number(item.quantity || 0),
+      (location.inventory || []).reduce(
+        (itemSum, item) => itemSum + Number(item.quantity || 0),
         0,
       ),
     0,
   );
+
+  function renderLocation(location) {
+    const inventory = location.inventory || [];
+    const load = basketOf(location);
+    const state = getShelfState(location);
+
+    const qty = inventory.reduce(
+      (sum, item) => sum + Number(item.quantity || 0),
+      0,
+    );
+
+    const firstItem = inventory.find(
+      (item) => Number(item.quantity || 0) > 0,
+    );
+
+    return (
+      <button
+        type="button"
+        className={`rack-five-block load-location-card ${state}`}
+        onClick={() => onShelfClick(location)}
+      >
+        {!isBasket && <LoadTypeVisual type={info.type} />}
+
+        <strong>
+          {location.code || "Set RCS location code"}
+        </strong>
+
+        <span>
+          {firstItem
+            ? `${firstItem.sku} · ${firstItem.name}`
+            : "No products"}
+        </span>
+
+        <small>
+          {load ? `${info.label} present` : `No ${info.label.toLowerCase()}`}
+          {" · "}
+          {qty} items
+        </small>
+      </button>
+    );
+  }
 
   return (
     <aside className="rack-front-side-panel">
       <div className="rack-side-header">
         <div>
           <span>{rack.zone}</span>
-          <h3>Rack {rack.id}</h3>
+          <h3>{info.label} storage · {rack.id}</h3>
 
           <p>
-            Monitor master data
+            {isBasket
+              ? `${rackShelfCount(rack)} shelf levels`
+              : info.type === "RACK"
+                ? "Whole-rack pickup"
+                : `${locations.length} storage positions per depth`}
             {" · "}
-            {rackShelfCount(rack)} shelf levels
-            {" · "}
-            {depthCount} depths
+            {depthCount} {depthCount === 1 ? "depth" : "depths"}
           </p>
         </div>
 
@@ -1166,15 +1360,12 @@ function RackFrontPanel({
         </div>
       </div>
 
-      <RackShelfSettings
-        rack={rack}
-        onSave={onResizeRack}
-      />
+      <RackShelfSettings rack={rack} onSave={onResizeRack} />
 
       <div
         className="overview-actions"
         role="group"
-        aria-label="Rack depth"
+        aria-label="Storage depth"
       >
         {Array.from(
           { length: depthCount },
@@ -1184,12 +1375,6 @@ function RackFrontPanel({
             type="button"
             key={depth}
             aria-pressed={activeDepth === depth}
-            style={{
-              borderBottom:
-                activeDepth === depth
-                  ? "3px solid #22d3ee"
-                  : "3px solid transparent",
-            }}
             onClick={() => setSelectedDepth(depth)}
           >
             Depth {depth}
@@ -1197,84 +1382,52 @@ function RackFrontPanel({
         ))}
       </div>
 
-      <div className="rack-five-shelf-frame">
-        <div className="rack-five-upright left" />
-        <div className="rack-five-upright right" />
+      {isBasket ? (
+        <div className="rack-five-shelf-frame">
+          <div className="rack-five-upright left" />
+          <div className="rack-five-upright right" />
 
-        {shelves.map((shelf) => {
-          const qty = shelf.inventory.reduce(
-            (sum, item) =>
-              sum + Number(item.quantity || 0),
-            0,
-          );
-
-          const state = getShelfState(shelf);
-
-          const firstItem = shelf.inventory.find(
-            (item) => Number(item.quantity || 0) > 0,
-          );
-
-          return (
-            <div
-              className="rack-five-level"
-              key={shelf.id}
-            >
+          {locations.map((location) => (
+            <div className="rack-five-level" key={location.id}>
               <div className="rack-five-level-label">
-                Level {shelf.level}
+                Level {location.level}
               </div>
 
               <div className="rack-five-level-blocks">
-                <button
-                  type="button"
-                  className={`rack-five-block ${state}`}
-                  onClick={() => onShelfClick(shelf)}
-                >
-                  <strong>
-                    {shelf.code || "Set RCS location code"}
-                  </strong>
-
-                  <span>
-                    {firstItem
-                      ? `${firstItem.sku} · ${firstItem.name}`
-                      : "Empty"}
-                  </span>
-
-                  <small>
-                    {basketOf(shelf)?.id || "No basket"}
-                    {" · "}
-                    {qty} items
-                  </small>
-                </button>
+                {renderLocation(location)}
               </div>
             </div>
-          );
-        })}
+          ))}
 
-        <div className="rack-five-base" />
-      </div>
+          <div className="rack-five-base" />
+        </div>
+      ) : (
+        <div className="load-position-grid">
+          {locations.map((location) => (
+            <div className="load-position-item" key={location.id}>
+              <span className="load-position-label">
+                {info.location}
+                {locations.length > 1 ? ` ${location.level}` : ""}
+              </span>
+
+              {renderLocation(location)}
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="rack-side-legend">
-        <span>
-          <i className="legend-dot empty" />
-          Empty
-        </span>
-
-        <span>
-          <i className="legend-dot occupied" />
-          Occupied
-        </span>
-
-        <span>
-          <i className="legend-dot blocked" />
-          Blocked
-        </span>
+        <span><i className="legend-dot empty" />Empty</span>
+        <span><i className="legend-dot occupied" />Occupied</span>
+        <span><i className="legend-dot blocked" />Blocked</span>
       </div>
 
       <div className="rack-side-hint">
         <CircleDot size={14} />
-
-        Click a shelf to view inventory,
-        edit shelf data and run an operation.
+        <span>
+          Click a {info.location.toLowerCase()} to view products,
+          edit location details and prepare an operation.
+        </span>
       </div>
     </aside>
   );
@@ -1290,6 +1443,9 @@ function ShelfInventoryModal({
   onOutbound,
   onDeduct,
 }) {
+  const info = getLoadInfo(rack.loadType);
+  const isBasket = info.type === "BASKET";
+
   const [mode, setMode] = useState("INBOUND");
 
   const [selectedItemId, setSelectedItemId] = useState(
@@ -1526,7 +1682,7 @@ function ShelfInventoryModal({
       });
 
       setMessage(
-        "Shelf data saved in Monitor.",
+        `${info.location} data saved in Monitor.`,
       );
     } catch (error) {
       setMessage(error.message);
@@ -1547,10 +1703,16 @@ function ShelfInventoryModal({
           <div>
             <span>
               {rack.zone}
-              {" · RACK "}
+              {" · "}
+              {info.label.toUpperCase()}
+              {" · STORAGE "}
               {rack.id}
-              {" · LEVEL "}
-              {shelf.level}
+              {isBasket && (
+                <>
+                  {" · LEVEL "}
+                  {shelf.level}
+                </>
+              )}
               {" · DEPTH "}
               {shelfDepth(shelf)}
             </span>
@@ -1608,7 +1770,7 @@ function ShelfInventoryModal({
           </div>
 
           <div>
-            <span>Baskets</span>
+            <span>{info.plural}</span>
             <strong>
               {basketOf(shelf) ? 1 : 0}/1
             </strong>
@@ -1629,6 +1791,7 @@ function ShelfInventoryModal({
 
         <BasketDetails
           shelf={shelf}
+          loadType={info.type}
           onSave={onSaveShelf}
         />
 
@@ -1637,7 +1800,7 @@ function ShelfInventoryModal({
             <Layers3 size={17} />
 
             <div>
-              <strong>Shelf data</strong>
+              <strong>{info.location} data</strong>
 
               <span>
                 Location details are maintained directly in Monitor.
@@ -1686,7 +1849,7 @@ function ShelfInventoryModal({
               type="button"
               onClick={saveShelfData}
             >
-              Save Shelf Data
+              Save {info.location} Data
             </button>
           </div>
         </section>
@@ -1696,10 +1859,10 @@ function ShelfInventoryModal({
             <Package size={17} />
 
             <div>
-              <strong>Inventory in this shelf</strong>
+              <strong>Products in this {info.label.toLowerCase()}</strong>
 
               <span>
-                Current stock stored inside this basket.
+                {info.description}
               </span>
             </div>
           </div>
@@ -1743,7 +1906,7 @@ function ShelfInventoryModal({
               })
             ) : (
               <div className="rack-no-inventory">
-                No stock in this shelf.
+                No products in this {info.label.toLowerCase()}.
               </div>
             )}
           </div>
@@ -1982,6 +2145,7 @@ function createDefaultMonitorData() {
   const racks = DEFAULT_RACK_LAYOUT.map((rack) => ({
     ...rack,
     name: `Rack ${rack.id}`,
+    loadType: "BASKET",
 
     shelves: Array.from(
       { length: SHELF_COUNT },
@@ -2136,6 +2300,8 @@ function normalizeMonitorData(data) {
     return {
       ...layout,
       ...saved,
+
+      loadType: saved.loadType || "BASKET",
 
       id: layout.id,
       zone: saved.zone || layout.zone,
@@ -2308,13 +2474,13 @@ function applyInbound(
         )
       ) {
         throw new Error(
-          `Shelf ${shelf.code} is ${shelf.status}.`,
+          `Location ${shelf.code} is ${shelf.status}.`,
         );
       }
 
       if (!basketOf(shelf)) {
         throw new Error(
-          "Create a basket at this location before adding stock.",
+          "Save a load ID at this location before adding products.",
         );
       }
 

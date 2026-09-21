@@ -1,3 +1,4 @@
+import { getLoadInfo } from "./LoadTypeVisual";
 import { useState } from "react";
 
 export function filterLocations(
@@ -18,7 +19,7 @@ export function filterLocations(
     const text = [
       shelf.code,
       shelf.rack,
-      shelf.basket?.id,
+      shelf.loadType,
 
       ...(shelf.inventory || []).flatMap(
         (item) => [item.sku, item.name],
@@ -86,9 +87,12 @@ export default function LocationPicker({
   function describe(shelf) {
     return [
       shelf.code || "Set RCS code",
-      `Rack ${shelf.rack}`,
-      `L${shelf.level} / D${shelf.depth || 1}`,
-      shelf.basket?.id || "Empty",
+      `Storage ${shelf.rack}`,
+      getLoadInfo(shelf.loadType).label,
+      shelf.loadType === "BASKET" || !shelf.loadType
+        ? `L${shelf.level} / D${shelf.depth || 1}`
+        : `Depth ${shelf.depth || 1}`,
+      shelf.basket ? "Occupied" : "Empty",
     ].join(" · ");
   }
 
@@ -104,7 +108,7 @@ export default function LocationPicker({
       <legend>{label}</legend>
 
       <label>
-        Search location, basket or SKU
+        Search location, type or SKU
 
         <input
           type="search"
@@ -112,7 +116,7 @@ export default function LocationPicker({
           onChange={(event) =>
             setQuery(event.target.value)
           }
-          placeholder="e.g. R8A04011 or 002"
+          placeholder="e.g. R8A04011 or Pallet"
         />
       </label>
 
@@ -124,7 +128,7 @@ export default function LocationPicker({
         }}
       >
         <label>
-          Rack
+          Storage
 
           <select
             value={rack}
@@ -132,7 +136,7 @@ export default function LocationPicker({
               setRack(event.target.value)
             }
           >
-            <option value="">All racks</option>
+            <option value="">All storage</option>
 
             {racks.map((item) => (
               <option key={item} value={item}>

@@ -1,6 +1,8 @@
 const BASE_URL = String(
   import.meta.env.VITE_RCS_BRIDGE_URL || "",
-).replace(/\/+$/, "");
+)
+  .trim()
+  .replace(/\/+$/, "");
 
 export function getRcsBridgeBaseUrl() {
   return BASE_URL || window.location.origin;
@@ -16,11 +18,9 @@ async function bridgeFetch(
     response = await fetch(`${BASE_URL}${path}`, {
       method,
       signal,
-
       headers: {
         "Content-Type": "application/json",
       },
-
       ...(body === undefined
         ? {}
         : { body: JSON.stringify(body) }),
@@ -29,7 +29,11 @@ async function bridgeFetch(
     throw new Error(
       signal?.aborted
         ? "The request timed out or was cancelled. Check task status before submitting again."
-        : `Cannot reach the WMS backend at ${getRcsBridgeBaseUrl()}. Check that FastAPI is running. ${cause.message}`,
+        : `Cannot reach the WMS backend at ${getRcsBridgeBaseUrl()}. Check that FastAPI is running. ${
+            cause instanceof Error
+              ? cause.message
+              : String(cause)
+          }`,
     );
   }
 
@@ -38,9 +42,12 @@ async function bridgeFetch(
   try {
     data = await response.json();
   } catch {
-    throw new Error(
+    const error = new Error(
       `Backend returned an unreadable response (HTTP ${response.status}). Check task status before submitting again.`,
     );
+
+    error.status = response.status;
+    throw error;
   }
 
   if (!response.ok || data?.success === false) {
@@ -98,7 +105,6 @@ export async function checkRcsConnection(
     {
       ...options,
       method: "POST",
-
       body: {
         singleRobotCode: code,
       },
@@ -117,8 +123,8 @@ export async function checkRcsConnection(
   return result;
 }
 
-// The bridge records the task and forwards it to HIK.
-// Basket contents are not included in the RCS command.
+// The backend records the task and forwards it to RCS.
+// Preserve the source and destination types selected in the form.
 export function createRcsBridgeTask(
   command,
   options = {},
