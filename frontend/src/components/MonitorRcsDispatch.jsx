@@ -14,6 +14,8 @@ import {
 
 import "../styles/MonitorRcsDispatch.css";
 
+const HISTORY_PAGE_SIZE = 20;
+
 const QUEUE_KEY = "wms-robot-tasks-v1";
 const INPUT_HISTORY_KEY = "wms-transfer-input-history-v1";
 
@@ -309,6 +311,7 @@ export default function MonitorRcsDispatch() {
   const [history, setHistory] = useState([]);
   const [historyError, setHistoryError] = useState("");
   const [search, setSearch] = useState("");
+  const [historyPage, setHistoryPage] = useState(1);
 
   function rememberInputs() {
     const saved = readInputHistory();
@@ -660,6 +663,21 @@ export default function MonitorRcsDispatch() {
       .includes(query),
   );
 
+  const historyPageCount = Math.max(
+    1,
+    Math.ceil(filtered.length / HISTORY_PAGE_SIZE),
+  );
+  const currentHistoryPage = Math.min(historyPage, historyPageCount);
+  const historyOffset = (currentHistoryPage - 1) * HISTORY_PAGE_SIZE;
+  const visibleHistory = filtered.slice(
+    historyOffset,
+    historyOffset + HISTORY_PAGE_SIZE,
+  );
+
+  useEffect(() => {
+    setHistoryPage((page) => Math.min(page, historyPageCount));
+  }, [historyPageCount]);
+
   const preview = {
     taskType: taskType.trim(),
     ...(robotCode.trim() ? { robotCode: robotCode.trim() } : {}),
@@ -865,109 +883,162 @@ export default function MonitorRcsDispatch() {
 
       <hr />
 
-      <h3>Command history</h3>
+      <details className="command-history-collapse">
+        <summary
+          style={{
+            cursor: "pointer",
+            padding: "14px 0",
+            fontSize: 16,
+            fontWeight: 600,
+            overflowWrap: "anywhere",
+          }}
+        >
+          Command history · {historyError ? "Unavailable" : `${history.length} entries`}
+        </summary>
 
-      <p>
-        Reuse a previous command to fill in the form. Review the
-        locations, target types and codes before adding a new task.
-      </p>
+        <p>
+          Reuse a previous command to fill in the form. Review the
+          locations, target types and codes before adding a new task.
+        </p>
 
-      <label>
-        Search command history
-        <input
-          type="search"
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder="Task type, location, target type or task code"
-        />
-      </label>
+        <label>
+          Search command history
+          <input
+            type="search"
+            value={search}
+            onChange={(event) => {
+              setSearch(event.target.value);
+              setHistoryPage(1);
+            }}
+            placeholder="Task type, location, target type or task code"
+          />
+        </label>
 
-      {historyError && <p role="alert">{historyError}</p>}
+        {historyError && <p role="alert">{historyError}</p>}
 
-      <div
-        className="table-wrapper"
-        style={{ overflowX: "auto" }}
-      >
-        <table className="dashboard-table">
-          <thead>
-            <tr>
-              <th>Created / task</th>
-              <th>Task type</th>
-              <th>Source</th>
-              <th>Destination</th>
-              <th>Priority</th>
-              <th>Status</th>
-              <th>Action</th>
-            </tr>
-          </thead>
-
-          <tbody>
-            {!filtered.length && (
+        <div
+          className="table-wrapper"
+          style={{ overflowX: "auto" }}
+        >
+          <table className="dashboard-table">
+            <thead>
               <tr>
-                <td colSpan={7}>
-                  {historyError
-                    ? "Command history is unavailable."
-                    : "No command history found."}
-                </td>
+                <th>Created / task</th>
+                <th>Task type</th>
+                <th>Source</th>
+                <th>Destination</th>
+                <th>Priority</th>
+                <th>Status</th>
+                <th>Action</th>
               </tr>
-            )}
+            </thead>
 
-            {filtered.map((task, index) => {
-              const savedPriority = Number(task.rcsPriority);
-              const priorityLabel = PRIORITY_LABELS[savedPriority];
-
-              const status = task.backendError
-                ? "NEEDS_ATTENTION"
-                : task.sendStatus === "SENT"
-                  ? task.rcsStatus || "SENT"
-                  : task.sendStatus || "NOT_SENT";
-
-              return (
-                <tr key={task.id || task.rcsTaskChainCode || index}>
-                  <td>
-                    {formatDate(task.createdAt)}
-                    <br />
-                    {task.rcsTaskChainCode || task.id || "—"}
-                  </td>
-
-                  <td>{task.rcsTaskType || "CTUB1"}</td>
-
-                  <td>
-                    {task.sourceRcsTargetType || "STORAGE"}
-                    <br />
-                    {task.sourceRcsPointCode}
-                  </td>
-
-                  <td>
-                    {task.destinationRcsTargetType || "STORAGE"}
-                    <br />
-                    {task.destinationRcsPointCode}
-                  </td>
-
-                  <td>
-                    {Number.isFinite(savedPriority)
-                      ? `${priorityLabel || "Previous value"} · ${savedPriority}`
-                      : "—"}
-                  </td>
-
-                  <td>{status}</td>
-
-                  <td>
-                    <button type="button" onClick={() => reuse(task)}>
-                      Reuse
-                    </button>
+            <tbody>
+              {!filtered.length && (
+                <tr>
+                  <td colSpan={7}>
+                    {historyError
+                      ? "Command history is unavailable."
+                      : "No command history found."}
                   </td>
                 </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+              )}
 
-      <p>
-        History is stored in this browser using the dispatch queue.
-        Tasks removed from the queue are also removed from this list.
-      </p>
+              {visibleHistory.map((task, index) => {
+                const savedPriority = Number(task.rcsPriority);
+                const priorityLabel = PRIORITY_LABELS[savedPriority];
+
+                const status = task.backendError
+                  ? "NEEDS_ATTENTION"
+                  : task.sendStatus === "SENT"
+                    ? task.rcsStatus || "SENT"
+                    : task.sendStatus || "NOT_SENT";
+
+                return (
+                  <tr key={task.id || task.rcsTaskChainCode || index}>
+                    <td>
+                      {formatDate(task.createdAt)}
+                      <br />
+                      {task.rcsTaskChainCode || task.id || "—"}
+                    </td>
+
+                    <td>{task.rcsTaskType || "CTUB1"}</td>
+
+                    <td>
+                      {task.sourceRcsTargetType || "STORAGE"}
+                      <br />
+                      {task.sourceRcsPointCode}
+                    </td>
+
+                    <td>
+                      {task.destinationRcsTargetType || "STORAGE"}
+                      <br />
+                      {task.destinationRcsPointCode}
+                    </td>
+
+                    <td>
+                      {Number.isFinite(savedPriority)
+                        ? `${priorityLabel || "Previous value"} · ${savedPriority}`
+                        : "—"}
+                    </td>
+
+                    <td>{status}</td>
+
+                    <td>
+                      <button type="button" onClick={() => reuse(task)}>
+                        Reuse
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        <nav
+          aria-label="Command history pagination"
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            marginTop: 12,
+          }}
+        >
+          <span role="status" style={{ fontSize: 13 }}>
+            {filtered.length
+              ? `${historyOffset + 1}–${Math.min(historyOffset + HISTORY_PAGE_SIZE, filtered.length)} of ${filtered.length} entries`
+              : "0 entries"}
+            {" · "}Page {currentHistoryPage} of {historyPageCount}
+          </span>
+
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            <button
+              type="button"
+              disabled={currentHistoryPage <= 1}
+              onClick={() => setHistoryPage(currentHistoryPage - 1)}
+              style={{ margin: 0 }}
+            >
+              Previous
+            </button>
+            <button
+              type="button"
+              disabled={currentHistoryPage >= historyPageCount}
+              onClick={() => setHistoryPage(currentHistoryPage + 1)}
+              style={{ margin: 0 }}
+            >
+              Next
+            </button>
+          </div>
+        </nav>
+
+        <p>
+          History is stored in this browser using the dispatch queue.
+          Tasks removed from the queue are also removed from this list.
+        </p>
+      </details>
     </section>
   );
 }

@@ -15,7 +15,6 @@ import WarehouseData from "./pages/WarehouseData";
 import WarehouseOperations from "./pages/WarehouseOperations";
 import TaskManagement from "./pages/TaskManagement";
 import RobotTaskDispatcher from "./pages/RobotTaskDispatcher";
-import FleetControl from "./pages/FleetControl";
 import Settings from "./pages/Settings";
 
 function AppContent() {
@@ -94,11 +93,6 @@ function AppContent() {
 
             {/* แสดง Dispatcher จากด้านบนแล้ว */}
             <Route path="/dispatcher" element={null} />
-
-            <Route
-              path="/fleet"
-              element={<FleetControl />}
-            />
 
             <Route
               path="/settings"

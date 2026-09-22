@@ -1,5 +1,4 @@
 import {
-  Bot,
   Boxes,
   CheckCircle2,
   ClipboardList,
@@ -44,11 +43,6 @@ export default function Sidebar() {
       name: "RCS Dispatch Queue",
       path: "/dispatcher",
       icon: Send,
-    },
-    {
-      name: "Fleet Control",
-      path: "/fleet",
-      icon: Bot,
     },
     {
       name: "Settings",
