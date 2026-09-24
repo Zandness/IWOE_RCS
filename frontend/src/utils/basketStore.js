@@ -244,6 +244,47 @@ function assertWmsLocationCodes(task, from, to) {
   }
 }
 
+// Resolve the WMS landing slot only. Never change the RCS route.
+function completedDestination(locations, requested) {
+  if (Number(requested.depth || 1) !== 1) {
+    return requested;
+  }
+
+  const rearSlots = locations.filter(
+    (shelf) =>
+      shelf.rack === requested.rack &&
+      Number(shelf.level) === Number(requested.level) &&
+      Number(shelf.depth || 1) === 2,
+  );
+
+  if (rearSlots.length > 1) {
+    throw new Error(
+      "Duplicate depth-2 slots. Check Warehouse Monitor.",
+    );
+  }
+
+  const rear = rearSlots[0];
+
+  if (
+    !rear ||
+    basketOf(rear) ||
+    inventoryOf(rear).length
+  ) {
+    return requested;
+  }
+
+  // An empty but blocked rear slot cannot be treated as a front-slot move.
+  if (
+    ["BLOCKED", "MAINTENANCE"].includes(rear.status)
+  ) {
+    throw new Error(
+      "RCS completed, but depth 2 is unavailable. Check the physical load position before updating Monitor.",
+    );
+  }
+
+  return rear;
+}
+
 export function completeBasketTransfer(task) {
   if (
     !task?.basketId ||
@@ -307,6 +348,20 @@ export function completeBasketTransfer(task) {
     destinationInfo,
   );
 
+  if (
+    basketOf(destinationInfo) ||
+    inventoryOf(destinationInfo).length
+  ) {
+    throw new Error(
+      "RCS completed, but the requested destination is occupied. Check physical locations and Monitor.",
+    );
+  }
+
+  const actualDestination = completedDestination(
+    locations,
+    destinationInfo,
+  );
+
   // Use original objects so both locations are saved together.
   const shelves = data.racks.flatMap(
     (rack) => rack.shelves,
@@ -319,7 +374,7 @@ export function completeBasketTransfer(task) {
 
   const to = findLocation(
     shelves,
-    task.destinationLocationId,
+    actualDestination.id,
   );
 
   const load = basketOf(from);
@@ -383,13 +438,27 @@ export function completeBasketTransfer(task) {
       sourceLocationId: from.id,
       destinationLocationId: to.id,
 
+      requestedDestinationLocationId:
+        destinationInfo.id,
+
+      requestedDestinationLocationCode:
+        destinationInfo.code,
+
+      actualDestinationDepth:
+        Number(actualDestination.depth || 1),
+
+      autoPushedToDepth2:
+        actualDestination.id !== destinationInfo.id,
+
       sourceRcsTargetType:
         task.sourceRcsTargetType || "STORAGE",
+
       destinationRcsTargetType:
         task.destinationRcsTargetType || "STORAGE",
 
       sourceRcsPointCode:
         task.sourceRcsPointCode || "",
+
       destinationRcsPointCode:
         task.destinationRcsPointCode || "",
 
