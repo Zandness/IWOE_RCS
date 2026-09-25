@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from typing import Literal, Optional
 
+import hashlib
 import json
 import os
 import random
@@ -241,6 +242,15 @@ def init_database():
             """
         )
 
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS rcs_submission_claims (
+                request_key TEXT PRIMARY KEY,
+                fingerprint TEXT NOT NULL,
+                state TEXT NOT NULL,
+                response_json TEXT,
+                created_at TEXT NOT NULL
+            )
+        """)
         connection.commit()
     finally:
         connection.close()
@@ -907,11 +917,7 @@ def rcs_bridge_status():
 # CREATE TASK
 # =========================================================
 
-@app.post(
-    "/api/rcs/tasks",
-    response_model=RcsTaskResponse,
-)
-def create_rcs_task(command: RcsTaskRequest):
+def _create_rcs_task_once(command: RcsTaskRequest):
     # Compare both target type and code.
     source_identity = (
         command.source.type,
@@ -1037,6 +1043,74 @@ def create_rcs_task(command: RcsTaskRequest):
         "rcsStatus": "CREATED",
         "receivedAt": received_at,
     }
+
+
+@app.post("/api/rcs/tasks", response_model=RcsTaskResponse)
+def create_rcs_task(command: RcsTaskRequest):
+    # Preflight errors do not consume a request key.
+    if (command.source.type, command.source.code) == (command.destination.type, command.destination.code):
+        raise HTTPException(400, "Source and destination cannot be the same.")
+    if RCS_MODE == "HIK":
+        ensure_hik_configured()
+        build_hik_task_payload(command)
+
+    # Same external payload as before. Idempotency is enforced by the bridge.
+    canonical = json.dumps(model_to_dict(command), sort_keys=True, separators=(",", ":"))
+    fingerprint = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    request_key = json.dumps([RCS_MODE, HIK_RCS_BASE_URL if RCS_MODE == "HIK" else "", command.robotTaskCode])
+    connection = get_db_connection()
+    try:
+        connection.execute("BEGIN IMMEDIATE")
+        previous = connection.execute(
+            "SELECT * FROM rcs_submission_claims WHERE request_key = ?", (request_key,)
+        ).fetchone()
+        if previous:
+            if previous["fingerprint"] != fingerprint:
+                raise HTTPException(409, "This request ID was already used with different command data.")
+            if previous["state"] == "ACCEPTED" and previous["response_json"]:
+                return json.loads(previous["response_json"])
+            raise HTTPException(409, "Submission already started or has an unknown outcome. Check the existing task; no new command was sent.")
+
+        # Old bridge records have no full request fingerprint: never resubmit them.
+        legacy = connection.execute(
+            "SELECT rcs_task_chain_code FROM rcs_tasks WHERE robot_task_code = ?",
+            (command.robotTaskCode,),
+        ).fetchall()
+        if any(str(row["rcs_task_chain_code"]).upper().startswith("SIM-RCS-") == (RCS_MODE == "MOCK") for row in legacy):
+            raise HTTPException(409, "This task reference already exists. Query its status; use a new reference only for an intentional new transfer.")
+        connection.execute(
+            "INSERT INTO rcs_submission_claims VALUES (?, ?, 'STARTED', NULL, ?)",
+            (request_key, fingerprint, utc_now_iso()),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+    try:
+        response = _create_rcs_task_once(command)
+        connection = get_db_connection()
+        try:
+            connection.execute(
+                "UPDATE rcs_submission_claims SET state = 'ACCEPTED', response_json = ? WHERE request_key = ?",
+                (json.dumps(response), request_key),
+            )
+            connection.commit()
+        finally:
+            connection.close()
+        return response
+    except Exception:
+        # Includes timeouts, upstream rejection and failures after upstream success.
+        # Retain STARTED if the database itself fails: both states block retries.
+        connection = get_db_connection()
+        try:
+            connection.execute(
+                "UPDATE rcs_submission_claims SET state = 'OUTCOME_UNKNOWN' WHERE request_key = ?",
+                (request_key,),
+            )
+            connection.commit()
+        finally:
+            connection.close()
+        raise
 
 
 # =========================================================

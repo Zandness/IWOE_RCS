@@ -408,28 +408,16 @@ export default function RobotTaskDispatcher() {
       throw new Error(`Unrecognized RCS status: ${status}`);
     }
 
-    if (status === "COMPLETED" && queueTask.basketId) {
-      completeBasketTransfer({
-        ...queueTask,
-        rcsStatus: status,
-      });
-    }
+    patch(queueTask.id, {
+      rcsStatus: status,
+      backendError: "",
+      statusCheckError: "",
+      lastStatusCheckAt: new Date().toISOString(),
+    }, queueTask.rcsStatus !== status ? `RCS ${status}` : "");
 
-    patch(
-      queueTask.id,
-      {
-        rcsStatus: status,
-        backendError: "",
-        lastStatusCheckAt: new Date().toISOString(),
-      },
-      queueTask.rcsStatus !== status
-        ? `RCS ${status}${
-            status === "COMPLETED" && queueTask.basketId
-              ? ": load location updated"
-              : ""
-          }`
-        : "",
-    );
+    if (status === "COMPLETED" && queueTask.basketId) {
+      syncWarehouse({ ...queueTask, rcsStatus: status });
+    }
 
     if (["FAILED", "CANCELLED", "CANCELED"].includes(status)) {
       pause(
@@ -438,14 +426,44 @@ export default function RobotTaskDispatcher() {
     }
   }
 
+  function syncWarehouse(task) {
+    try {
+      completeBasketTransfer(task);
+      if (task.warehouseSyncStatus !== "COMPLETED") {
+        patch(task.id, {
+          warehouseSyncStatus: "COMPLETED",
+          warehouseSyncError: "",
+          backendError: "",
+        }, "Warehouse location updated after confirmed RCS completion");
+      }
+      return true;
+    } catch (error) {
+      if (task.warehouseSyncError !== error.message) {
+        patch(task.id, {
+          warehouseSyncStatus: "REQUIRES_REVIEW",
+          warehouseSyncError: error.message,
+        }, "Robot completed; warehouse update requires review");
+      }
+      pause(error.message);
+      return false;
+    }
+  }
+
   async function pollActive() {
-    const active = ref.current.filter(
+    const terminalStatuses = [
+      "COMPLETED",
+      "FAILED",
+      "CANCELLED",
+      "CANCELED",
+    ];
+
+    const activeTasks = ref.current.filter(
       (task) =>
         task.sendStatus === "SENT" &&
-        task.rcsStatus !== "COMPLETED",
+        !terminalStatuses.includes(task.rcsStatus),
     );
 
-    for (const task of active) {
+    for (const task of activeTasks) {
       try {
         if (!task.bridgeTaskId) {
           throw new Error(
@@ -459,12 +477,14 @@ export default function RobotTaskDispatcher() {
 
         applySnapshot(task, response);
       } catch (error) {
-        patch(task.id, { backendError: error.message });
+        patch(task.id, {
+          statusCheckError: error.message,
+        });
+
         pause(error.message);
       }
     }
   }
-
   async function tick() {
     if (busy.current || blocked.current) return;
     busy.current = true;
@@ -474,7 +494,7 @@ export default function RobotTaskDispatcher() {
 
       for (const task of ref.current) {
         if (task.basketId && task.rcsStatus === "COMPLETED") {
-          completeBasketTransfer(task);
+          if (!syncWarehouse(task)) return;
         }
       }
 
@@ -491,13 +511,30 @@ export default function RobotTaskDispatcher() {
         return;
       }
 
-      if (
-        ref.current.some(
-          (task) =>
-            task.sendStatus === "SENT" &&
-            task.rcsStatus !== "COMPLETED",
-        )
-      ) {
+      const stoppedTask = ref.current.find(
+        (task) =>
+          task.sendStatus === "SENT" &&
+          ["FAILED", "CANCELLED", "CANCELED"].includes(
+            task.rcsStatus,
+          ),
+      );
+
+      if (stoppedTask) {
+        pause(
+          `Task ${
+            stoppedTask.rcsTaskChainCode || stoppedTask.id
+          } is ${stoppedTask.rcsStatus}. Check the physical load location before continuing.`,
+        );
+        return;
+      }
+
+      const unfinishedTask = ref.current.some(
+        (task) =>
+          task.sendStatus === "SENT" &&
+          task.rcsStatus !== "COMPLETED",
+      );
+
+      if (unfinishedTask) {
         return;
       }
 
@@ -1016,7 +1053,7 @@ export default function RobotTaskDispatcher() {
             </p>
 
             <p>
-              {active.backendError ||
+              {active.statusCheckError || active.warehouseSyncError || active.backendError ||
                 "Checking task status automatically. The load location updates after confirmed completion."}
             </p>
 
@@ -1171,11 +1208,10 @@ export default function RobotTaskDispatcher() {
                   </td>
 
                   <td>
-                    {task.backendError
-                      ? "Needs attention"
-                      : task.sendStatus === "SENT"
-                        ? task.rcsStatus
-                        : task.sendStatus}
+                    {task.sendStatus === "SENT" ? task.rcsStatus : task.sendStatus}
+                    {task.statusCheckError && <div>Status check: Connection error</div>}
+                    {task.warehouseSyncStatus && <div>Warehouse: {task.warehouseSyncStatus}</div>}
+                    {task.backendError && <div>Submission: Requires review</div>}
                   </td>
 
                   <td style={CELL_STYLE}>
@@ -1225,7 +1261,12 @@ export default function RobotTaskDispatcher() {
           </p>
 
           <p>
-            {detailTask.backendError || detailTask.rcsStatus}
+            Robot: {detailTask.rcsStatus}
+          </p>
+          <p>Submission: {detailTask.sendStatus}</p>
+          <p>Warehouse: {detailTask.warehouseSyncStatus || "Pending completion"}</p>
+          <p role="status">
+            {detailTask.warehouseSyncError || detailTask.statusCheckError || detailTask.backendError || ""}
           </p>
 
           <details>

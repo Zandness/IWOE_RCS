@@ -106,16 +106,232 @@ export function shelvesOf(data) {
   );
 }
 
-export function isReserved(id, except = "") {
-  return readQueue().some(
-    (task) =>
-      task.id !== except &&
-      task.rcsStatus !== "COMPLETED" &&
-      (
-        task.sourceLocationId === id ||
-        task.destinationLocationId === id
-      ),
+// Reserve a whole two-depth lane while a transfer is unresolved.
+// This also protects the rear slot when the selected destination is depth 1.
+function laneIds(locations, id) {
+  const point = findLocation(locations, id);
+  if (!point) return [id];
+  const level = Number(point.level);
+  if (!Number.isInteger(level) || level < 1) return [id];
+  return locations.filter((item) =>
+    item.rack === point.rack && Number(item.level) === level
+  ).map((item) => item.id);
+}
+
+const STOPPED_TRANSFER_STATUSES = [
+  "FAILED",
+  "CANCELLED",
+  "CANCELED",
+];
+
+export function isStoppedTransferReviewed(
+  task,
+  data = readMonitor(),
+) {
+  if (
+    !task ||
+    task.sendStatus !== "SENT" ||
+    !STOPPED_TRANSFER_STATUSES.includes(task.rcsStatus)
+  ) {
+    return false;
+  }
+
+  const review = data.reviewedStoppedTransfers?.[task.id];
+
+  return Boolean(
+    review &&
+    review.resolution === "LOAD_AT_SOURCE" &&
+    review.rcsStatus === task.rcsStatus &&
+    review.bridgeTaskId === task.bridgeTaskId &&
+    review.rcsTaskChainCode === task.rcsTaskChainCode &&
+    review.basketId === task.basketId &&
+    review.sourceLocationId === task.sourceLocationId &&
+    review.destinationLocationId === task.destinationLocationId &&
+    review.reviewedBy &&
+    review.note &&
+    review.reviewedAt
   );
+}
+
+export function reviewStoppedTransferAtSource(
+  taskId,
+  {
+    reviewedBy = "",
+    note = "",
+    confirmedRcsStopped = false,
+    confirmedLoadAtSource = false,
+  } = {},
+) {
+  const matches = readQueue().filter(
+    (task) => task.id === taskId,
+  );
+
+  if (matches.length !== 1) {
+    throw new Error("Task is missing or duplicated.");
+  }
+
+  const task = matches[0];
+
+  if (
+    task.sendStatus !== "SENT" ||
+    !STOPPED_TRANSFER_STATUSES.includes(task.rcsStatus) ||
+    !task.bridgeTaskId ||
+    !task.rcsTaskChainCode ||
+    !task.basketId
+  ) {
+    throw new Error(
+      "Only confirmed FAILED or CANCELLED transfers can be reviewed here.",
+    );
+  }
+
+  const reviewer = String(reviewedBy).trim();
+  const reason = String(note).trim();
+
+  if (!reviewer || !reason) {
+    throw new Error(
+      "Enter the reviewer name and review notes.",
+    );
+  }
+
+  if (
+    confirmedRcsStopped !== true ||
+    confirmedLoadAtSource !== true
+  ) {
+    throw new Error(
+      "Confirm that the RCS task has stopped and the physical load is at the source.",
+    );
+  }
+
+  const data = readMonitor();
+
+  // Repeated confirmation must not create another history entry.
+  if (isStoppedTransferReviewed(task, data)) {
+    return data.reviewedStoppedTransfers[task.id];
+  }
+
+  const locations = shelvesOf(data);
+  const from = findLocation(locations, task.sourceLocationId);
+  const to = findLocation(locations, task.destinationLocationId);
+
+  if (!from || !to || from.id === to.id) {
+    throw new Error(
+      "Source or destination is missing or invalid.",
+    );
+  }
+
+  assertWmsLocationCodes(task, from, to);
+
+  if (
+    from.loadType !== to.loadType ||
+    basketOf(from)?.id !== task.basketId ||
+    basketOf(to) ||
+    inventoryOf(to).length > 0
+  ) {
+    throw new Error(
+      "Monitor does not match a load remaining at the source. Check the locations before reviewing.",
+    );
+  }
+
+  const loadLocations = locations.filter(
+    (location) => basketOf(location)?.id === task.basketId,
+  );
+
+  if (loadLocations.length !== 1) {
+    throw new Error(
+      "The load appears in multiple locations. Check Monitor.",
+    );
+  }
+
+  if (data.history != null && !Array.isArray(data.history)) {
+    throw new Error("Warehouse history is invalid.");
+  }
+
+  const reviews = data.reviewedStoppedTransfers;
+
+  if (
+    reviews != null &&
+    (typeof reviews !== "object" || Array.isArray(reviews))
+  ) {
+    throw new Error("Transfer review records are invalid.");
+  }
+
+  const review = {
+    taskId: task.id,
+    resolution: "LOAD_AT_SOURCE",
+    rcsStatus: task.rcsStatus,
+    bridgeTaskId: task.bridgeTaskId,
+    rcsTaskChainCode: task.rcsTaskChainCode,
+    basketId: task.basketId,
+    sourceLocationId: task.sourceLocationId,
+    destinationLocationId: task.destinationLocationId,
+    reviewedBy: reviewer,
+    note: reason,
+    reviewedAt: new Date().toISOString(),
+  };
+
+  data.reviewedStoppedTransfers = {
+    ...(reviews || {}),
+    [task.id]: review,
+  };
+
+  data.history = [
+    {
+      ...review,
+      id: `REVIEW-${crypto.randomUUID()}`,
+      type: "TRANSFER_REVIEW",
+      createdAt: review.reviewedAt,
+      shelfId: from.id,
+      locationCode: from.code,
+    },
+    ...(data.history || []),
+  ];
+
+  // Save the review and its history together.
+  // Load location, inventory and RCS status are unchanged.
+  localStorage.setItem(MONITOR_KEY, JSON.stringify(data));
+
+  window.dispatchEvent(
+    new CustomEvent("wms-monitor-data-changed"),
+  );
+
+  return review;
+}
+
+export function isReserved(id, except = "") {
+  const data = readMonitor();
+  const locations = shelvesOf(data);
+  const completed = data.completedBasketTransfers || {};
+
+  return readQueue().some((task) => {
+    if (task.id === except) {
+      return false;
+    }
+
+    // Release only this task's reservation after a recorded review.
+    if (isStoppedTransferReviewed(task, data)) {
+      return false;
+    }
+
+    if (task.rcsStatus === "COMPLETED") {
+      const key = task.rcsTaskChainCode || task.bridgeTaskId;
+
+      if (
+        key &&
+        Object.prototype.hasOwnProperty.call(completed, key)
+      ) {
+        return false;
+      }
+    }
+
+    return [
+      task.sourceLocationId,
+      task.destinationLocationId,
+    ]
+      .filter(Boolean)
+      .some((pointId) =>
+        laneIds(locations, pointId).includes(id),
+      );
+  });
 }
 
 export function assertEditable(id) {
@@ -204,6 +420,11 @@ export function validateTransfer(
     );
   }
 
+  // Validate the possible rear landing slot without changing the selected route.
+  const actual = completedDestination(shelves, to);
+  if (isReserved(actual.id, except)) {
+    throw new Error("The possible depth-2 destination is reserved by another transfer.");
+  }
   return { from, to };
 }
 
@@ -357,10 +578,10 @@ export function completeBasketTransfer(task) {
     );
   }
 
-  const actualDestination = completedDestination(
-    locations,
-    destinationInfo,
-  );
+  const actualDestination = completedDestination(locations, destinationInfo);
+  if (isReserved(actualDestination.id, task.id)) {
+    throw new Error("RCS completed, but the landing lane has another reservation. Review the conflicting tasks.");
+  }
 
   // Use original objects so both locations are saved together.
   const shelves = data.racks.flatMap(
