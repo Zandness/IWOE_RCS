@@ -624,92 +624,143 @@ def build_hik_task_payload(command: RcsTaskRequest) -> dict:
 # =========================================================
 
 def find_status_value(value) -> str:
+    # Accept one task object or a list containing one task.
+    if isinstance(value, list):
+        if len(value) != 1:
+            raise HTTPException(
+                status_code=502,
+                detail=(
+                    "Expected exactly one RCS task record. "
+                    "The saved status was not updated."
+                ),
+            )
+
+        value = value[0]
+
+    if not isinstance(value, dict):
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                "HIK RCS task data must be an object. "
+                "The saved status was not updated."
+            ),
+        )
+
     status_keys = {
-        "status",
         "taskstatus",
         "robottaskstatus",
-        "state",
         "taskstate",
     }
 
-    if isinstance(value, dict):
-        for key, child in value.items():
-            if (
-                str(key).lower() in status_keys
-                and child is not None
-            ):
-                return str(child)
+    values = [
+        child
+        for key, child in value.items()
+        if str(key).lower() in status_keys
+    ]
 
-        for child in value.values():
-            found = find_status_value(child)
+    if not values:
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                "No explicit task status field was found "
+                "in HIK RCS task data. "
+                "The saved status was not updated."
+            ),
+        )
 
-            if found:
-                return found
+    normalized_statuses = {
+        normalize_hik_status(item)
+        for item in values
+    }
 
-    if isinstance(value, list):
-        for child in value:
-            found = find_status_value(child)
+    if len(normalized_statuses) != 1:
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                "HIK RCS returned conflicting task statuses. "
+                "The saved status was not updated."
+            ),
+        )
 
-            if found:
-                return found
-
-    return ""
+    return normalized_statuses.pop()
 
 
-def normalize_hik_status(
-    raw_status: str,
-    fallback: str = "CREATED",
-) -> str:
+def normalize_hik_status(raw_status: str) -> str:
+    if (
+        not isinstance(raw_status, str)
+        or not raw_status.strip()
+    ):
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                "HIK RCS returned an empty or unsupported "
+                "task status. The saved status was not updated."
+            ),
+        )
+
     status = (
-        str(raw_status or "")
+        raw_status
         .strip()
         .upper()
         .replace("-", "_")
         .replace(" ", "_")
     )
 
-    if status in {
-        "CREATED",
-        "CREATE",
-        "NEW",
-        "PENDING",
-        "WAITING",
-        "QUEUED",
-        "ACCEPTED",
-        "READY",
-    }:
-        return "CREATED"
+    status_groups = {
+        "CREATED": {
+            "CREATED",
+            "CREATE",
+            "NEW",
+            "PENDING",
+            "WAITING",
+            "QUEUED",
+            "ACCEPTED",
+            "READY",
+        },
+        "RUNNING": {
+            "RUNNING",
+            "EXECUTING",
+            "EXECUTE",
+            "DOING",
+            "PROCESSING",
+            "IN_PROGRESS",
+            "STARTED",
+            "WORKING",
+        },
+        "COMPLETED": {
+            "COMPLETED",
+            "COMPLETE",
+            "FINISHED",
+            "DONE",
+            "ENDED",
+            "END",
+        },
+        "CANCELLED": {
+            "CANCELLED",
+            "CANCELED",
+        },
+        "FAILED": {
+            "FAILED",
+            "FAILURE",
+            "ERROR",
+            "ABORTED",
+        },
+    }
 
-    if status in {
-        "RUNNING",
-        "EXECUTING",
-        "EXECUTE",
-        "DOING",
-        "PROCESSING",
-        "IN_PROGRESS",
-        "STARTED",
-        "WORKING",
-    }:
-        return "RUNNING"
+    for normalized, aliases in status_groups.items():
+        if status in aliases:
+            return normalized
 
-    if status in {
-        "COMPLETED",
-        "COMPLETE",
-        "FINISHED",
-        "DONE",
-        "ENDED",
-        "END",
-    }:
-        return "COMPLETED"
-
-    if status in {"CANCELLED", "CANCELED"}:
-        return "CANCELLED"
-
-    if status in {"FAILED", "FAILURE", "ERROR", "ABORTED"}:
-        return "FAILED"
-
-    # Keep the previous status for unknown vendor-specific values.
-    return str(fallback or "CREATED").upper()
+    raise HTTPException(
+        status_code=502,
+        detail={
+            "message": (
+                "HIK RCS returned an unrecognized task status. "
+                "The saved status was not updated."
+            ),
+            "rawStatus": raw_status,
+        },
+    )
 
 
 def get_elapsed_seconds(record: dict) -> float:
@@ -796,16 +847,27 @@ def refresh_mock_record(record: dict) -> dict:
 # =========================================================
 
 def refresh_hik_record(record: dict) -> dict:
+    if is_mock_record(record):
+        return record
+
     rcs_robot_task_code = str(
         record.get("rcsTaskChainCode") or ""
     ).strip()
 
-    if not rcs_robot_task_code or is_mock_record(record):
-        return record
+    if not rcs_robot_task_code:
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                "Missing RCS task code. "
+                "Cannot confirm the current task status."
+            ),
+        )
 
     response = hik_post(
         "/task/query",
-        {"robotTaskCode": rcs_robot_task_code},
+        {
+            "robotTaskCode": rcs_robot_task_code,
+        },
     )
 
     if not hik_success(response):
@@ -817,16 +879,36 @@ def refresh_hik_record(record: dict) -> dict:
             },
         )
 
-    raw_status = find_status_value(
-        response.get("data", response)
+    data = response.get("data")
+
+    # Validate the response before updating any saved status.
+    next_status = find_status_value(data)
+
+    task_data = (
+        data[0]
+        if isinstance(data, list)
+        else data
     )
 
-    next_status = normalize_hik_status(
-        raw_status,
-        fallback=record.get("rcsStatus", "CREATED"),
-    )
+    returned_code = task_data.get("robotTaskCode")
 
-    return apply_status(record, next_status)
+    if (
+        returned_code is not None
+        and str(returned_code).strip()
+        != rcs_robot_task_code
+    ):
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                "HIK RCS returned a different task code. "
+                "The saved status was not updated."
+            ),
+        )
+
+    return apply_status(
+        record,
+        next_status,
+    )
 
 
 def refresh_task_record(record: dict) -> dict:
@@ -1119,13 +1201,18 @@ def create_rcs_task(command: RcsTaskRequest):
 
 @app.get("/api/rcs/tasks")
 def get_all_rcs_tasks():
+    """
+    Return saved bridge records.
+
+    Listing history must not query every task in RCS.
+    Use the individual task endpoint to refresh a task.
+    """
     records = get_all_task_records()
     tasks = []
 
     for record in records:
-        refresh_task_record(record)
-
         public_record = public_task_record(record)
+
         public_record["elapsedSeconds"] = round(
             get_elapsed_seconds(record),
             2,
@@ -1136,6 +1223,7 @@ def get_all_rcs_tasks():
     return {
         "ok": True,
         "mode": RCS_MODE,
+        "statusSource": "DATABASE",
         "count": len(tasks),
         "tasks": tasks,
     }
@@ -1143,6 +1231,13 @@ def get_all_rcs_tasks():
 
 @app.get("/api/rcs/tasks/{bridge_task_id}")
 def get_rcs_task(bridge_task_id: str):
+    """
+    Refresh one task before returning its status.
+
+    Keep refresh errors visible to the caller.
+    A failed refresh must not look like a successful
+    live status check using an old database value.
+    """
     record = get_task_record(bridge_task_id)
 
     if record is None:
@@ -1151,6 +1246,8 @@ def get_rcs_task(bridge_task_id: str):
             detail="RCS bridge task not found.",
         )
 
+    # Keep individual refreshes, including stopped tasks.
+    # The review form uses this endpoint to recheck status.
     refresh_task_record(record)
 
     return {

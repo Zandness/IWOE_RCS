@@ -2,6 +2,12 @@ export const MONITOR_KEY = "wms-monitor-master-v2";
 
 const QUEUE_KEY = "wms-robot-tasks-v1";
 
+const STOPPED_TRANSFER_STATUSES = [
+  "FAILED",
+  "CANCELLED",
+  "CANCELED",
+];
+
 function inventoryOf(shelf) {
   const inventory = shelf?.inventory;
 
@@ -106,23 +112,28 @@ export function shelvesOf(data) {
   );
 }
 
-// Reserve a whole two-depth lane while a transfer is unresolved.
-// This also protects the rear slot when the selected destination is depth 1.
+// Reserve both depths on the same rack level.
 function laneIds(locations, id) {
   const point = findLocation(locations, id);
-  if (!point) return [id];
-  const level = Number(point.level);
-  if (!Number.isInteger(level) || level < 1) return [id];
-  return locations.filter((item) =>
-    item.rack === point.rack && Number(item.level) === level
-  ).map((item) => item.id);
-}
 
-const STOPPED_TRANSFER_STATUSES = [
-  "FAILED",
-  "CANCELLED",
-  "CANCELED",
-];
+  if (!point) {
+    return [id];
+  }
+
+  const level = Number(point.level);
+
+  if (!Number.isInteger(level) || level < 1) {
+    return [id];
+  }
+
+  return locations
+    .filter(
+      (item) =>
+        item.rack === point.rack &&
+        Number(item.level) === level,
+    )
+    .map((item) => item.id);
+}
 
 export function isStoppedTransferReviewed(
   task,
@@ -204,14 +215,22 @@ export function reviewStoppedTransferAtSource(
 
   const data = readMonitor();
 
-  // Repeated confirmation must not create another history entry.
+  // Repeated confirmation does not create another history entry.
   if (isStoppedTransferReviewed(task, data)) {
     return data.reviewedStoppedTransfers[task.id];
   }
 
   const locations = shelvesOf(data);
-  const from = findLocation(locations, task.sourceLocationId);
-  const to = findLocation(locations, task.destinationLocationId);
+
+  const from = findLocation(
+    locations,
+    task.sourceLocationId,
+  );
+
+  const to = findLocation(
+    locations,
+    task.destinationLocationId,
+  );
 
   if (!from || !to || from.id === to.id) {
     throw new Error(
@@ -242,7 +261,10 @@ export function reviewStoppedTransferAtSource(
     );
   }
 
-  if (data.history != null && !Array.isArray(data.history)) {
+  if (
+    data.history != null &&
+    !Array.isArray(data.history)
+  ) {
     throw new Error("Warehouse history is invalid.");
   }
 
@@ -250,7 +272,10 @@ export function reviewStoppedTransferAtSource(
 
   if (
     reviews != null &&
-    (typeof reviews !== "object" || Array.isArray(reviews))
+    (
+      typeof reviews !== "object" ||
+      Array.isArray(reviews)
+    )
   ) {
     throw new Error("Transfer review records are invalid.");
   }
@@ -287,8 +312,11 @@ export function reviewStoppedTransferAtSource(
   ];
 
   // Save the review and its history together.
-  // Load location, inventory and RCS status are unchanged.
-  localStorage.setItem(MONITOR_KEY, JSON.stringify(data));
+  // Load location, inventory and RCS status stay unchanged.
+  localStorage.setItem(
+    MONITOR_KEY,
+    JSON.stringify(data),
+  );
 
   window.dispatchEvent(
     new CustomEvent("wms-monitor-data-changed"),
@@ -307,7 +335,7 @@ export function isReserved(id, except = "") {
       return false;
     }
 
-    // Release only this task's reservation after a recorded review.
+    // Release only the reviewed task's reservation.
     if (isStoppedTransferReviewed(task, data)) {
       return false;
     }
@@ -321,6 +349,9 @@ export function isReserved(id, except = "") {
       ) {
         return false;
       }
+
+      // A completed robot task keeps its reservation
+      // until the warehouse update has been committed.
     }
 
     return [
@@ -389,9 +420,7 @@ export function validateTransfer(
     }
 
     if (
-      ["BLOCKED", "MAINTENANCE"].includes(
-        shelf.status,
-      )
+      ["BLOCKED", "MAINTENANCE"].includes(shelf.status)
     ) {
       throw new Error("Location is unavailable.");
     }
@@ -420,16 +449,21 @@ export function validateTransfer(
     );
   }
 
-  // Validate the possible rear landing slot without changing the selected route.
+  // Check the possible rear destination.
+  // Keep the original selected destination for the RCS command.
   const actual = completedDestination(shelves, to);
+
   if (isReserved(actual.id, except)) {
-    throw new Error("The possible depth-2 destination is reserved by another transfer.");
+    throw new Error(
+      "The possible depth-2 destination is reserved by another transfer.",
+    );
   }
+
   return { from, to };
 }
 
 function assertWmsLocationCodes(task, from, to) {
-  // New tasks store WMS codes separately from RCS target codes.
+  // New tasks keep WMS location codes separate from RCS codes.
   // Legacy tasks used the same code for both.
   const expectedSourceCode =
     Object.prototype.hasOwnProperty.call(
@@ -450,22 +484,21 @@ function assertWmsLocationCodes(task, from, to) {
   if (
     (
       expectedSourceCode != null &&
-      String(from.code || "") !==
-        String(expectedSourceCode)
+      String(from.code || "") !== String(expectedSourceCode)
     ) ||
     (
       expectedDestinationCode != null &&
-      String(to.code || "") !==
-        String(expectedDestinationCode)
+      String(to.code || "") !== String(expectedDestinationCode)
     )
   ) {
     throw new Error(
-      "RCS completed, but WMS location codes changed. Check physical locations and Monitor before continuing.",
+      "WMS location codes changed. Check physical locations and Monitor before continuing.",
     );
   }
 }
 
-// Resolve the WMS landing slot only. Never change the RCS route.
+// Resolve the final WMS location only.
+// Never change the destination sent to RCS.
 function completedDestination(locations, requested) {
   if (Number(requested.depth || 1) !== 1) {
     return requested;
@@ -494,7 +527,7 @@ function completedDestination(locations, requested) {
     return requested;
   }
 
-  // An empty but blocked rear slot cannot be treated as a front-slot move.
+  // An empty but blocked D2 requires review.
   if (
     ["BLOCKED", "MAINTENANCE"].includes(rear.status)
   ) {
@@ -523,7 +556,7 @@ export function completeBasketTransfer(task) {
     throw new Error("Missing confirmed transfer ID.");
   }
 
-  // A completed transfer must only update warehouse data once.
+  // Apply each completed transfer only once.
   if (
     Object.prototype.hasOwnProperty.call(
       data.completedBasketTransfers || {},
@@ -578,12 +611,18 @@ export function completeBasketTransfer(task) {
     );
   }
 
-  const actualDestination = completedDestination(locations, destinationInfo);
+  const actualDestination = completedDestination(
+    locations,
+    destinationInfo,
+  );
+
   if (isReserved(actualDestination.id, task.id)) {
-    throw new Error("RCS completed, but the landing lane has another reservation. Review the conflicting tasks.");
+    throw new Error(
+      "RCS completed, but the landing lane has another reservation. Review the conflicting tasks.",
+    );
   }
 
-  // Use original objects so both locations are saved together.
+  // Use the original shelf objects so the update is saved together.
   const shelves = data.racks.flatMap(
     (rack) => rack.shelves,
   );
@@ -646,8 +685,6 @@ export function completeBasketTransfer(task) {
   data.history = [
     {
       id: `TRANSFER-${key}`,
-
-      // Preserve the existing history type and field names.
       type: "BASKET_TRANSFER",
       basketId: task.basketId,
       loadType: sourceInfo.loadType,
@@ -693,7 +730,7 @@ export function completeBasketTransfer(task) {
     ...(data.history || []),
   ];
 
-  // Save the load, inventory, history and completion marker together.
+  // Save location, inventory, history and completion marker together.
   localStorage.setItem(
     MONITOR_KEY,
     JSON.stringify(data),
@@ -724,9 +761,7 @@ export function binLocationPatch(
   assertEditable(locationId);
 
   if (
-    ["BLOCKED", "MAINTENANCE"].includes(
-      shelf.status,
-    )
+    ["BLOCKED", "MAINTENANCE"].includes(shelf.status)
   ) {
     throw new Error("This location is unavailable.");
   }
@@ -788,7 +823,7 @@ export function binLocationPatch(
     );
   }
 
-  // This is an internal WMS ID, not an RCS carrier number.
+  // Internal WMS ID only, not an RCS carrier number.
   return {
     basket: {
       id: `${shelf.loadType}-${crypto.randomUUID()}`,
