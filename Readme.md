@@ -4,26 +4,6 @@ A web-based Warehouse Management System (WMS) for storage monitoring, inventory 
 
 The WMS manages what to move, the source and destination, priority, and sending time. The external RCS manages robot assignment, navigation, traffic, and physical task execution.
 
-> This is a prototype for development and local warehouse testing. It is not a complete production WMS.
-
-## Documentation scope
-
-This README describes the reviewed project changes as of 30 September 2026.
-
-These changes include:
-
-- Removal of Fleet Control from the interface.
-- WMS depth-2 placement after confirmed task completion.
-- Reservation of paired storage depths during transfers.
-- Operator review for stopped transfers with the load still at the source.
-- Bridge protection against duplicate task submissions.
-- Strict validation of task-status responses.
-- Disabled direct family task-submission endpoints.
-- Environment examples and dependency files for installation.
-- A backend test suite with 18 tests.
-
-The repository or local folder may still be named `IWOE_RCS`. That name does not indicate implemented AI optimization.
-
 ## Features
 
 | Area | Functions |
