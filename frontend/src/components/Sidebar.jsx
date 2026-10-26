@@ -40,6 +40,11 @@ export default function Sidebar() {
       icon: ClipboardList,
     },
     {
+      name: "Audit History",
+      path: "/audit-history",
+      icon: ClipboardList,
+    },
+    {
       name: "Task Management",
       path: "/tasks",
       icon: CheckCircle2,

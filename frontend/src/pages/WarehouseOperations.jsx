@@ -1,3 +1,4 @@
+import AuditFields from "../components/AuditFields";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
@@ -9,6 +10,7 @@ import {
 import "../styles/OverviewSettings.css";
 
 export default function WarehouseOperations() {
+  const [audit, setAudit] = useState({ actor: "", reason: "" });
   const [snapshot, setSnapshot] = useState(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -56,7 +58,8 @@ export default function WarehouseOperations() {
     }
 
     try {
-      updateOutbound(operation.id, action);
+      updateOutbound(operation.id, action, audit);
+      setAudit(current => ({ ...current, reason: "" }));
 
       setMessage(
         action === "COMPLETE"
@@ -153,6 +156,8 @@ export default function WarehouseOperations() {
           Deduct Stock is a direct adjustment.
         </p>
 
+        <AuditFields value={audit} onChange={setAudit} />
+
         {error && (
           <p role="alert">{error}</p>
         )}
@@ -243,7 +248,7 @@ export default function WarehouseOperations() {
                     <br />
                     {new Date(
                       record.createdAt
-                    ).toLocaleString()}
+                    ).toLocaleString('en-GB')}
                   </td>
 
                   <td>

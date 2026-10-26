@@ -1,3 +1,4 @@
+import { saveAuditedWarehouse } from "./wmsAudit.js";
 export const MONITOR_KEY = "wms-monitor-master-v2";
 
 const QUEUE_KEY = "wms-robot-tasks-v1";
@@ -556,6 +557,7 @@ export function completeBasketTransfer(task) {
     return false;
   }
 
+  const original = localStorage.getItem(MONITOR_KEY);
   const data = readMonitor();
 
   const key =
@@ -740,10 +742,12 @@ export function completeBasketTransfer(task) {
   ];
 
   // Save location, inventory, history and completion marker together.
-  localStorage.setItem(
-    MONITOR_KEY,
-    JSON.stringify(data),
-  );
+  saveAuditedWarehouse(data, {
+    actor: "System (transfer reconciliation)",
+    reason: `Confirmed transfer ${key}`,
+    action: "TRANSFER_COMPLETED",
+    expectedRaw: original,
+  });
 
   window.dispatchEvent(
     new CustomEvent("wms-monitor-data-changed"),

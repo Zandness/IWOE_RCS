@@ -1,3 +1,4 @@
+import { saveAuditedWarehouse } from "./wmsAudit.js";
 import {
   MONITOR_KEY,
   readMonitor,
@@ -271,21 +272,18 @@ export function transitionOutbound(data, id, action) {
   return next;
 }
 
-export function updateOutbound(id, action) {
+export function updateOutbound(id, action, audit) {
   const next = transitionOutbound(
     readMonitor(),
     id,
     action,
   );
 
-  localStorage.setItem(
-    MONITOR_KEY,
-    JSON.stringify(next),
-  );
+  const saved = saveAuditedWarehouse(next, { ...audit, action: `OUTBOUND_${action}` });
 
   window.dispatchEvent(
     new CustomEvent("wms-monitor-data-changed"),
   );
 
-  return next;
+  return saved;
 }

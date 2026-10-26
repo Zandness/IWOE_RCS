@@ -1,3 +1,6 @@
+import AuditFields from "../components/AuditFields";
+import { saveAuditedWarehouse, validateAuditLog } from "../utils/wmsAudit";
+import { validateStockCounts } from "../utils/stockCount";
 import { createOutboundReservation } from "../utils/warehouseOperations";
 
 import {
@@ -306,6 +309,7 @@ const DEFAULT_STORAGE_LINKS = [
 ];
 
 export default function WarehouseMap() {
+  const [audit, setAudit] = useState({ actor: "", reason: "" });
   const [monitorData, setMonitorData] = useState(
     loadMonitorData,
   );
@@ -319,15 +323,11 @@ export default function WarehouseMap() {
   const [search, setSearch] = useState("");
   const [zoneFilter, setZoneFilter] = useState("ALL");
 
-  function saveAndSet(nextData) {
+  function saveAndSet(nextData, action = "MONITOR_UPDATE") {
     const normalized = normalizeMonitorData(nextData);
-
-    localStorage.setItem(
-      MONITOR_STORAGE_KEY,
-      JSON.stringify(normalized),
-    );
-
-    setMonitorData(normalized);
+    const saved = saveAuditedWarehouse(normalized, { ...audit, action });
+    setMonitorData(saved);
+    setAudit(current => ({ ...current, reason: "" }));
 
     window.dispatchEvent(
       new CustomEvent("wms-monitor-data-changed", {
@@ -487,6 +487,10 @@ export default function WarehouseMap() {
   return (
     <div className="rack-monitor-page">
       <MonitorRcsDispatch />
+      <section className="panel overview-section">
+        <h3>Change details</h3>
+        <AuditFields value={audit} onChange={setAudit} />
+      </section>
 
       <div className="rack-monitor-header">
         <div>
@@ -635,6 +639,8 @@ export default function WarehouseMap() {
         <ShelfInventoryModal
           rack={selectedShelfRack}
           shelf={selectedShelf}
+          audit={audit}
+          onAuditChange={setAudit}
           skuCatalog={monitorData.skuCatalog}
           onClose={() => setSelectedShelfRef(null)}
           onSaveShelf={(patch) => {
@@ -1439,6 +1445,8 @@ function ShelfInventoryModal({
   skuCatalog,
   onClose,
   onSaveShelf,
+  audit,
+  onAuditChange,
   onInbound,
   onOutbound,
   onDeduct,
@@ -1788,6 +1796,8 @@ function ShelfInventoryModal({
             <strong>{totalQty}</strong>
           </div>
         </div>
+
+        <AuditFields value={audit} onChange={onAuditChange} />
 
         <BasketDetails
           shelf={shelf}
@@ -2253,6 +2263,8 @@ function loadMonitorData() {
 }
 
 function normalizeMonitorData(data) {
+  validateAuditLog(data?.auditLog);
+  validateStockCounts(data?.stockCounts);
   const fallback = createDefaultMonitorData();
 
   const sourceRacks = Array.isArray(data?.racks)
@@ -2331,6 +2343,7 @@ function normalizeMonitorData(data) {
     version: 4,
     layoutVersion: CURRENT_LAYOUT_VERSION,
 
+    auditLog: data?.auditLog ?? [],
     stockCounts: Array.isArray(data?.stockCounts) ? data.stockCounts : [],
 
     completedBasketTransfers:

@@ -1,3 +1,4 @@
+import { saveAuditedWarehouse } from "./wmsAudit.js";
 import { MONITOR_KEY, isReserved } from './basketStore.js';
 
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -48,12 +49,11 @@ function available(data, shelf, storage) {
   if (!shelf.basket?.id) fail('This location has no Load ID. Check data consistency first.');
   if (data.racks.flatMap(rack => rack.shelves).filter(point => point.basket?.id === shelf.basket.id).length !== 1) fail('Duplicate Load ID. Check data consistency first.');
 }
-function save(data, original, storage) {
+function save(data, original, storage, audit = {}) {
   validateStockCounts(data.stockCounts);
   if (storage.getItem(MONITOR_KEY) !== original) fail('Warehouse data changed while saving. Reload and try again.');
   // Save stock and audit together with one atomic localStorage write.
-  storage.setItem(MONITOR_KEY, JSON.stringify(data));
-  return data;
+  return saveAuditedWarehouse(data, { ...audit, expectedRaw: original }, storage);
 }
 export function startStockCount(rackId, shelfId, storage = localStorage) {
   const original = storage.getItem(MONITOR_KEY);
@@ -111,5 +111,5 @@ export function updateStockCount(id, input, action = 'SAVE', storage = localStor
     // Retain zero-stock items and their Load; counting never deletes records.
     data.history = [{ id: `HIS-${crypto.randomUUID()}`, type: 'STOCK_COUNT', countId: count.id, rackId: count.rackId, shelfId: count.shelfId, locationCode: count.locationCode, basketId: count.loadId, operator: count.operator, reason: count.reason, lines: clone(count.lines), createdAt: count.closedAt }, ...(data.history || [])];
   }
-  return save(data, original, storage);
+  return save(data, original, storage, { actor: count.operator, reason: count.reason, action: 'STOCK_COUNT' });
 }

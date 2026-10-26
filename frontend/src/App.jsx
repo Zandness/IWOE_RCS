@@ -17,6 +17,7 @@ import TaskManagement from "./pages/TaskManagement";
 import RobotTaskDispatcher from "./pages/RobotTaskDispatcher";
 import Settings from "./pages/Settings";
 import StockCount from "./pages/StockCount";
+import AuditHistory from "./pages/AuditHistory";
 
 function AppContent() {
   const { pathname } = useLocation();
@@ -42,6 +43,7 @@ function AppContent() {
           </div>
 
           <Routes>
+            <Route path="/audit-history" element={<AuditHistory />} />
             <Route path="/stock-count" element={<StockCount />} />
             <Route path="/" element={<Dashboard />} />
 

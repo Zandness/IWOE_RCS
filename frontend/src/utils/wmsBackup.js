@@ -1,3 +1,4 @@
+import { validateAuditLog } from "./wmsAudit.js";
 import { validateStockCounts } from './stockCount.js';
 
 export const BACKUP_KEYS = [
@@ -55,6 +56,7 @@ export function validateBackup(backup) {
     requireValue(monitor[name] == null || Array.isArray(monitor[name]), `Invalid ${name}.`);
   }
   validateStockCounts(monitor.stockCounts);
+  validateAuditLog(monitor.auditLog);
   const inputHistoryKey = 'wms-transfer-input-history-v1';
   for (const key of BACKUP_KEYS.slice(2)) {
     if (key === inputHistoryKey) continue;
