@@ -1,3 +1,4 @@
+import WorkflowStatusPanel from "../components/WorkflowStatusPanel";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
@@ -28,6 +29,8 @@ function readSnapshot() {
     }
 
     return {
+      monitor,
+      queue,
       summary: summarizeWarehouse(monitor, queue),
       initialized: Boolean(monitor),
       preferences: loadPreferences(),
@@ -144,6 +147,8 @@ export default function Dashboard() {
               to initialize the warehouse layout.
             </p>
           )}
+
+          <WorkflowStatusPanel monitor={snapshot.monitor} queue={snapshot.queue} />
 
           <div className="overview-stats">
             {cards.map(([name, value]) => (
@@ -349,18 +354,13 @@ export default function Dashboard() {
                         )
                           ? new Date(
                               task.scheduledSendAt
-                            ).toLocaleString()
+                            ).toLocaleString('en-GB')
                           : "As soon as ready"}
                       </td>
 
                       <td>
-                        {task.backendError ||
-                        task.statusCheckError ||
-                        task.warehouseSyncError
-                          ? "Needs attention"
-                          : task.sendStatus === "SENT"
-                            ? task.rcsStatus
-                            : task.sendStatus}
+                        {task.workflow.label}
+                        <small className="workflow-next-step">{task.workflow.nextStep}</small>
                       </td>
                     </tr>
                   ))}

@@ -1,3 +1,5 @@
+import { buildWorkflowRows } from "../utils/workflowStatus";
+import "../styles/WorkflowStatus.css";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
@@ -12,18 +14,25 @@ export default function TaskManagement() {
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("ALL");
+  const [rows, setRows] = useState([]);
 
   useEffect(() => {
     function refresh() {
       try {
-        setSnapshot(readOperationsSnapshot());
+        const next = readOperationsSnapshot();
+        const nextRows = buildWorkflowRows(next.monitor, next.queue);
+        setSnapshot(next);
+        setRows(nextRows);
         setError("");
       } catch (error) {
+        setSnapshot(null);
+        setRows([]);
         setError(error.message);
       }
     }
 
     refresh();
+    const timer = window.setInterval(refresh, 10000);
 
     const events = [
       "focus",
@@ -37,39 +46,12 @@ export default function TaskManagement() {
     });
 
     return () => {
+      window.clearInterval(timer);
       events.forEach((event) => {
         window.removeEventListener(event, refresh);
       });
     };
   }, []);
-
-  const rows = [
-    ...(snapshot?.monitor.outboundOperations || []).map(
-      (operation) => ({
-        ...operation,
-        kind: "OUTBOUND",
-        source: operation.locationCode,
-        destination: "Picking workflow",
-        path: "/operations",
-      })
-    ),
-
-    ...(snapshot?.queue || []).map((task) => ({
-      ...task,
-      kind: "BASKET_TRANSFER",
-      source: task.sourceRcsPointCode,
-      destination: task.destinationRcsPointCode,
-      path: "/dispatcher",
-
-      status: task.backendError
-        ? "NEEDS_ATTENTION"
-        : task.sendStatus === "SENT"
-          ? task.rcsStatus
-          : task.sendStatus === "NOT_SENT"
-            ? "PENDING"
-            : task.sendStatus,
-    })),
-  ];
 
   const visible = rows
     .filter(
@@ -78,6 +60,10 @@ export default function TaskManagement() {
         [
           record.id,
           record.kind,
+          record.typeLabel,
+          record.execution,
+          record.nextStep,
+          record.number,
           record.sku,
           record.basketId,
           record.source,
@@ -94,19 +80,13 @@ export default function TaskManagement() {
         (Date.parse(a.createdAt) || 0)
     );
 
-  const closed = [
-    "COMPLETED",
-    "CANCELLED",
-    "CANCELED",
-  ];
-
   const stats = [
     ["Total", rows.length],
 
     [
       "Open",
       rows.filter(
-        (record) => !closed.includes(record.status)
+        (record) => !record.closed
       ).length,
     ],
 
@@ -119,13 +99,7 @@ export default function TaskManagement() {
 
     [
       "Needs attention",
-      rows.filter((record) =>
-        [
-          "FAILED",
-          "NEEDS_ATTENTION",
-          "OUTCOME_UNKNOWN",
-        ].includes(record.status)
-      ).length,
+      rows.filter(record => record.attention).length,
     ],
   ];
 
@@ -140,7 +114,7 @@ export default function TaskManagement() {
           <h2>Task Management</h2>
 
           <p>
-            Overview of picking work and load transfers.
+            Overview of WMS documents, picking, stock counts and RCS Load transfers.
             Manage each task in its operation page.
           </p>
         </div>
@@ -193,6 +167,9 @@ export default function TaskManagement() {
                 Outbound picking
               </option>
 
+              <option value="DOCUMENT">Inbound / Outbound documents</option>
+              <option value="STOCK_COUNT">Stock counts</option>
+
               <option value="BASKET_TRANSFER">
                 Load transfers
               </option>
@@ -231,7 +208,7 @@ export default function TaskManagement() {
 
         <p className="workflow-note">
           Summary cards include all tasks.
-          Open tasks may also need attention.
+          Open tasks may also need attention. RCS-reported completion remains open until WMS reconciliation is recorded. No live connection check or dispatch is performed here.
         </p>
 
         <div className="table-wrapper">
@@ -266,9 +243,8 @@ export default function TaskManagement() {
                   <td>{record.id}</td>
 
                   <td>
-                    {record.kind === "BASKET_TRANSFER"
-                      ? "Load transfer"
-                      : "Outbound picking"}
+                    {record.typeLabel}
+                    <small className="workflow-execution">{record.execution}</small>
                   </td>
 
                   <td>
@@ -286,10 +262,9 @@ export default function TaskManagement() {
                       className="workflow-status"
                       data-status={record.status || "UNKNOWN"}
                     >
-                      {String(
-                        record.status || "UNKNOWN"
-                      ).replaceAll("_", " ")}
+                      {record.label || "UNKNOWN"}
                     </span>
+                    <small className="workflow-next-step">{record.nextStep}</small>
                   </td>
 
                   <td>

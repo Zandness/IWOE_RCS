@@ -1,7 +1,7 @@
 import { validateAuditLog } from './wmsAudit.js';
 import { validateDocuments } from './warehouseDocuments.js';
 import { validateStockCounts } from './stockCount.js';
-import { isStoppedTransferReviewed } from './basketStore.js';
+import { transferWorkflowState } from './workflowStatus.js';
 
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const requireValue = (ok, message) => { if (!ok) throw new Error(message); };
@@ -68,10 +68,9 @@ function pendingRows(snapshot) {
     add(`COUNT/${count.id}`, { createdAt: count.createdAt, source: 'STOCK COUNT', reference: count.id, status: count.status, location: `${count.rackId} / ${count.locationCode || count.shelfId}`, load: count.loadId, nextStep: 'Complete or cancel the draft in Stock Count' });
   }
   for (const task of queue.list) {
-    const key = task.rcsTaskChainCode || task.bridgeTaskId;
-    if (isStoppedTransferReviewed(task, monitor) || (task.rcsStatus === 'COMPLETED' && key && Object.hasOwn(monitor.completedBasketTransfers || {}, key))) continue;
-    const needsReview = ['FAILED', 'CANCELLED', 'CANCELED'].includes(task.rcsStatus) || task.sendStatus === 'OUTCOME_UNKNOWN' || task.warehouseSyncError;
-    add(`QUEUE/${task.id}`, { createdAt: task.createdAt || '', source: 'TRANSFER QUEUE', reference: task.id, status: task.rcsStatus || task.sendStatus || 'UNKNOWN', location: `${task.sourceLocationId || '?'} → ${task.destinationLocationId || '?'}`, load: task.basketId || '', nextStep: needsReview ? 'Review transfer outcome; do not resubmit automatically' : task.rcsStatus === 'COMPLETED' ? 'Review warehouse reconciliation' : task.sendStatus === 'NOT_SENT' ? 'Waiting for dispatch; no command sent by this report' : 'Waiting for confirmed transfer outcome' });
+    const workflow = transferWorkflowState(task, monitor);
+    if (workflow.closed) continue;
+    add(`QUEUE/${task.id}`, { createdAt: task.createdAt || '', source: 'TRANSFER QUEUE', reference: task.id, status: workflow.label, location: `${task.sourceLocationId || '?'} → ${task.destinationLocationId || '?'}`, load: task.basketId || '', nextStep: workflow.nextStep });
   }
   for (const task of legacyTasks.list) {
     if (['COMPLETED', 'CANCELLED', 'CANCELED'].includes(task.status)) continue;

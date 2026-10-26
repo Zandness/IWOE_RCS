@@ -1,0 +1,8 @@
+.workflow-readiness h4 { margin: 8px 0; font-size: 13px; font-weight: 600; }
+.workflow-readiness-counts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 18px 0 0; }
+.workflow-readiness-counts > div { padding: 12px; border: 1px solid #8885; border-radius: 8px; min-width: 0; }
+.workflow-readiness-counts dt { font-size: 12px; color: #94a3b8; overflow-wrap: anywhere; }
+.workflow-readiness-counts dd { margin: 6px 0 0; font-size: 20px; font-weight: 600; }
+.workflow-execution { display: block; margin-top: 4px; font-size: 12px; color: #94a3b8; }
+.workflow-next-step { display: block; max-width: 320px; margin-top: 6px; font-size: 12px; line-height: 1.6; color: #a7bad0; }
+@media (max-width: 600px) { .workflow-readiness-counts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

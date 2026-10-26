@@ -1,7 +1,7 @@
+import { transferWorkflowState } from "./workflowStatus.js";
 import {
   basketOf,
   isReserved,
-  isStoppedTransferReviewed,
 } from "./basketStore.js";
 
 export const PREFERENCES_KEY = "wms-ui-preferences-v1";
@@ -51,16 +51,7 @@ export function summarizeWarehouse(
     (task) => task.sendStatus === "NOT_SENT"
   );
 
-  const attention = queue.filter(
-    (task) =>
-      task.sendStatus === "OUTCOME_UNKNOWN" ||
-      task.backendError ||
-      task.statusCheckError ||
-      task.warehouseSyncError ||
-      ["FAILED", "CANCELLED", "CANCELED"].includes(
-        task.rcsStatus
-      )
-  );
+  const states = queue.map(task => transferWorkflowState(task, monitor || {}, now));
 
   const loadsByType = {
     BASKET: 0,
@@ -166,36 +157,11 @@ export function summarizeWarehouse(
 
     pending: pending.length,
 
-    scheduled: pending.filter(
-      (task) => Date.parse(task.scheduledSendAt) > now
-    ).length,
-
-    ready: pending.filter(
-      (task) =>
-        !task.scheduledSendAt ||
-        Date.parse(task.scheduledSendAt) <= now
-    ).length,
-
-    active: queue.filter(
-      (task) =>
-        task.sendStatus === "SENDING" ||
-        (task.sendStatus === "SENT" &&
-          ["CREATED", "RUNNING"].includes(
-            task.rcsStatus
-          ))
-    ).length,
-
-    completed: queue.filter(
-      (task) => task.rcsStatus === "COMPLETED"
-    ).length,
-
-    attention: attention.filter(
-      (task) =>
-        !isStoppedTransferReviewed(
-          task,
-          monitor || {}
-        )
-    ).length,
+    scheduled: states.filter(value => value.status === "SCHEDULED").length,
+    ready: states.filter(value => value.status === "NOT_SENT").length,
+    active: states.filter(value => ["SUBMITTING", "WAITING_RCS"].includes(value.status)).length,
+    completed: states.filter(value => value.status === "COMPLETED").length,
+    attention: states.filter(value => value.attention).length,
 
     recent: [...queue]
       .sort(
@@ -203,6 +169,7 @@ export function summarizeWarehouse(
           (Date.parse(b.createdAt) || 0) -
           (Date.parse(a.createdAt) || 0)
       )
-      .slice(0, 8),
+      .slice(0, 8)
+      .map(task => ({ ...task, workflow: transferWorkflowState(task, monitor || {}, now) })),
   };
 }
