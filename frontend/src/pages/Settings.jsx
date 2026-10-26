@@ -1,3 +1,4 @@
+import WmsConsistencyPanel from "../components/WmsConsistencyPanel";
 import WmsBackupPanel from "../components/WmsBackupPanel";
 import { useEffect, useRef, useState } from "react";
 
@@ -346,6 +347,7 @@ export default function Settings() {
       </div>
 
       <WmsBackupPanel />
+      <WmsConsistencyPanel />
 
       <div className="overview-columns">
         <section className="panel overview-section">
