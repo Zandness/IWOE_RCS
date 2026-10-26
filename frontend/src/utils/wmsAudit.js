@@ -35,7 +35,7 @@ function entities(data) {
       }
     }
   }
-  for (const [field, entity, idField] of [['skuCatalog', 'SKU_MASTER', 'sku'], ['outboundOperations', 'OUTBOUND_OPERATION', 'id']]) {
+  for (const [field, entity, idField] of [['skuCatalog', 'SKU_MASTER', 'sku'], ['outboundOperations', 'OUTBOUND_OPERATION', 'id'], ['documents', 'WAREHOUSE_DOCUMENT', 'id']]) {
     requireValue(data[field] == null || Array.isArray(data[field]), `Invalid ${field}.`);
     for (const item of data[field] || []) {
       requireValue(object(item), `Invalid ${field} record.`);

@@ -104,5 +104,23 @@ export function checkWmsConsistency(storage = localStorage) {
       }
     }
   }
+  if (monitor?.documents != null && !Array.isArray(monitor.documents)) {
+    add('UNREADABLE_DATA', 'Warehouse documents could not be read.', 'Monitor / documents');
+  }
+  for (const [index, doc] of (Array.isArray(monitor?.documents) ? monitor.documents : []).entries()) {
+    const position = `Document / ${text(doc?.number || doc?.id) || `#${index + 1}`}`;
+    if (!object(doc) || !Array.isArray(doc.lines)) {
+      add('UNREADABLE_DATA', 'Document lines could not be read.', position);
+      continue;
+    }
+    // Closed documents keep historical locations even after layout changes.
+    if (['COMPLETED', 'CANCELLED'].includes(doc.status)) continue;
+    for (const [lineIndex, line] of doc.lines.entries()) {
+      const rack = monitor.racks.find(record => record?.id === line?.rackId);
+      if (!object(line) || !Array.isArray(rack?.shelves) || !rack.shelves.some(shelf => shelf?.id === line.shelfId)) {
+        add('MISSING_TASK_LOCATION', `Document references a missing location: ${text(line?.rackId)} / ${text(line?.shelfId)}`, `${position} / Line ${lineIndex + 1}`);
+      }
+    }
+  }
   return { issues, locationsChecked: locationIds.size, checkedAt: new Date().toISOString() };
 }

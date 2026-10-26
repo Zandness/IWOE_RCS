@@ -35,6 +35,11 @@ export default function Sidebar() {
       icon: ClipboardList,
     },
     {
+      name: "Inbound / Outbound Documents",
+      path: "/documents",
+      icon: ClipboardList,
+    },
+    {
       name: "Stock Count",
       path: "/stock-count",
       icon: ClipboardList,

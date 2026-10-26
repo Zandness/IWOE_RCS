@@ -1,3 +1,4 @@
+import { validateDocuments } from "../utils/warehouseDocuments";
 import AuditFields from "../components/AuditFields";
 import { saveAuditedWarehouse, validateAuditLog } from "../utils/wmsAudit";
 import { validateStockCounts } from "../utils/stockCount";
@@ -2265,6 +2266,7 @@ function loadMonitorData() {
 function normalizeMonitorData(data) {
   validateAuditLog(data?.auditLog);
   validateStockCounts(data?.stockCounts);
+  validateDocuments(data?.documents);
   const fallback = createDefaultMonitorData();
 
   const sourceRacks = Array.isArray(data?.racks)
@@ -2343,6 +2345,7 @@ function normalizeMonitorData(data) {
     version: 4,
     layoutVersion: CURRENT_LAYOUT_VERSION,
 
+    documents: data?.documents ?? [],
     auditLog: data?.auditLog ?? [],
     stockCounts: Array.isArray(data?.stockCounts) ? data.stockCounts : [],
 
