@@ -1,0 +1,26 @@
+.reports-filters { grid-template-columns: minmax(0, 2fr) repeat(2, minmax(0, 1fr)); margin-top: 18px; }
+.reports-filters > label { min-width: 0; }
+.reports-scroll { max-width: 100%; overflow-x: auto; }
+.reports-table { min-width: 1100px; }
+.reports-table th, .reports-table td { min-width: 110px; max-width: 320px; overflow-wrap: anywhere; }
+@media (max-width: 720px) { .reports-filters { grid-template-columns: minmax(0, 1fr); } }
+
+/* Match the table typography used by Warehouse Operations and Dashboard. */
+.reports-page .consistency-table {
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.reports-page .consistency-table thead th {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.reports-page .consistency-table tbody td,
+.reports-page .consistency-table tbody th {
+  font-size: 13px;
+}
+
+.reports-page .consistency-table tbody th {
+  font-weight: 600;
+}

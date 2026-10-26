@@ -50,6 +50,11 @@ export default function Sidebar() {
       icon: ClipboardList,
     },
     {
+      name: "Reports & CSV Export",
+      path: "/reports",
+      icon: ClipboardList,
+    },
+    {
       name: "Task Management",
       path: "/tasks",
       icon: CheckCircle2,
