@@ -2331,6 +2331,8 @@ function normalizeMonitorData(data) {
     version: 4,
     layoutVersion: CURRENT_LAYOUT_VERSION,
 
+    stockCounts: Array.isArray(data?.stockCounts) ? data.stockCounts : [],
+
     completedBasketTransfers:
       data?.completedBasketTransfers || {},
 

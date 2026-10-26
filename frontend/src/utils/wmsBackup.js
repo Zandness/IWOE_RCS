@@ -1,3 +1,5 @@
+import { validateStockCounts } from './stockCount.js';
+
 export const BACKUP_KEYS = [
   'wms-monitor-master-v2', 'wms-ui-preferences-v1', 'wms-robot-tasks-v1',
   'wms-transfer-input-history-v1', 'wms-inbound-orders-v1', 'wms-outbound-orders-v1',
@@ -52,6 +54,7 @@ export function validateBackup(backup) {
   for (const name of ['history', 'outboundOperations', 'waypoints', 'waypointLinks', 'storageLinks']) {
     requireValue(monitor[name] == null || Array.isArray(monitor[name]), `Invalid ${name}.`);
   }
+  validateStockCounts(monitor.stockCounts);
   const inputHistoryKey = 'wms-transfer-input-history-v1';
   for (const key of BACKUP_KEYS.slice(2)) {
     if (key === inputHistoryKey) continue;

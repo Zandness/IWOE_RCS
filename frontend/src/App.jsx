@@ -16,6 +16,7 @@ import WarehouseOperations from "./pages/WarehouseOperations";
 import TaskManagement from "./pages/TaskManagement";
 import RobotTaskDispatcher from "./pages/RobotTaskDispatcher";
 import Settings from "./pages/Settings";
+import StockCount from "./pages/StockCount";
 
 function AppContent() {
   const { pathname } = useLocation();
@@ -28,7 +29,7 @@ function AppContent() {
         <Sidebar />
 
         <main className="main-content">
-          {/* คิวอยู่ตลอด เปลี่ยนเฉพาะการแสดงหน้า */}
+          {/* Keep the queue mounted; only toggle page visibility. */}
           <div
             style={{
               display:
@@ -41,6 +42,7 @@ function AppContent() {
           </div>
 
           <Routes>
+            <Route path="/stock-count" element={<StockCount />} />
             <Route path="/" element={<Dashboard />} />
 
             <Route
@@ -91,7 +93,7 @@ function AppContent() {
               element={<TaskManagement />}
             />
 
-            {/* แสดง Dispatcher จากด้านบนแล้ว */}
+            {/* The dispatcher is rendered above. */}
             <Route path="/dispatcher" element={null} />
 
             <Route

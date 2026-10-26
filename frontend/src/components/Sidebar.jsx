@@ -35,6 +35,11 @@ export default function Sidebar() {
       icon: ClipboardList,
     },
     {
+      name: "Stock Count",
+      path: "/stock-count",
+      icon: ClipboardList,
+    },
+    {
       name: "Task Management",
       path: "/tasks",
       icon: CheckCircle2,
