@@ -1,3 +1,4 @@
+import WmsBackupPanel from "../components/WmsBackupPanel";
 import { useEffect, useRef, useState } from "react";
 
 import {
@@ -343,6 +344,8 @@ export default function Settings() {
           </p>
         </section>
       </div>
+
+      <WmsBackupPanel />
 
       <div className="overview-columns">
         <section className="panel overview-section">
