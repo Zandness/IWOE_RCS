@@ -4,6 +4,12 @@ A web-based Warehouse Management System (WMS) for storage monitoring, inventory 
 
 The WMS manages what to move, the source and destination, priority, and sending time. The external RCS manages robot assignment, navigation, traffic, and physical task execution.
 
+## Current version
+
+This version adds Login and role-based access to the browser-local WMS. Shared warehouse storage is removed. Accounts and RCS permissions are checked by the backend, while warehouse data remains in the current browser.
+
+Recent additions include Backup / Restore, read-only consistency checks, stock counts, audit history, warehouse documents, reports, and workflow summaries. The existing Monitor, inventory, and RCS transfer functions remain available.
+
 ## Features
 
 | Area | Functions |
@@ -20,7 +26,15 @@ The WMS manages what to move, the source and destination, priority, and sending 
 | Command history | Collapsible history, search, command reuse, and 20 entries per page |
 | Input history | Remember entered task types and robot codes in the browser |
 | Appearance | Night and Day themes |
-| Settings | Warehouse preferences and backend/RCS connection checks |
+| Backup / Restore | Export warehouse backups, validate imports, and restore supported browser data |
+| Consistency checks | Report duplicate Location Codes or Load IDs, excess reservations, stock without a Load, and references to missing locations; no automatic repair or deletion |
+| Stock counts | Record actual quantities, review differences, and apply supported adjustments with a reason |
+| Audit History | Review locally recorded warehouse changes, account attribution, and reasons |
+| Warehouse Documents | Multi-line inbound and outbound documents and their processing status |
+| Reports | Filter stock on hand, movements, and pending work; export CSV |
+| Workflow summaries | Separate WMS operation state from RCS transfer state |
+| Login and roles | Viewer, Operator, and Admin accounts; own-password changes and Admin user management |
+| Settings | Accounts, warehouse preferences, backup, consistency checks, and backend/RCS connection checks |
 
 Fleet Control is excluded from the updated interface. This does not remove the dispatch queue or optional robot-code input.
 
@@ -29,16 +43,18 @@ Fleet Control is excluded from the updated interface. This does not remove the d
 | Component | Responsibility | Storage |
 | --- | --- | --- |
 | React frontend | Warehouse interface, inventory operations, transfer validation, scheduling, and queue processing | Browser local storage |
-| FastAPI bridge | Validate requests, prevent duplicate submissions, prepare HIK payloads, submit tasks, and retrieve status | SQLite |
+| FastAPI bridge | Authenticate accounts, enforce RCS permissions, authorize local warehouse writes, prevent duplicate submissions, prepare HIK payloads, submit tasks, and retrieve status | SQLite: accounts, sessions, access events, bridge tasks, and submission claims |
 | External HIK RCS | Select and control robots, plan routes, and execute installed workflows | Managed by the external system |
 
-The frontend sends transfer requests to `POST /api/rcs/tasks`.
+The frontend sends transfer requests to `POST /api/rcs/tasks` using the signed-in session. Operator or Admin permission is required for RCS commands. Shared mode is not required.
+
+Before saving warehouse changes, the application checks the account through `POST /api/wms/auth/authorize`. This authorizes a local write; it does not upload or synchronize warehouse inventory. Two browsers do not share stock simply because they use the same backend account.
 
 The bridge records a submission claim before contacting RCS, prepares a `targetRoute`, and calls HIK `/task/submit`. After acceptance, it saves the returned task ID.
 
 The frontend queries individual bridge tasks to retrieve current status. A confirmed `COMPLETED` status triggers the WMS load-location update, subject to local consistency checks.
 
-The dispatcher remains mounted while navigating between WMS pages. Closing the browser tab stops automatic dispatch and polling.
+The dispatcher remains mounted while navigating between WMS pages. Closing the browser tab stops automatic dispatch and polling. Signing out unmounts the dispatcher; it does not cancel a robot task already accepted by RCS.
 
 ## Main source files
 
@@ -52,6 +68,27 @@ The dispatcher remains mounted while navigating between WMS pages. Closing the b
 | `frontend/src/pages/RobotTaskDispatcher.jsx` | Queue, dispatch, polling, and stopped-task review |
 | `frontend/src/components/MonitorRcsDispatch.jsx` | Transfer form and command history |
 | `frontend/src/components/ThemeToggle.jsx` | Day/Night control |
+| `frontend/src/components/LoginGate.jsx` | Session gate and account connectivity |
+| `frontend/src/components/LoginForm.jsx` | First administrator setup and sign-in |
+| `frontend/src/components/AccountPanel.jsx` | Password changes and Admin account management |
+| `frontend/src/components/AuditFields.jsx` | Signed-in operator attribution and change reason |
+| `frontend/src/components/WmsBackupPanel.jsx` | Backup export, validation, and restore interface |
+| `frontend/src/components/WmsConsistencyPanel.jsx` | Read-only warehouse consistency results |
+| `frontend/src/components/WorkflowStatusPanel.jsx` | WMS and RCS workflow summaries |
+| `frontend/src/pages/StockCount.jsx` | Stock-count workflow |
+| `frontend/src/pages/AuditHistory.jsx` | Warehouse audit viewer |
+| `frontend/src/pages/WarehouseDocuments.jsx` | Inbound/outbound document workflows |
+| `frontend/src/pages/Reports.jsx` | Filtered warehouse reports and CSV export |
+| `frontend/src/utils/wmsAuth.js` | Session-aware authentication requests |
+| `frontend/src/utils/browserSession.js` | Local-write permission and conflict checks |
+| `frontend/src/utils/browserMigration.js` | Preserve current browser warehouse when retiring legacy mode flags |
+| `frontend/src/utils/wmsBackup.js` | Backup format, validation, and restoration |
+| `frontend/src/utils/wmsConsistency.js` | Read-only consistency checks |
+| `frontend/src/utils/stockCount.js` | Count validation and adjustment logic |
+| `frontend/src/utils/warehouseDocuments.js` | Warehouse document rules |
+| `frontend/src/utils/wmsAudit.js` | Local warehouse audit records |
+| `frontend/src/utils/wmsReports.js` | Report rows, filters, and CSV formatting |
+| `frontend/src/utils/workflowStatus.js` | Workflow status classification |
 | `frontend/src/utils/basketStore.js` | Transfer validation, reservations, local Bin/Unbin, completion updates, and review records |
 | `frontend/src/utils/rackStructure.js` | Storage levels and depths |
 | `frontend/src/utils/warehouseOperations.js` | Stock operations |
@@ -59,6 +96,7 @@ The dispatcher remains mounted while navigating between WMS pages. Closing the b
 | `frontend/vite.config.js` | Development and preview servers with API proxy |
 | `frontend/.env.example` | Frontend configuration example |
 | `backend/main.py` | FastAPI app, SQLite records, submission protection, and tracked tasks |
+| `backend/wms_auth.py` | Account storage, password hashing, sessions, roles, and access events |
 | `backend/hik_api.py` | Direct query, cancellation, and binding routes; disabled legacy submission |
 | `backend/test_hik_contract.py` | Backend contract and behavior tests |
 | `backend/requirements.txt` | Direct dependencies with supported version ranges |
@@ -68,8 +106,8 @@ The dispatcher remains mounted while navigating between WMS pages. Closing the b
 ## Requirements
 
 - Python 3.11 for the reviewed backend and test setup.
-- Node.js and npm compatible with the Vite version in the project lockfile.
-- A browser with JavaScript and local storage enabled.
+- Node.js 20.19+ or 22.12+, with npm, compatible with Vite 7 in the project lockfile.
+- A browser with JavaScript, local storage, and cookies enabled.
 - For physical testing: access from the backend computer to the RCS network, configured robots, and installed task templates.
 
 The backend package snapshot was captured from a Windows Python 3.11 environment. Other operating systems or Python versions need separate installation and testing.
@@ -138,6 +176,26 @@ Open [http://localhost:5173](http://localhost:5173).
 
 `npm ci` installs dependencies from `package-lock.json`. Keep the manifest and lockfile together when intentionally changing dependencies.
 
+### 3. First Login and accounts
+
+1. Keep both the backend and frontend running, then open the application.
+2. If no accounts exist, create the first administrator. No default credentials are supplied.
+3. Use a password of at least 12 characters.
+4. Open **Settings** to add users and assign roles.
+5. If accounts already exist in the retained backend database, sign in with an existing account. Older sessions may require a fresh sign-in.
+
+| Role | Warehouse access | RCS access | Account management |
+| --- | --- | --- | --- |
+| Viewer | Read data and export reports | Read status and query | Own password |
+| Operator | Save warehouse operations | Submit and manage commands | Own password |
+| Admin | Operator permissions | Operator permissions | Create users, change roles, disable accounts, and reset passwords |
+
+The last enabled Admin cannot be disabled or demoted through account management. Passwords are hashed with PBKDF2-SHA256; session cookies are HttpOnly and SameSite Strict, with an eight-hour lifetime. Role changes, account disabling, and password resets revoke affected sessions.
+
+Warehouse writes and dispatch require an available account backend. An already open session can display cached data during an outage, while saves and dispatch pause. Switching accounts in the same browser preserves that browser's warehouse.
+
+These permissions protect backend requests and normal application workflows. Browser Local Storage can still be edited outside the application; it is not a centrally protected inventory database.
+
 ### Dependency files
 
 `requirements.txt` lists direct Python dependencies and version ranges.
@@ -167,6 +225,7 @@ HIK_TASK_TYPE=
 | `HIK_RCS_API_VERSION` | Value sent in the HIK API version header |
 | `HIK_RCS_TIMEOUT_SECONDS` | Timeout for an upstream RCS request |
 | `HIK_TASK_TYPE` | Installed template used when a tracked request specifies generic `TRANSPORT` |
+| `WMS_COOKIE_SECURE` | Set to `1` when serving session cookies over HTTPS |
 
 For physical integration, set `RCS_MODE=HIK` and verify the controller IP, port, and path.
 
@@ -202,7 +261,7 @@ The backend allows these CORS origins:
 - `http://localhost:5173`
 - `http://127.0.0.1:5173`
 
-A direct browser connection from another origin requires a matching backend CORS configuration.
+A direct browser connection from another origin requires a matching backend CORS configuration with credentials enabled. The session uses SameSite Strict cookies; use the same-origin `/api` proxy where possible rather than assuming cross-site authentication will work.
 
 Do not store passwords or private API keys in `VITE_` variables because frontend values can be included in the browser build.
 
@@ -257,6 +316,29 @@ A completion ledger prevents the same confirmed transfer from moving stock twice
 The actual destination is calculated from WMS data at completion. It is not a sensor-confirmed location returned by RCS.
 
 This rule does not implement relocation of a load that blocks access to an inner position.
+
+## Warehouse management workflows
+
+### Backup / Restore
+
+Use **Settings → Backup / Restore** to export a JSON backup. Importing a file validates its format and supported warehouse records before restoration. Review the result before confirming a restore. Restoration requires Operator or Admin permission and is subject to unresolved-transfer checks.
+
+The browser backup covers the supported warehouse and queue keys. It does not include backend accounts, sessions, or SQLite bridge records. Back up the backend database separately. Export a backup before clearing browser data or making substantial changes.
+
+### Consistency checks
+
+Run the checker in **Settings** to display problems and their locations. It checks duplicate Location Codes and Load IDs, reservations exceeding stock, stock without a Load, and records referencing missing locations. It reports findings without automatically fixing or deleting data.
+
+### Stock counts
+
+Open **Stock Count**, record actual quantities, compare them with the system quantities, and review differences. Apply supported adjustments only after entering the required reason. Review active reservations and transfer conflicts before changing stock.
+
+### Documents, audit history, and reports
+
+- **Warehouse Documents:** manage multi-line receiving and outbound documents through the supported processing steps.
+- **Audit History:** inspect recorded warehouse changes and reasons. New authorized writes attribute the operation to the signed-in account; older records may retain manually entered names. Audit data remains browser-local and is not tamper-proof.
+- **Reports:** filter stock on hand, movements, or pending work and export the filtered rows as CSV. Refresh when the application indicates that the report data may be stale.
+- **Workflow summaries:** distinguish warehouse operations from external RCS transfer progress; a WMS-only operation does not require a robot command.
 
 ## Transfer workflow
 
@@ -350,6 +432,14 @@ Match the target type, code, and installed workflow.
 Interactive documentation is available at [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs).
 
 Replace example codes and task types with values from the actual installation before physical testing.
+
+### Authentication for API clients
+
+Protected endpoints require a signed-in session cookie. Mutation requests also require `X-WMS-Request: 1`, including read-only POST query routes. The application supplies the cookie and header automatically.
+
+For Swagger or another API client, first sign in through `POST /api/wms/auth/login` with the application header, retain the returned cookie, and send the header on subsequent POST/PATCH requests. Signing in at `localhost` does not authenticate requests to `127.0.0.1`. Creating an initial Admin is available through `/api/wms/auth/setup` only while no accounts exist.
+
+Viewer accounts may read status and run supported read-only queries. Operator or Admin permission is required for command endpoints. Backend authorization does not itself create or update browser inventory.
 
 ### Read-only connection check
 
@@ -461,6 +551,14 @@ Other response structures require a verified mapping based on the actual install
 | Method | Endpoint | Purpose |
 | --- | --- | --- |
 | GET | `/api/health` | Backend health response |
+| GET | `/api/wms/auth/status` | Session status and whether first-Admin setup is needed |
+| POST | `/api/wms/auth/setup` | Create the first administrator |
+| POST | `/api/wms/auth/login` | Sign in and set the session cookie |
+| POST | `/api/wms/auth/logout` | Sign out |
+| POST | `/api/wms/auth/authorize` | Check permission for a browser-local warehouse write |
+| GET / POST | `/api/wms/auth/users` | Admin user listing and creation |
+| PATCH | `/api/wms/auth/users/{user_id}` | Admin role, account status, and password updates |
+| POST | `/api/wms/auth/password` | Change own password |
 | GET | `/api/rcs/status` | Local bridge configuration and task counts |
 | POST | `/api/rcs/connection/check` | Live robot query for connectivity |
 | POST | `/api/rcs/tasks` | Create a tracked task with submission protection |
@@ -500,18 +598,22 @@ Existing simulated records are not queried against physical RCS after switching 
 
 | Location | Contents |
 | --- | --- |
-| Browser: `wms-monitor-master-v2` | Storage layout, loads, inventory, warehouse history, completion ledger, and stopped-transfer reviews |
+| Browser: `wms-monitor-master-v2` | Storage layout, loads, inventory, documents, stock counts, audit history, completion ledger, and stopped-transfer reviews |
 | Browser: `wms-robot-tasks-v1` | Dispatch queue and command history |
 | Browser: `wms-transfer-input-history-v1` | Saved task types and robot codes |
 | Browser: `wms-ui-preferences-v1` | Warehouse preferences |
 | Browser: `wms-color-theme-v1` | Selected theme |
-| Backend: `rcs_bridge.db` | Bridge-task records and submission claims |
+| Backend: `rcs_bridge.db` | Accounts, hashed passwords, sessions, Login limits, access events, bridge-task records, and submission claims |
 
 Browser data belongs to its origin and browser profile. `localhost` and `127.0.0.1` use separate browser storage.
 
 Clearing site data can remove warehouse records, reservations, reviews, and queue history.
 
-Back up browser records separately from SQLite. The bridge database is not a complete inventory backup.
+Back up browser records separately from SQLite. The bridge database is not a complete inventory backup, and a browser warehouse export does not recover backend accounts.
+
+Login does not enable Shared mode. Warehouse records stay separate between browsers even when accounts are managed by the same backend. Keep the same origin and browser profile to retain access to local data.
+
+When retiring a legacy Shared-mode flag, the current browser warehouse is preserved. If the current cache is absent, the migration may recover a preserved browser copy once. Archived robot queue entries are not automatically restored, and backend warehouse tables are not automatically deleted.
 
 Stop the backend before making a simple file-copy backup of SQLite. Preserve the submission claims as well as task records because they support duplicate-submission protection.
 
@@ -527,7 +629,7 @@ From `backend/`:
 .\.venv\Scripts\python.exe -m unittest test_hik_contract -v
 ```
 
-The reported local run passed all 18 tests on 30 September 2026.
+The earlier project report records 18 passing contract tests on 30 September 2026. This is a historical result, not a fresh validation of every feature in the current upload. Run the included suite against the installed version before integration testing.
 
 The suite checks:
 
@@ -549,6 +651,8 @@ Tests mock network requests and use temporary SQLite databases. They do not send
 Passing these tests does not verify frontend behavior, actual RCS response compatibility, or physical placement.
 
 `httpx2`, used by the test client in the reviewed environment, is included in the dependency files.
+
+The latest source ZIP includes `test_hik_contract.py` and the legacy `backend/tests/test_hik_api.py`. It does not include the separate expanded Login or frontend test suites from earlier development packages. Do not infer that those suites are present or have just passed from a historical test count.
 
 ### Frontend build
 
@@ -577,7 +681,7 @@ Before disconnecting from the internet:
 6. Confirm task templates, target types, codes, and physical occupancy.
 7. Keep the WMS tab open during dispatch and polling.
 
-Internet access is not required for local operation once dependencies are installed. Connectivity to the RCS network is still required for physical commands.
+Internet access is not required for local operation once dependencies are installed. The local account backend must still be running for Login, saves, and dispatch. Connectivity to the RCS network is required for physical commands.
 
 Dependency lockfiles alone are not an offline installation bundle. A fresh offline machine also needs the required package files or prepared installation media.
 
@@ -587,12 +691,15 @@ Dependency lockfiles alone are not an offline installation bundle. A fresh offli
 | --- | --- |
 | `No module named fastapi` | Use the project's `.venv` Python and install its requirements |
 | TestClient reports missing `httpx2` | Install the updated requirements in the same virtual environment |
+| Login remains on Connecting or fails | Backend availability, proxy configuration, cookies, and browser network errors |
+| Save or dispatch is disabled | Signed-in role, session validity, and account backend availability |
+| API returns `401` or `403` | Session cookie, application header, account role, and whether the account was disabled or its sessions revoked |
 | Cannot reach the backend | FastAPI process, port 8000, Vite proxy, explicit bridge URL, and firewall |
 | Backend ready but RCS unreachable | Run the live connection check; local readiness is not a network test |
 | `Bin (...) Not exist` | Registered bin alias, target type, and installed workflow |
 | Direct submit returns `410` | Use `POST /api/rcs/tasks` with the tracked request format |
 | Submission returns `409` | Check the existing task reference, request data, and previous submission outcome |
-| Queue will not start | HIK configuration, unresolved submissions, and stopped tasks awaiting review |
+| Queue will not start | Operator/Admin role, account connectivity, HIK configuration, unresolved submissions, and stopped tasks awaiting review |
 | Accepted task later shows a timeout | Check the existing RCS task ID; polling may have failed while the robot continues |
 | Invalid or missing task status | Inspect the actual `/task/query` response and verify its mapping |
 | `OUTCOME_UNKNOWN` | Check RCS and saved bridge records before considering another submission |
@@ -618,8 +725,10 @@ An unknown outcome is not proof that nothing was sent.
 - Local Bin/Unbin does not automatically update RCS binding.
 - Navigation, traffic management, and hardware control remain in RCS.
 - AI optimization and automatic storage recommendations are outside the implemented scope.
-- The backend does not provide application authentication or user roles.
-- Production use requires access control, shared data management, and an appropriate deployment design.
+- Backend Login and roles are implemented; they do not make browser-local warehouse data a centrally protected database.
+- Warehouse saves require online account authorization. Offline editing is not provided.
+- Browser-local audit records are not tamper-proof and do not replace a central audit service.
+- Production use requires an appropriate deployment design, HTTPS session configuration, backup procedures, and central inventory management if multiple browsers must share stock.
 
 ## Repository files
 
