@@ -73,11 +73,6 @@ export default function Sidebar() {
 
   return (
     <aside className="sidebar navigation-sidebar">
-      <div className="sidebar-title">
-        <Warehouse size={20} />
-        <span>WMS</span>
-      </div>
-
       <nav aria-label="Main navigation">
         {menu.map((item) => {
           const Icon = item.icon;

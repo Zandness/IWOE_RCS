@@ -1,32 +1,32 @@
 import ThemeToggle from "./ThemeToggle";
-import {
-  Settings,
-  Server,
-} from "lucide-react";
-
+import { Settings, Server } from "lucide-react";
 import { Link } from "react-router-dom";
 
 export default function Navbar() {
   return (
     <header className="navbar">
       <div className="navbar-left">
-        <div className="logo-box">
-          W
-        </div>
+        <img
+          src={`${import.meta.env.BASE_URL}wms-logo.png`}
+          alt="WMS logo"
+          width={48}
+          height={48}
+          style={{
+            display: "block",
+            objectFit: "contain",
+            flexShrink: 0,
+          }}
+        />
 
         <div>
-          <h1>
-            Warehouse Management System
-          </h1>
-
-          <span>
-            External RCS Integration
-          </span>
+          <h1>Warehouse Management System</h1>
+          <span>External RCS Integration</span>
         </div>
       </div>
 
       <div className="navbar-right">
         <ThemeToggle />
+
         <Link
           to="/settings"
           className="connection-status"
@@ -36,10 +36,7 @@ export default function Navbar() {
           }}
         >
           <Settings size={17} />
-
-          <span>
-            Connection settings
-          </span>
+          <span>Connection settings</span>
         </Link>
 
         <div className="system-status">
