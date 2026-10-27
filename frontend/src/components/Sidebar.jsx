@@ -1,7 +1,11 @@
 import {
+  ArrowLeftRight,
   Boxes,
+  ChartColumn,
   CheckCircle2,
   ClipboardList,
+  Files,
+  History,
   LayoutDashboard,
   Map,
   Send,
@@ -32,12 +36,12 @@ export default function Sidebar() {
     {
       name: "Warehouse Operations",
       path: "/operations",
-      icon: ClipboardList,
+      icon: ArrowLeftRight,
     },
     {
       name: "Inbound / Outbound Documents",
       path: "/documents",
-      icon: ClipboardList,
+      icon: Files,
     },
     {
       name: "Stock Count",
@@ -47,12 +51,12 @@ export default function Sidebar() {
     {
       name: "Audit History",
       path: "/audit-history",
-      icon: ClipboardList,
+      icon: History,
     },
     {
       name: "Reports & CSV Export",
       path: "/reports",
-      icon: ClipboardList,
+      icon: ChartColumn,
     },
     {
       name: "Task Management",
