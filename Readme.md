@@ -176,23 +176,42 @@ Open [http://localhost:5173](http://localhost:5173).
 
 `npm ci` installs dependencies from `package-lock.json`. Keep the manifest and lockfile together when intentionally changing dependencies.
 
-### 3. First Login and accounts
+### 3. First login and accounts
 
-1. Keep both the backend and frontend running, then open the application.
-2. If no accounts exist, create the first administrator. No default credentials are supplied.
-3. Use a password of at least 12 characters.
-4. Open **Settings** to add users and assign roles.
-5. If accounts already exist in the retained backend database, sign in with an existing account. Older sessions may require a fresh sign-in.
+1. Keep both the backend and frontend running, then open http://localhost:5173.
+2. If no accounts exist, create the first Admin account. No default username or password is provided.
+3. Use a password between 12 and 128 characters.
+4. If accounts already exist in the backend database, sign in with an existing account. Older sessions may require a fresh sign-in.
+5. An Admin can open **Settings** to create users and assign roles. All users can change their own password.
 
 | Role | Warehouse access | RCS access | Account management |
 | --- | --- | --- | --- |
-| Viewer | Read data and export reports | Read status and query | Own password |
-| Operator | Save warehouse operations | Submit and manage commands | Own password |
-| Admin | Operator permissions | Operator permissions | Create users, change roles, disable accounts, and reset passwords |
+| Viewer | View warehouse data and export reports | View status and run supported read-only queries | Change own password |
+| Operator | Viewer access and permission to save supported warehouse operations | Submit and manage supported RCS commands | Change own password |
+| Admin | Full access to supported WMS functions, including all Operator actions | Submit and manage supported RCS commands, including all Operator actions | Change own password, create users, change roles, disable accounts, and reset passwords |
 
-The last enabled Admin cannot be disabled or demoted through account management. Passwords are hashed with PBKDF2-SHA256; session cookies are HttpOnly and SameSite Strict, with an eight-hour lifetime. Role changes, account disabling, and password resets revoke affected sessions.
+**Admin accounts can perform warehouse operations and send RCS commands as well as manage users.** Admin actions remain subject to the same warehouse validation, task checks, and connection requirements as Operator actions.
 
-Warehouse writes and dispatch require an available account backend. An already open session can display cached data during an outage, while saves and dispatch pause. Switching accounts in the same browser preserves that browser's warehouse.
+The last enabled Admin cannot be disabled or demoted through account management. Passwords are hashed with PBKDF2-SHA256; session cookies are HttpOnly and SameSite Strict, with an eight-hour lifetime. Role changes, account disabling, and Admin password resets revoke affected sessions. Changing your own password revokes previous sessions and creates a new session for the current browser.
+
+#### Sending tasks after sign-in
+
+Signing in as an Operator or Admin gives permission to send commands, but it does not confirm that RCS is connected.
+
+1. Configure the backend in **HIK** mode and confirm the controller address.
+2. Run the RCS connection check in **Settings**.
+3. Open **Warehouse Monitor** and prepare a transfer with valid source and destination locations, an installed task type, and the required RCS codes.
+4. Review the transfer settings and add the transfer to the queue.
+5. Use **Start Queue** to begin processing eligible tasks. The queue applies its scheduling and validation rules before submission.
+6. Keep the WMS tab open during automatic dispatch and status polling.
+
+Viewer accounts cannot submit RCS commands. Signing out or closing the tab stops browser-based processing, but does not cancel tasks already accepted by RCS.
+
+#### Backend availability and local data
+
+An available account backend is required for sign-in, warehouse saves, and command submission. If the backend becomes unavailable while the application is already open and signed in, locally stored warehouse data may remain visible, but saves and dispatch are paused. Opening or reloading the application during an outage does not provide offline sign-in.
+
+Switching accounts in the same browser profile and origin keeps the same local warehouse data. Signing in with the same account in another browser does not synchronize warehouse records. Use the same application address consistently: `localhost` and `127.0.0.1` have separate browser storage.
 
 These permissions protect backend requests and normal application workflows. Browser Local Storage can still be edited outside the application; it is not a centrally protected inventory database.
 
