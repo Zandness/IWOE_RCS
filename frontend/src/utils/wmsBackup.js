@@ -1,3 +1,4 @@
+import { withLocalWritePermission } from "./browserSession.js";
 import { validateDocuments } from "./warehouseDocuments.js";
 import { validateAuditLog } from "./wmsAudit.js";
 import { validateStockCounts } from './stockCount.js';
@@ -85,6 +86,9 @@ function requireNoQueue(data) {
   requireValue(queue === null || (Array.isArray(queue) && queue.length === 0), 'Restore requires an empty robot queue/history in both the current browser and backup. Robot records cannot be safely replayed by this restore version.');
 }
 export function restoreBackup(backup, storage = localStorage) {
+  return withLocalWritePermission(storage, () => restoreLocalBackup(backup, storage));
+}
+function restoreLocalBackup(backup, storage) {
   validateBackup(backup);
   requireNoQueue(backup.data);
   const previous = Object.fromEntries(BACKUP_KEYS.map(key => [key, storage.getItem(key)]));

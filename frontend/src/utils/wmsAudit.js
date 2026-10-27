@@ -1,3 +1,4 @@
+import { persistWarehouseData } from "./browserSession.js";
 export const AUDIT_MONITOR_KEY = 'wms-monitor-master-v2';
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const clone = value => JSON.parse(JSON.stringify(value));
@@ -71,6 +72,5 @@ export function saveAuditedWarehouse(next, { actor, reason, action = 'WMS_UPDATE
   validateAuditLog(data.auditLog);
   requireValue(storage.getItem(AUDIT_MONITOR_KEY) === raw, 'Warehouse data changed while saving. Reload and try again.');
   // The change and its audit record are saved together; a quota failure saves neither.
-  storage.setItem(AUDIT_MONITOR_KEY, JSON.stringify(data));
-  return data;
+  return persistWarehouseData(data, raw, storage);
 }

@@ -3196,7 +3196,7 @@ function formatDateTime(
     date.getTime()
   )
     ? "-"
-    : date.toLocaleString();
+    : date.toLocaleString('en-GB');
 }
 
 

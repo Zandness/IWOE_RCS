@@ -1,3 +1,4 @@
+import { afterWarehouseSave } from "./browserSession.js";
 import { saveAuditedWarehouse } from "./wmsAudit.js";
 import { MONITOR_KEY, isReserved } from './basketStore.js';
 
@@ -75,8 +76,7 @@ export function startStockCount(rackId, shelfId, storage = localStorage) {
     lines: shelf.inventory.map(item => ({ itemId: item.id, sku: item.sku, name: item.name || '', unit: item.unit || '', before: Number(item.quantity), reserved: Number(item.reserved ?? 0), counted: '' })),
   };
   data.stockCounts = [count, ...(data.stockCounts || [])];
-  save(data, original, storage);
-  return count.id;
+  return afterWarehouseSave(save(data, original, storage), () => count.id);
 }
 export function updateStockCount(id, input, action = 'SAVE', storage = localStorage) {
   if (!['SAVE', 'CONFIRM', 'CANCEL'].includes(action)) fail('Unknown stock count action.');

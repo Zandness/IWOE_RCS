@@ -1,3 +1,4 @@
+import { canEditWarehouse } from "../utils/browserSession";
 import { useRef, useState } from 'react';
 import { createBackup, validateBackup, restoreBackup, downloadJson, RECOVERY_KEY } from '../utils/wmsBackup';
 
@@ -7,8 +8,8 @@ export default function WmsBackupPanel() {
   const [confirmed, setConfirmed] = useState(false);
   const selection = useRef(0);
   const stamp = () => new Date().toISOString().replace(/[:.]/g, '-');
-  function run(action) {
-    try { action(); } catch (error) { setNotice({ error: true, text: error.message }); }
+  async function run(action) {
+    try { await action(); } catch (error) { setNotice({ error: true, text: error.message }); }
   }
   async function selectFile(event) {
     const id = ++selection.current;
@@ -44,13 +45,13 @@ export default function WmsBackupPanel() {
       <label>Choose a WMS backup (.json)<input type="file" accept=".json,application/json" onChange={selectFile} /></label>
     </div>
     {preview && <>
-      <p><strong>{preview.name}</strong><br />Created: {new Date(preview.backup.createdAt).toLocaleString()}</p>
+      <p><strong>{preview.name}</strong><br />Created: {new Date(preview.backup.createdAt).toLocaleString('en-GB')}</p>
       <dl className="overview-facts">{Object.entries(preview.summary).map(([label, count]) => <div key={label}><dt>{label}</dt><dd>{count}</dd></div>)}</dl>
       <p>Restore replaces saved browser data. Close other WMS tabs first. This version requires an empty robot queue and robot history in both the browser and the backup; it will not replay robot tasks.</p>
       <label><input type="checkbox" checked={confirmed} onChange={event => setConfirmed(event.target.checked)} /> I have closed other WMS tabs and want to replace this browser’s WMS data.</label>
-      <div className="overview-actions"><button type="button" className="primary-button" disabled={!confirmed} onClick={() => run(() => {
+      <div className="overview-actions"><button type="button" className="primary-button" disabled={!canEditWarehouse() || !confirmed} onClick={() => run(async () => {
         if (!window.confirm('Replace WMS browser data with this backup? A recovery copy will be saved first.')) return;
-        restoreBackup(preview.backup);
+        await restoreBackup(preview.backup);
         window.location.reload();
       })}>Restore backup</button></div>
     </>}

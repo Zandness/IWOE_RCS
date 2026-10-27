@@ -1,3 +1,4 @@
+import { afterWarehouseSave } from "./browserSession.js";
 import { isReserved } from './basketStore.js';
 import { saveAuditedWarehouse, AUDIT_MONITOR_KEY } from './wmsAudit.js';
 
@@ -118,8 +119,7 @@ export function createDocument(input, audit, storage = localStorage) {
   }
   doc.events.push(auditEvent(audit, 'CREATE', crypto.randomUUID()));
   data.documents = [doc, ...(data.documents || [])];
-  persist(data, original, audit, 'CREATE', storage);
-  return id;
+  return afterWarehouseSave(persist(data, original, audit, 'CREATE', storage), () => id);
 }
 export function processDocument(id, action, input, audit, storage = localStorage) {
   const original = storage.getItem(AUDIT_MONITOR_KEY), data = readDocumentData(storage);

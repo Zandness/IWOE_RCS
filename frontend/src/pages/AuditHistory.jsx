@@ -38,7 +38,7 @@ export default function AuditHistory() {
   return <div className="page wms-overview">
     <div className="page-header"><div><span className="page-label">WAREHOUSE RECORDS</span><h2>Audit History</h2><p>Review who recorded a change, when it happened, why it was made and the values before and after.</p></div></div>
     <section className="panel overview-section">
-      <p>New changes are recorded from this version onward. Earlier operation history remains in Warehouse Operations. Operator names are entered manually; this browser-based history is not a secure or tamper-proof audit system. System records identify automatic transfer reconciliation. Audit records are included in WMS backups.</p>
+      <p>New changes are recorded from this version onward. Earlier operation history remains in Warehouse Operations. App changes record the signed-in account. This browser-based history is not tamper-proof; data can be edited outside the app. System records identify automatic transfer reconciliation. Audit records are included in WMS backups.</p>
       <div className="overview-form"><label>Search<input value={search} onChange={event => setSearch(event.target.value)} placeholder="Operator, SKU, Load, location, action or reason" /></label><label>From date<input type="date" value={from} onChange={event => setFrom(event.target.value)} /></label><label>To date<input type="date" value={to} onChange={event => setTo(event.target.value)} /></label></div>
       <div className="overview-actions"><button type="button" className="settings-secondary" onClick={refresh}>Refresh</button></div>
       {error && <p role="alert">{error}</p>}

@@ -1,3 +1,4 @@
+import LoginGate from "./components/LoginGate";
 import {
   BrowserRouter,
   Navigate,
@@ -115,8 +116,8 @@ function AppContent() {
 
 export default function App() {
   return (
-    <BrowserRouter>
+    <LoginGate>{() => <BrowserRouter>
       <AppContent />
-    </BrowserRouter>
+    </BrowserRouter>}</LoginGate>
   );
 }

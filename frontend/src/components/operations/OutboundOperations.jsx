@@ -959,11 +959,11 @@ export default function OutboundOperations({
    * CONFIRM PICK FROM OUTBOUND PAGE
    * =====================================================
    *
-   * ยังคงอนุญาตให้ Operator
-   * Confirm Pick จากหน้า Outbound โดยตรงได้
+   * Operators may still
+   * confirm picks directly from the Outbound page.
    *
-   * ถ้าใช้ Task Management
-   * Inventory จะถูกลดตอน Task ครบเอง
+   * When using Task Management,
+   * inventory is deducted when all tasks are complete.
    * =====================================================
    */
 
@@ -3027,8 +3027,8 @@ function buildOrderAllocations({
 
 
   /*
-   * ไม่รวม Reservation ของ Order
-   * ตัวเองตอนคำนวณ
+   * Exclude reservations belonging to this order
+   * from the calculation.
    */
 
   const reserved =
@@ -3073,10 +3073,10 @@ function buildOrderAllocations({
 
 
             /*
-             * FULL ยังหยิบออกได้
+             * Picking is allowed from FULL locations.
              *
              * BLOCKED / MAINTENANCE
-             * หยิบไม่ได้
+             * Picking is not allowed.
              */
 
             return (
@@ -3751,7 +3751,7 @@ function formatDateTime(
     date.getTime()
   )
     ? "-"
-    : date.toLocaleString();
+    : date.toLocaleString('en-GB');
 }
 
 

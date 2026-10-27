@@ -20,6 +20,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ConfigDict, Field
 
 from hik_api import create_hik_router
+from wms_auth import WmsAuth
+from fastapi.responses import JSONResponse
+from starlette.concurrency import run_in_threadpool
 
 
 # =========================================================
@@ -1265,3 +1268,34 @@ def get_rcs_task(bridge_task_id: str):
 app.include_router(
     create_hik_router(hik_post, lambda: RCS_MODE)
 )
+
+# Accounts are server-side; warehouse inventory remains browser-local.
+wms_auth = WmsAuth(lambda: DATABASE_PATH)
+app.include_router(wms_auth.router, prefix='/api/wms')
+
+@app.middleware("http")
+async def account_permissions(request, call_next):
+    path = request.url.path
+    if request.method == 'OPTIONS' or not path.startswith('/api/') or path == '/api/health' or path.startswith('/api/wms/auth/'):
+        return await call_next(request)
+    try:
+        user = await run_in_threadpool(wms_auth.require_user, request)
+        if request.method not in ['GET', 'HEAD']:
+            wms_auth.csrf(request)
+            readonly_query = path.endswith('/task/query') or path.endswith('/robot/query') or path == '/api/rcs/connection/check'
+            if not readonly_query and user['role'] not in ['operator', 'admin']:
+                raise HTTPException(403, 'Operator or Admin permission is required for RCS commands.')
+            if not readonly_query:
+                def record_request():
+                    connection = wms_auth.connect()
+                    try:
+                        wms_auth.event(connection, user, 'RCS_COMMAND_REQUESTED', {'path': path, 'method': request.method})
+                        connection.commit()
+                    finally:
+                        connection.close()
+                await run_in_threadpool(record_request)
+    except HTTPException as error:
+        return JSONResponse(status_code=error.status_code, content={'detail': error.detail, 'dispatched': False}, headers={'Cache-Control': 'no-store'})
+    except sqlite3.Error:
+        return JSONResponse(status_code=503, content={'detail': 'Account database unavailable. No command was dispatched.', 'dispatched': False}, headers={'Cache-Control': 'no-store'})
+    return await call_next(request)

@@ -1,3 +1,4 @@
+import { setAuthenticatedUser } from "../utils/wmsAuth";
 const BASE_URL = String(
   import.meta.env.VITE_RCS_BRIDGE_URL || "",
 )
@@ -17,9 +18,11 @@ async function bridgeFetch(
   try {
     response = await fetch(`${BASE_URL}${path}`, {
       method,
+      credentials: 'include',
       signal,
       headers: {
         "Content-Type": "application/json",
+        "X-WMS-Request": "1",
       },
       ...(body === undefined
         ? {}
@@ -51,6 +54,7 @@ async function bridgeFetch(
   }
 
   if (!response.ok || data?.success === false) {
+    if (response.status === 401) setAuthenticatedUser(null);
     const detail =
       data?.detail ||
       data?.message ||

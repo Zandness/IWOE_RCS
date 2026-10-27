@@ -1,3 +1,4 @@
+import { canEditWarehouse, requireWarehouseWrite } from "../utils/browserSession";
 import { getLoadInfo } from "./LoadTypeVisual";
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -123,7 +124,7 @@ function formatDate(value) {
   const date = new Date(value);
 
   return Number.isFinite(date.getTime())
-    ? date.toLocaleString()
+    ? date.toLocaleString('en-GB')
     : "—";
 }
 
@@ -521,6 +522,7 @@ export default function MonitorRcsDispatch() {
       event.nativeEvent.submitter?.value === "start";
 
     try {
+      requireWarehouseWrite();
       const type = taskType.trim();
       const sourceRcsCode = sourceCode.trim();
       const destinationRcsCode = destinationCode.trim();
@@ -698,7 +700,7 @@ export default function MonitorRcsDispatch() {
     initPriority: priority,
   };
 
-  const cannotSubmit =
+  const cannotSubmit = !canEditWarehouse() ||
     !source ||
     !destination ||
     !taskType.trim() ||

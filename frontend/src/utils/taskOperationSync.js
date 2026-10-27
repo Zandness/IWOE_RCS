@@ -389,12 +389,12 @@ export function syncWarehouseTasks(
    * OUTBOUND -> PICKING
    * =====================================================
    *
-   * สำคัญ:
+   * Important:
    *
    * Outbound status = PICKING
-   * ไม่ได้แปลว่า Picking Task ทุกตัวต้อง IN_PROGRESS
+   * This does not mean every picking task must be IN_PROGRESS.
    *
-   * แต่ละ Task จะมีสถานะของตัวเอง
+   * Each task has its own status.
    *
    * PENDING
    * IN_PROGRESS
@@ -422,11 +422,11 @@ export function syncWarehouseTasks(
 
 
       /*
-       * ถ้า Order ผ่าน Picking แล้ว
-       * Task ทุกตัวถือว่า Complete
+       * If the order has already finished picking,
+       * all its tasks are considered complete.
        *
-       * แต่ถ้า Order แค่ ALLOCATED / PICKING
-       * Task ใหม่เริ่มเป็น PENDING
+       * If the order is only ALLOCATED or PICKING,
+       * new tasks start as PENDING.
        */
 
       const suggestedStatus =
@@ -601,8 +601,8 @@ export function syncTaskStatusToOperations({
    * =====================================================
    * PICKING TASK -> OUTBOUND
    *
-   * ทุกครั้งที่ Picking Task เปลี่ยน
-   * ให้ update Outbound Progress
+   * Whenever a picking task changes,
+   * update outbound progress.
    * =====================================================
    */
 
@@ -702,8 +702,8 @@ function syncOutboundPickingProgress({
 
 
   /*
-   * หา Picking Task ทุกตัว
-   * ของ Outbound Order ใบเดียวกัน
+   * Find all picking tasks
+   * belonging to the same outbound order.
    */
 
   const pickingTasks =
@@ -778,7 +778,7 @@ function syncOutboundPickingProgress({
 
   /*
    * Progress fields
-   * จะถูกเก็บใน Outbound Order
+   * is stored in the outbound order.
    */
 
   const progressFields = {
@@ -801,10 +801,10 @@ function syncOutboundPickingProgress({
 
   /*
    * =====================================================
-   * ORDER ผ่าน PICKED ไปแล้ว
+   * The order has already reached PICKED.
    *
-   * ห้ามลด Inventory อีก
-   * แค่อัพเดต Progress
+   * Do not deduct inventory again.
+   * Only update progress.
    * =====================================================
    */
 
@@ -840,8 +840,8 @@ function syncOutboundPickingProgress({
 
 
   /*
-   * Picking Task จะทำงานได้
-   * ตอน Order = ALLOCATED / PICKING
+   * Picking tasks can run
+   * when the order is ALLOCATED or PICKING.
    */
 
   if (
@@ -866,9 +866,9 @@ function syncOutboundPickingProgress({
 
   /*
    * =====================================================
-   * TASK ครบทั้งหมด
+   * All tasks are complete.
    *
-   * เช่น
+   * For example:
    *
    * TASK-001 = COMPLETED
    * TASK-002 = COMPLETED
@@ -951,14 +951,14 @@ function syncOutboundPickingProgress({
    * =====================================================
    * PARTIAL PICKING
    *
-   * เช่น
+   * For example:
    *
    * Task 1 = Complete
    * Task 2 = Pending
    * Task 3 = Pending
    *
-   * Order ยังเป็น PICKING
-   * แต่ Progress = 1/3
+   * The order remains PICKING
+   * while progress is 1/3.
    * =====================================================
    */
 
@@ -1044,9 +1044,9 @@ function completeInbound(
 
 
   /*
-   * Completed จากหน้า Inbound แล้ว
+   * Already completed from the Inbound page.
    *
-   * ห้าม Inventory + ซ้ำ
+   * Do not add inventory again.
    */
 
   if (
@@ -1176,7 +1176,7 @@ function applyInboundPutaway(
 
 
     /*
-     * SKU เดิม + Location เดิม
+     * Same SKU and same location.
      */
 
     const existingIndex =
@@ -1216,7 +1216,7 @@ function applyInboundPutaway(
 
 
     /*
-     * หา SKU Master
+     * Find the SKU master.
      */
 
     const master =
@@ -1238,7 +1238,7 @@ function applyInboundPutaway(
 
 
     /*
-     * SKU เดิม แต่ Location ใหม่
+     * Same SKU at a new location.
      */
 
     result.push({
@@ -1451,10 +1451,10 @@ function saveEntries(
 
 
   /*
-   * Storage event จะไม่เกิด
-   * ใน Browser Tab เดียวกัน
+   * The storage event does not fire
+   * in the same browser tab.
    *
-   * จึงต้องมี Custom Event
+   * Use a custom event for same-tab updates.
    */
 
   notifyWmsDataChanged(
@@ -1690,8 +1690,8 @@ function mergeTaskStatus(
   suggestedStatus
 ) {
   /*
-   * ถ้า Operation จบแล้ว
-   * Task ต้อง Completed
+   * If the operation has finished,
+   * the task must be COMPLETED.
    */
 
   if (
@@ -1703,7 +1703,7 @@ function mergeTaskStatus(
 
 
   /*
-   * Completed แล้วไม่ย้อนกลับ
+   * Completed tasks cannot move back to an earlier status.
    */
 
   if (
@@ -1715,7 +1715,7 @@ function mergeTaskStatus(
 
 
   /*
-   * Blocked คงไว้
+   * Keep blocked tasks blocked.
    */
 
   if (
@@ -1727,11 +1727,11 @@ function mergeTaskStatus(
 
 
   /*
-   * สำคัญ:
+   * Important:
    *
    * Outbound PICKING
-   * จะไม่เปลี่ยน PENDING Task
-   * ทั้งหมดเป็น IN_PROGRESS
+   * Do not change all PENDING tasks
+   * to IN_PROGRESS.
    */
 
   return (

@@ -1,3 +1,4 @@
+import { canEditWarehouse } from "../utils/browserSession";
 import { useEffect, useState } from 'react';
 import AuditFields from '../components/AuditFields';
 import { createDocument, processDocument, readDocumentData } from '../utils/warehouseDocuments';
@@ -37,10 +38,10 @@ export default function WarehouseDocuments() {
     window.dispatchEvent(new CustomEvent('wms-monitor-data-changed'));
     setData(next); setStale(false); setQuantities({}); setAudit(value => ({ ...value, reason: '' })); setNotice({ text });
   }
-  function create(event) {
+  async function create(event) {
     event.preventDefault();
     try {
-      const id = createDocument({ type, number, reference, lines: lines.map(line => {
+      const id = await createDocument({ type, number, reference, lines: lines.map(line => {
         const [rackId, shelfId] = JSON.parse(line.target || 'null') || [];
         return { rackId, shelfId, sku: line.sku, quantity: line.quantity };
       }) }, audit);
@@ -48,11 +49,11 @@ export default function WarehouseDocuments() {
       setSelected(id); setNumber(''); setReference(''); setLines([blankLine()]);
     } catch (error) { setNotice({ error: true, text: error.message }); }
   }
-  function act(action) {
+  async function act(action) {
     const message = action === 'CANCEL' ? 'Cancel the remaining document quantities? Received or picked stock will remain unchanged; outstanding document reservations will be released.' : action === 'RECEIVE' ? 'Confirm these goods were physically received? This adds stock.' : action === 'PICK' ? 'Confirm these goods were physically picked? This deducts stock and releases their reservations.' : 'Reserve the entered quantities? Stock quantity will remain unchanged.';
     if (!window.confirm(message)) return;
     try {
-      const next = processDocument(current.id, action, { quantities, expectedRevision: current.revision, requestId: crypto.randomUUID() }, audit);
+      const next = await processDocument(current.id, action, { quantities, expectedRevision: current.revision, requestId: crypto.randomUUID() }, audit);
       success(next, action === 'CANCEL' ? 'Document cancelled. Completed quantities were preserved.' : 'Document quantities and warehouse stock updated.');
     } catch (error) { setNotice({ error: true, text: error.message }); }
   }
@@ -77,7 +78,7 @@ export default function WarehouseDocuments() {
             <label>Planned quantity<input required type="number" min="0" step="any" value={line.quantity} onChange={event => changeLine(line.key, { quantity: event.target.value })} /></label>
           </div><button type="button" className="settings-secondary" disabled={lines.length === 1} onClick={() => setLines(values => values.filter(value => value.key !== line.key))}>Remove line</button></fieldset>;
         })}
-        <div className="overview-actions"><button type="button" className="settings-secondary" onClick={() => setLines(values => [...values, blankLine()])}>Add SKU line</button><button type="submit" className="primary-button" disabled={!data || !audit.actor.trim() || !audit.reason.trim()}>Create draft</button></div>
+        <div className="overview-actions"><button type="button" className="settings-secondary" onClick={() => setLines(values => [...values, blankLine()])}>Add SKU line</button><button type="submit" className="primary-button" disabled={!canEditWarehouse() || !data || !audit.actor.trim() || !audit.reason.trim()}>Create draft</button></div>
       </form>
     </section>
     <section className="panel overview-section"><h3>Documents and progress</h3>
@@ -86,10 +87,10 @@ export default function WarehouseDocuments() {
       {current && <>
         <p><strong>{current.number}</strong> · {current.type} · {current.status}<br />External reference: {current.reference || 'None'}<br />Created: {date(current.createdAt)}</p>
         <p>{current.type === 'INBOUND' ? 'Enter the quantities physically received now. Remaining quantities can be received later.' : 'Enter quantities for this action. Reserve stock first, then confirm only the quantities physically picked. You may reserve and pick in multiple steps.'}</p>
-        <div style={{ overflowX: 'auto' }}><table className="consistency-table"><thead><tr><th scope="col">SKU / Location / Load</th><th scope="col">Planned</th><th scope="col">{current.type === 'INBOUND' ? 'Received' : 'Picked'}</th><th scope="col">Remaining</th><th scope="col">Reserved</th>{!isClosed && <th scope="col">Quantity now</th>}</tr></thead><tbody>{current.lines.map(line => <tr key={line.id}><td>{line.sku} · {line.name}<br />{line.rackId} / {line.locationCode || line.shelfId}<br />Load {line.loadId} · {line.unit}</td><td>{line.quantity}</td><td>{line.processed}</td><td>{line.quantity - line.processed}</td><td>{line.reserved}</td>{!isClosed && <td><input aria-label={`Quantity now for ${line.sku} at ${line.shelfId}`} type="number" min="0" step="any" value={quantities[line.id] ?? ''} onChange={event => setQuantities(values => ({ ...values, [line.id]: event.target.value }))} /></td>}</tr>)}</tbody></table></div>
+        <div style={{ overflowX: 'auto' }}><table className="consistency-table"><thead><tr><th scope="col">SKU / Location / Load</th><th scope="col">Planned</th><th scope="col">{current.type === 'INBOUND' ? 'Received' : 'Picked'}</th><th scope="col">Remaining</th><th scope="col">Reserved</th>{!isClosed && <th scope="col">Quantity now</th>}</tr></thead><tbody>{current.lines.map(line => <tr key={line.id}><td>{line.sku} · {line.name}<br />{line.rackId} / {line.locationCode || line.shelfId}<br />Load {line.loadId} · {line.unit}</td><td>{line.quantity}</td><td>{line.processed}</td><td>{line.quantity - line.processed}</td><td>{line.reserved}</td>{!isClosed && <td><input aria-label={`Quantity now for ${line.sku} at ${line.shelfId}`} type="number" min="0" step="any" readOnly={!canEditWarehouse()} value={quantities[line.id] ?? ''} onChange={event => setQuantities(values => ({ ...values, [line.id]: event.target.value }))} /></td>}</tr>)}</tbody></table></div>
         {!isClosed && <div className="overview-actions">
-          {(current.type === 'INBOUND' ? [['RECEIVE', 'Confirm received quantities']] : [['RESERVE', 'Reserve quantities'], ['PICK', 'Confirm picked quantities']]).map(([action, label]) => <button key={action} type="button" className="primary-button" disabled={!audit.actor.trim() || !audit.reason.trim()} onClick={() => act(action)}>{label}</button>)}
-          <button type="button" className="settings-secondary" disabled={!audit.actor.trim() || !audit.reason.trim()} onClick={() => act('CANCEL')}>Cancel remaining quantities</button>
+          {(current.type === 'INBOUND' ? [['RECEIVE', 'Confirm received quantities']] : [['RESERVE', 'Reserve quantities'], ['PICK', 'Confirm picked quantities']]).map(([action, label]) => <button key={action} type="button" className="primary-button" disabled={!canEditWarehouse() || !audit.actor.trim() || !audit.reason.trim()} onClick={() => act(action)}>{label}</button>)}
+          <button type="button" className="settings-secondary" disabled={!canEditWarehouse() || !audit.actor.trim() || !audit.reason.trim()} onClick={() => act('CANCEL')}>Cancel remaining quantities</button>
         </div>}
         {current.status === 'CANCELLED' && <p>Unprocessed quantities were cancelled. Previously received or picked quantities remain recorded and were not reversed.</p>}
         <details><summary>Document activity ({current.events.length})</summary>{current.events.slice().reverse().map(event => <div key={event.requestId} className="audit-change"><strong>{event.action} · {date(event.createdAt)}</strong><p>Operator: {event.actor} · Reason: {event.reason}</p>{event.quantities.map(entry => { const line = current.lines.find(line => line.id === entry.lineId); return <p key={entry.lineId}>{line.sku} · {line.locationCode || line.shelfId} · {entry.quantity} {line.unit}</p>; })}</div>)}</details>

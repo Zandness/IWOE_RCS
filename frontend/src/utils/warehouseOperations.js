@@ -1,3 +1,4 @@
+import { afterWarehouseSave } from "./browserSession.js";
 import { saveAuditedWarehouse } from "./wmsAudit.js";
 import {
   MONITOR_KEY,
@@ -281,9 +282,8 @@ export function updateOutbound(id, action, audit) {
 
   const saved = saveAuditedWarehouse(next, { ...audit, action: `OUTBOUND_${action}` });
 
-  window.dispatchEvent(
-    new CustomEvent("wms-monitor-data-changed"),
-  );
-
-  return saved;
+  return afterWarehouseSave(saved, result => {
+    window.dispatchEvent(new CustomEvent("wms-monitor-data-changed"));
+    return result;
+  });
 }

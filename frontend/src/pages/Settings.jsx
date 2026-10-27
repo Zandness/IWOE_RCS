@@ -1,3 +1,4 @@
+import AccountPanel from "../components/AccountPanel";
 import WmsConsistencyPanel from "../components/WmsConsistencyPanel";
 import WmsBackupPanel from "../components/WmsBackupPanel";
 import { useEffect, useRef, useState } from "react";
@@ -186,7 +187,7 @@ export default function Settings() {
         setResult({
           state: "success",
           message,
-          time: new Date().toLocaleString(),
+          time: new Date().toLocaleString('en-GB'),
         });
       }
     } catch (error) {
@@ -196,7 +197,7 @@ export default function Settings() {
           message: request.signal.aborted
             ? "Check timed out or was cancelled."
             : error.message,
-          time: new Date().toLocaleString(),
+          time: new Date().toLocaleString('en-GB'),
         });
       }
     } finally {
@@ -346,6 +347,7 @@ export default function Settings() {
         </section>
       </div>
 
+      <AccountPanel />
       <WmsBackupPanel />
       <WmsConsistencyPanel />
 

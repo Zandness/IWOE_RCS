@@ -1,3 +1,4 @@
+import { canEditWarehouse } from "../utils/browserSession";
 import AuditFields from "../components/AuditFields";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
@@ -47,7 +48,7 @@ export default function WarehouseOperations() {
     };
   }, []);
 
-  function act(operation, action) {
+  async function act(operation, action) {
     if (
       action === "COMPLETE" &&
       !window.confirm(
@@ -58,7 +59,7 @@ export default function WarehouseOperations() {
     }
 
     try {
-      updateOutbound(operation.id, action, audit);
+      await updateOutbound(operation.id, action, audit);
       setAudit(current => ({ ...current, reason: "" }));
 
       setMessage(
@@ -285,7 +286,7 @@ export default function WarehouseOperations() {
                       {record.status === "PENDING" && (
                         <button
                           type="button"
-                          disabled={!!error}
+                          disabled={!canEditWarehouse() || !!error}
                           onClick={() =>
                             act(record, "START")
                           }
@@ -297,7 +298,7 @@ export default function WarehouseOperations() {
                       {record.status === "IN_PROGRESS" && (
                         <button
                           type="button"
-                          disabled={!!error}
+                          disabled={!canEditWarehouse() || !!error}
                           onClick={() =>
                             act(record, "COMPLETE")
                           }
@@ -312,7 +313,7 @@ export default function WarehouseOperations() {
                       ].includes(record.status) && (
                         <button
                           type="button"
-                          disabled={!!error}
+                          disabled={!canEditWarehouse() || !!error}
                           onClick={() =>
                             act(record, "CANCEL")
                           }

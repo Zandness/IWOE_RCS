@@ -1,3 +1,4 @@
+import { afterWarehouseSave, persistWarehouseData, requireWarehouseWrite } from "./browserSession.js";
 import { saveAuditedWarehouse } from "./wmsAudit.js";
 export const MONITOR_KEY = "wms-monitor-master-v2";
 
@@ -174,6 +175,8 @@ export function reviewStoppedTransferAtSource(
     confirmedLoadAtSource = false,
   } = {},
 ) {
+  requireWarehouseWrite();
+  const original = localStorage.getItem(MONITOR_KEY);
   const matches = readQueue().filter(
     (task) => task.id === taskId,
   );
@@ -314,16 +317,10 @@ export function reviewStoppedTransferAtSource(
 
   // Save the review and its history together.
   // Load location, inventory and RCS status stay unchanged.
-  localStorage.setItem(
-    MONITOR_KEY,
-    JSON.stringify(data),
-  );
-
-  window.dispatchEvent(
-    new CustomEvent("wms-monitor-data-changed"),
-  );
-
-  return review;
+  return afterWarehouseSave(persistWarehouseData(data, original), () => {
+    window.dispatchEvent(new CustomEvent("wms-monitor-data-changed"));
+    return review;
+  });
 }
 
 export function isReserved(
@@ -550,6 +547,7 @@ function completedDestination(locations, requested) {
 }
 
 export function completeBasketTransfer(task) {
+  requireWarehouseWrite();
   if (
     !task?.basketId ||
     task.rcsStatus !== "COMPLETED"
@@ -742,18 +740,17 @@ export function completeBasketTransfer(task) {
   ];
 
   // Save location, inventory, history and completion marker together.
-  saveAuditedWarehouse(data, {
+  const saved = saveAuditedWarehouse(data, {
     actor: "System (transfer reconciliation)",
     reason: `Confirmed transfer ${key}`,
     action: "TRANSFER_COMPLETED",
     expectedRaw: original,
   });
 
-  window.dispatchEvent(
-    new CustomEvent("wms-monitor-data-changed"),
-  );
-
-  return true;
+  return afterWarehouseSave(saved, () => {
+    window.dispatchEvent(new CustomEvent("wms-monitor-data-changed"));
+    return true;
+  });
 }
 
 export function binLocationPatch(

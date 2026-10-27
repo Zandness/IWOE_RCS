@@ -1,3 +1,4 @@
+import { canEditWarehouse } from "../utils/browserSession";
 import { useEffect, useState } from "react";
 
 import {
@@ -31,12 +32,12 @@ export default function RackShelfSettings({ rack, onSave }) {
     nextCount !== levels ||
     Number(depth) !== depths;
 
-  function submit(event) {
+  async function submit(event) {
     event.preventDefault();
     setMessage("");
 
     try {
-      onSave(
+      await onSave(
         rack.id,
         nextCount,
         Number(depth),
@@ -109,7 +110,7 @@ export default function RackShelfSettings({ rack, onSave }) {
 
       <button
         type="submit"
-        disabled={!hasChanges}
+        disabled={!canEditWarehouse() || !hasChanges}
       >
         Save storage settings
       </button>

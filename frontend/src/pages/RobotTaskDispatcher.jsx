@@ -1,3 +1,4 @@
+import { canEditWarehouse, requireWarehouseWrite } from "../utils/browserSession";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
@@ -488,7 +489,7 @@ function StoppedTransferReviewForm({
             <button
               type="submit"
               className="primary-button"
-              disabled={!valid || saving}
+              disabled={!canEditWarehouse() || !valid || saving}
             >
               {saving
                 ? "Checking task and saving…"
@@ -557,6 +558,7 @@ export default function RobotTaskDispatcher() {
   }
 
   async function startQueue() {
+    if (!canEditWarehouse()) { pause("Operator or Admin permission is required to start dispatch."); return; }
     if (
       checkingRef.current ||
       reviewingRef.current ||
@@ -592,7 +594,7 @@ export default function RobotTaskDispatcher() {
       }
 
       setConnection(
-        `HIK backend ready · ${new Date().toLocaleTimeString()}`,
+        `HIK backend ready · ${new Date().toLocaleTimeString('en-GB')}`,
       );
 
       if (
@@ -681,7 +683,7 @@ export default function RobotTaskDispatcher() {
     );
   }
 
-  function applySnapshot(queueTask, response) {
+  async function applySnapshot(queueTask, response) {
     const task = response?.task;
 
     if (
@@ -726,7 +728,7 @@ export default function RobotTaskDispatcher() {
       status === "COMPLETED" &&
       queueTask.basketId
     ) {
-      syncWarehouse({
+      if (canEditWarehouse()) await syncWarehouse({
         ...queueTask,
         rcsStatus: status,
       });
@@ -739,9 +741,9 @@ export default function RobotTaskDispatcher() {
     }
   }
 
-  function syncWarehouse(task) {
+  async function syncWarehouse(task) {
     try {
-      completeBasketTransfer(task);
+      await completeBasketTransfer(task);
 
       if (task.warehouseSyncStatus !== "COMPLETED") {
         patch(
@@ -792,7 +794,7 @@ export default function RobotTaskDispatcher() {
           getRcsBridgeTask(task.bridgeTaskId, options),
         );
 
-        applySnapshot(task, response);
+        await applySnapshot(task, response);
       } catch (error) {
         patch(task.id, {
           statusCheckError: error.message,
@@ -914,11 +916,11 @@ export default function RobotTaskDispatcher() {
       }
 
       // Record the latest confirmed stopped status first.
-      applySnapshot(task, response);
+      await applySnapshot(task, response);
 
       // This function rereads the saved queue and Monitor,
       // validates the source load and saves the review ledger.
-      reviewStoppedTransferAtSource(taskId, values);
+      await reviewStoppedTransferAtSource(taskId, values);
 
       setQueue([...ref.current]);
 
@@ -952,13 +954,13 @@ export default function RobotTaskDispatcher() {
           task.basketId &&
           task.rcsStatus === "COMPLETED"
         ) {
-          if (!syncWarehouse(task)) {
+          if (canEditWarehouse() && !await syncWarehouse(task)) {
             return;
           }
         }
       }
 
-      if (!enabled.current) {
+      if (!enabled.current || !canEditWarehouse()) {
         return;
       }
 
@@ -1101,7 +1103,7 @@ export default function RobotTaskDispatcher() {
         patch(
           live.id,
           {
-            sendStatus: "OUTCOME_UNKNOWN",
+            sendStatus: ([401, 403].includes(error.status) || error.data?.dispatched === false) ? "NOT_SENT" : "OUTCOME_UNKNOWN",
             backendError: error.message,
           },
           "Check submission outcome before retrying",
@@ -1186,7 +1188,7 @@ export default function RobotTaskDispatcher() {
           "Recovered backend submission",
         );
 
-        applySnapshot(recovered, {
+        await applySnapshot(recovered, {
           mode: "HIK",
           task,
         });
@@ -1206,6 +1208,7 @@ export default function RobotTaskDispatcher() {
     alive.current = true;
 
     function enqueue(event) {
+      if (!canEditWarehouse()) { event.detail.error = "Operator or Admin permission is required to queue transfers."; return; }
       const request = event.detail;
 
       if (!request || request.handled) {
@@ -1387,6 +1390,7 @@ export default function RobotTaskDispatcher() {
 
   function edit(id, value) {
     try {
+      requireWarehouseWrite();
       const item = ref.current.find(
         (task) => task.id === id,
       );
@@ -1403,6 +1407,7 @@ export default function RobotTaskDispatcher() {
 
   function removeUnsent(id) {
     try {
+      requireWarehouseWrite();
       commit(
         ref.current.filter(
           (task) =>
@@ -1490,7 +1495,7 @@ export default function RobotTaskDispatcher() {
           <button
             type="button"
             className="primary-button"
-            disabled={
+            disabled={!canEditWarehouse() ||
               running ||
               checking ||
               reviewing ||
@@ -1517,7 +1522,7 @@ export default function RobotTaskDispatcher() {
           <button
             type="button"
             className="primary-button"
-            disabled={reviewing || blocked.current}
+            disabled={!canEditWarehouse() || reviewing || blocked.current}
             onClick={reconcile}
           >
             Check unresolved tasks
@@ -1600,7 +1605,7 @@ export default function RobotTaskDispatcher() {
                 Last checked:{" "}
                 {new Date(
                   active.lastStatusCheckAt,
-                ).toLocaleString()}
+                ).toLocaleString('en-GB')}
               </small>
             )}
           </div>
@@ -1656,6 +1661,7 @@ export default function RobotTaskDispatcher() {
 
                   <td>
                     <select
+                      disabled={!canEditWarehouse()}
                       aria-label={`Priority ${task.id}`}
                       value={task.rcsPriority || 60}
                       onChange={(event) =>
@@ -1680,6 +1686,7 @@ export default function RobotTaskDispatcher() {
 
                   <td>
                     <input
+                      disabled={!canEditWarehouse()}
                       aria-label={`Send time ${task.id}`}
                       type="datetime-local"
                       value={datetimeInput(
@@ -1705,6 +1712,7 @@ export default function RobotTaskDispatcher() {
                   <td>
                     <button
                       type="button"
+                      disabled={!canEditWarehouse()}
                       onClick={() => removeUnsent(task.id)}
                     >
                       Remove
@@ -1893,7 +1901,7 @@ export default function RobotTaskDispatcher() {
                 Reviewed at:{" "}
                 {new Date(
                   detailReview.reviewedAt,
-                ).toLocaleString()}
+                ).toLocaleString('en-GB')}
               </p>
 
               <p style={{ whiteSpace: "pre-wrap" }}>

@@ -1,3 +1,4 @@
+import { canEditWarehouse, requireWarehouseWrite } from "../utils/browserSession";
 import { validateDocuments } from "../utils/warehouseDocuments";
 import AuditFields from "../components/AuditFields";
 import { saveAuditedWarehouse, validateAuditLog } from "../utils/wmsAudit";
@@ -324,9 +325,10 @@ export default function WarehouseMap() {
   const [search, setSearch] = useState("");
   const [zoneFilter, setZoneFilter] = useState("ALL");
 
-  function saveAndSet(nextData, action = "MONITOR_UPDATE") {
+  async function saveAndSet(nextData, action = "MONITOR_UPDATE") {
+    requireWarehouseWrite();
     const normalized = normalizeMonitorData(nextData);
-    const saved = saveAuditedWarehouse(normalized, { ...audit, action });
+    const saved = await saveAuditedWarehouse(normalized, { ...audit, action });
     setMonitorData(saved);
     setAudit(current => ({ ...current, reason: "" }));
 
@@ -598,8 +600,8 @@ export default function WarehouseMap() {
 
           <RackFrontPanel
             rack={selectedRack}
-            onResizeRack={(rackId, count, depth, loadType) =>
-              saveAndSet(
+            onResizeRack={async (rackId, count, depth, loadType) =>
+              await saveAndSet(
                 resizeRack(
                   readMonitor(),
                   rackId,
@@ -644,7 +646,7 @@ export default function WarehouseMap() {
           onAuditChange={setAudit}
           skuCatalog={monitorData.skuCatalog}
           onClose={() => setSelectedShelfRef(null)}
-          onSaveShelf={(patch) => {
+          onSaveShelf={async (patch) => {
             assertEditable(selectedShelf.id);
 
             const latest = readMonitor();
@@ -671,7 +673,7 @@ export default function WarehouseMap() {
               throw new Error("Location code already exists.");
             }
 
-            saveAndSet(
+            await saveAndSet(
               updateShelf(
                 latest,
                 selectedShelfRack.id,
@@ -683,10 +685,10 @@ export default function WarehouseMap() {
               ),
             );
           }}
-          onInbound={(payload) => {
+          onInbound={async (payload) => {
             assertEditable(selectedShelf.id);
 
-            saveAndSet(
+            await saveAndSet(
               applyInbound(
                 readMonitor(),
                 selectedShelfRack.id,
@@ -695,10 +697,10 @@ export default function WarehouseMap() {
               ),
             );
           }}
-          onOutbound={(payload) => {
+          onOutbound={async (payload) => {
             assertEditable(selectedShelf.id);
 
-            saveAndSet(
+            await saveAndSet(
               applyOutboundReservation(
                 readMonitor(),
                 selectedShelfRack.id,
@@ -707,10 +709,10 @@ export default function WarehouseMap() {
               ),
             );
           }}
-          onDeduct={(payload) => {
+          onDeduct={async (payload) => {
             assertEditable(selectedShelf.id);
 
-            saveAndSet(
+            await saveAndSet(
               applyDeductStock(
                 readMonitor(),
                 selectedShelfRack.id,
@@ -1553,7 +1555,7 @@ function ShelfInventoryModal({
       )
     : 0;
 
-  const operationsDisabled = [
+  const operationsDisabled = !canEditWarehouse() || [
     "BLOCKED",
     "MAINTENANCE",
   ].includes(
@@ -1574,7 +1576,7 @@ function ShelfInventoryModal({
     }
   }
 
-  function submitOperation() {
+  async function submitOperation() {
     setMessage("");
 
     const qty = Number(quantity);
@@ -1597,7 +1599,7 @@ function ShelfInventoryModal({
           return;
         }
 
-        onInbound({
+        await onInbound({
           sku: sku.trim(),
           name: itemName.trim() || sku.trim(),
           unit: unit.trim() || "PCS",
@@ -1627,7 +1629,7 @@ function ShelfInventoryModal({
           return;
         }
 
-        onOutbound({
+        await onOutbound({
           itemId: selectedItem.id,
           quantity: qty,
           reference: reference.trim(),
@@ -1654,7 +1656,7 @@ function ShelfInventoryModal({
           return;
         }
 
-        onDeduct({
+        await onDeduct({
           itemId: selectedItem.id,
           quantity: qty,
           reference: reference.trim(),
@@ -1674,7 +1676,7 @@ function ShelfInventoryModal({
     }
   }
 
-  function saveShelfData() {
+  async function saveShelfData() {
     if (!codeDraft.trim()) {
       setMessage(
         "Location Code is required.",
@@ -1684,7 +1686,7 @@ function ShelfInventoryModal({
     }
 
     try {
-      onSaveShelf({
+      await onSaveShelf({
         code: codeDraft.trim(),
         capacity: 1,
         status: statusDraft,
@@ -1858,6 +1860,7 @@ function ShelfInventoryModal({
           <div className="monitor-shelf-save-row">
             <button
               type="button"
+              disabled={!canEditWarehouse()}
               onClick={saveShelfData}
             >
               Save {info.location} Data
@@ -2205,6 +2208,7 @@ function loadMonitorData() {
     let raw = localStorage.getItem(
       MONITOR_STORAGE_KEY,
     );
+    if (!canEditWarehouse()) return raw ? readMonitor() : createDefaultMonitorData();
 
     if (!raw) {
       for (const legacyKey of LEGACY_MONITOR_STORAGE_KEYS) {
@@ -2349,6 +2353,7 @@ function normalizeMonitorData(data) {
     auditLog: data?.auditLog ?? [],
     stockCounts: Array.isArray(data?.stockCounts) ? data.stockCounts : [],
 
+    reviewedStoppedTransfers: data?.reviewedStoppedTransfers ?? {},
     completedBasketTransfers:
       data?.completedBasketTransfers || {},
 
